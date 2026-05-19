@@ -1,0 +1,448 @@
+# pi-CoWork
+
+**AI agents that hand off work to each other, powered by a workflow engine you configure.**
+
+Define a pipeline of stages. Assign an AI agent to each stage. Drop a ticket in, and the agents take it from there — researching, drafting, coding, reviewing, testing — handing work between themselves automatically. You stay in control with quality gates, one-click approvals, and real-time visibility into everything that happens.
+
+## Why This Exists
+
+Most AI tools give you a single chatbot in a single window. Real work is a chain of specialists: triage → investigate → plan → implement → review → verify → ship. The hard part isn't the individual agent — it's the **handoff**. Context gets lost, prompts get copy-pasted, and someone has to manually push work from one stage to the next.
+
+pi-CoWork solves this by making the board the single source of truth. Every stage is an agent inbox. When a ticket moves into a stage, the assigned agent spawns with full context (ticket, comments, goal, available transitions) and does the work. It then moves the ticket to the next stage. The next agent picks up exactly where the last one left off. No copy-paste. No lost context. No manual orchestration.
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11+
+- [`pi`](https://github.com/anthropics/pi) agent CLI installed and configured (or any CLI that accepts `--system-prompt` and `--print`)
+- Git (for the self-update feature)
+
+### Setup
+
+```bash
+git clone https://github.com/your-username/pi-cowork.git
+cd pi-cowork
+pip install -r requirements.txt
+./start.sh
+```
+
+Open **http://localhost:5000/board**.
+
+The default config ships with 8 agents and 14 statuses for a startup/content pipeline. Use it as-is, customize it, or tear it down and build your own workflow entirely through the UI.
+
+### Stopping
+
+```bash
+./stop.sh
+```
+
+## How It Works
+
+### 1. Define Your Workflow
+
+Create statuses (stages), assign an agent to each, and define allowed transitions. One workflow can power multiple boards — each board is a separate workspace sharing the same pipeline definition.
+
+```
+Backlog → Research → Clarifications → Planning → Under Development → Code Review → QA → Closed
+  │          │           │              │              │               │         │      │
+  │    🤖Researcher  🤖Developer    🤖Developer    🤖Developer   🤖CodeReviewer  🤖QA    ✓
+  │
+  └── No agent (human triage)
+```
+
+### 2. Drop In a Ticket
+
+Create a ticket with a title and description. It starts in the default status (Backlog). Move it to any status to hand it to that status's agent.
+
+### 3. Agents Take Over
+
+The board auto-generates a context message for the agent containing:
+- **Ticket** — title, description, full comment history
+- **Goal** — what this stage expects the agent to achieve
+- **Transitions** — where the agent can move the ticket next, and when
+- **API docs** — how to add comments, ask questions, and move the ticket
+
+No prompt engineering per ticket. The board builds it from your workflow configuration.
+
+### 4. Agents Hand Off
+
+When an agent finishes its work, it calls the API to move the ticket to the next status. The next agent spawns automatically, reads the full history, and continues.
+
+### Warm Handoffs
+
+If a ticket returns to a status the agent has already worked on (within an hour), the agent gets a **warm spawn** — a delta update with only new comments and framing, not a full re-brief. Saves tokens and preserves session context.
+
+### Terminal Cleanup
+
+When a ticket reaches a terminal status (Closed, Dropped), all agent session directories for that ticket are cleaned up automatically.
+
+## Quality Gates
+
+Quality gates are checks that must pass before a ticket can enter a status — your safety net between agent handoffs.
+
+### Gate Types
+
+| Type | How It Works |
+|------|-------------|
+| **Manual** | A human must explicitly approve via the UI before the transition completes |
+| **CLI** | A shell command runs in the board's working directory. Exit 0 = pass, non-zero = fail |
+
+### How Gates Work
+
+1. An agent (or human) requests a status change via the API
+2. If the destination status has enabled quality gates, the ticket **stays in its current status**
+3. Gate reviews are created. CLI gates run automatically; manual gates wait for human approval
+4. **All gates must pass** (AND logic) for the transition to complete
+5. If all pass → ticket moves, agent spawns in the new status
+6. If any fail → a comment is added explaining why, and the transition is rejected
+
+Boards show 🚧 badges on tickets with pending gate reviews. The ticket detail page has inline approve/reject buttons for manual gates.
+
+## Recurring Tasks
+
+Create tickets automatically on a cron-like schedule.
+
+| Feature | Description |
+|---------|-------------|
+| **Cron expressions** | Standard 5-field cron (`0 9 * * 1` = every Monday at 9 AM) |
+| **Live preview** | See the next 5 trigger times before saving |
+| **Manual trigger** | Fire a one-off ticket creation on demand |
+| **Start/end dates** | Optional window for the schedule |
+| **Human-readable** | `0 9 * * *` → "Daily at 9:00 AM" |
+
+Recurring tickets are linked to their parent task. The board UI has a "Recurring" tab for creating and managing schedules. Generated tickets get a 🔄 badge and a system comment linking back to the schedule.
+
+## Agent Questions
+
+Agents can ask structured questions with one-click answer options. When an agent posts questions, it pauses — it won't spawn again until all questions are answered.
+
+```json
+// Agent asks:
+POST /api/tickets/13/questions
+{
+  "questions": [
+    {"body": "Which database?", "options": ["SQLite", "PostgreSQL", "MySQL"]},
+    {"body": "Authentication method?", "options": ["OAuth", "API keys", "None"]}
+  ]
+}
+```
+
+Answers appear as formatted comments (**Q:** ... **A:** ...). The bell icon in the top bar shows pending questions. When all are answered, the agent automatically re-spawns to continue its work.
+
+## Labels
+
+Workflow-scoped colored tags for tickets. Each workflow defines its own set of labels.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET/POST /api/labels` | List / create labels (filter by `workflow_id`) |
+| `GET/PUT/DELETE /api/labels/<id>` | Read / update / delete a label |
+| `GET/POST /api/tickets/<id>/labels` | List / add labels on a ticket |
+| `DELETE /api/tickets/<id>/labels?label_id=<id>` | Remove a label from a ticket |
+
+Labels appear as colored badges on board cards and ticket details.
+
+## In-App AI Assistant
+
+A chat bubble (✨) in the bottom-right corner of every page — a persistent AI assistant with its own session. Configure its model, thinking level, system prompt, and working directory from the Settings page. It can answer questions about the workspace, suggest actions, and help navigate the app.
+
+## Real-Time Updates (SSE)
+
+The UI updates in real-time via Server-Sent Events. No polling. When an agent spawns, comments, or moves a ticket, all open browser tabs see the change instantly.
+
+- Board view refreshes automatically when tickets are created, moved, or updated
+- Ticket detail pages update comments, agent runs, gate reviews, and questions live
+- The notification bell updates as soon as new gate reviews or questions appear
+- Reconnects automatically if the connection drops
+
+## System Logs
+
+A centralized audit trail recording every HTTP request (POST/PUT/DELETE), database change, and agent lifecycle event. Accessible from the sidebar.
+
+| Feature | Description |
+|---------|-------------|
+| **Filtering** | By level (INFO/WARNING/ERROR/CRITICAL), action type, ticket ID, date range, full-text search |
+| **Pagination** | 50 entries per page |
+| **Export** | Download filtered results as plain text |
+| **Redaction** | Request/response bodies are automatically redacted for sensitive fields (passwords, tokens, keys) |
+| **Retention** | Configurable retention period (default 30 days). Older entries are auto-purged |
+
+All agent spawn/completion/failure events are logged automatically — no extra configuration needed.
+
+## Self-Updating
+
+Update pi-CoWork from the UI without leaving the browser.
+
+1. Navigate to the **Update** page (⬆️ in the sidebar)
+2. Click **Check for updates** — shows how many commits behind you are
+3. Click **Install update** — automatically backs up the database, runs `git pull`, and restarts
+
+Requires the app to be running from a git repository with a tracking branch. Working tree changes are detected and blocked (you need a clean tree to update).
+
+## Workflow Import/Export
+
+Export a workflow to a JSON file — agents, statuses, transitions, and quality gates. Import it into another pi-CoWork instance or share it with your team.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/workflows/<id>/export` | Download workflow as JSON |
+| `POST /api/workflows/import` | Upload JSON to create a new workflow |
+
+The "Backup & Restore" page in the sidebar provides a one-click UI for both operations. If the imported workflow name collides with an existing one, a timestamp is appended.
+
+## Pipeline Examples
+
+### Content Marketing
+
+```
+Ideas → Research → Draft → Review → Publish → Closed
+```
+
+- **Researcher** checks topic viability and competitors
+- **Copywriter** writes the first draft
+- **Writer Reviewer** edits for tone and brand voice
+- Human moves to Publish
+
+### Software Development
+
+```
+Backlog → Research → Design → Clarifications → Planning → Under Development → Code Review → QA → Closed
+```
+
+- **Researcher** investigates feasibility
+- **Designer** creates wireframes
+- **Developer** asks clarifying questions
+- **Developer** writes the plan (🚧 manual gate: human approves before development)
+- **Developer** implements
+- **Code Reviewer** reviews for correctness and style
+- **QA** tests and validates
+
+### Customer Support Triage
+
+```
+New → Triage → Investigation → Fix → Verify → Resolved
+```
+
+Define your own agents and statuses. The same tool powers completely different pipelines.
+
+## Concurrency & Queue
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PI_COWORK_URL` | `http://localhost:5000` | API base URL agents call back to |
+| `PI_MAX_PARALLEL` | `1` | Max agents running concurrently |
+| `PI_MAX_PER_HOUR` | `100` | Max agent spawns per hour (rolling window) |
+
+When limits are hit, spawns queue persistently and drain FIFO. Move a ticket out of the expected status before the queued agent runs, and the queue entry auto-cancels.
+
+## Configuration
+
+Everything is configurable through the web UI or REST API. No config files to edit.
+
+### Agents
+
+| Field | Description |
+|-------|-------------|
+| **Name** | Unique identifier per workflow |
+| **Description** | System prompt — defines the agent's identity and role |
+| **Model** | Optional `--model` override for `pi` CLI. Leave empty to use pi's default |
+| **Thinking** | Optional `--thinking` level for `pi` CLI (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`). Leave empty for pi's default |
+
+### Statuses
+
+| Field | Description |
+|-------|-------------|
+| **Name** | Column name on the board |
+| **Sort Order** | Left-to-right position |
+| **Default** | New tickets start here |
+| **Terminal** | End of the line — cleans up agent sessions |
+| **Agent** | Which agent spawns when a ticket enters this status |
+| **Goal** | What the agent should aim for (injected into the context message) |
+
+### Transitions
+
+| Field | Description |
+|-------|-------------|
+| **From Status** | Source stage |
+| **To Status** | Destination stage |
+| **Instructions** | When the agent should move the ticket |
+
+## Observability
+
+### Agent Logs
+
+Every spawn creates a log at:
+
+```
+{board.working_directory}/.pi-logs/ticket-{ticket_id}/run-{run_id}.log
+```
+
+Each log contains the full system prompt, context message, and agent output. View them inline on the ticket detail page — the Agent Runs section shows "📋 Log" buttons that expand log content per run. Failed spawns also create logs with the error details.
+
+### System Comments
+
+The board auto-adds comments when agents start, resume, or fail — so you know what happened without checking logs.
+
+## Architecture
+
+```
+pi-cowork/
+├── app.py                          # Entry point, re-exports, backwards compat
+├── schema.sql                      # DB schema + seed data (default workflow)
+├── requirements.txt                # Flask, pytest, croniter
+├── start.sh / stop.sh              # Background process management
+├── pi_cowork/                      # Application package
+│   ├── __init__.py                 # App factory, audit subscriber, DB init
+│   ├── agents.py                   # Agent spawning, watchers, queue, drain loop
+│   ├── assistant.py                # In-app AI assistant (routes + pi spawning)
+│   ├── config.py                   # Environment variable constants
+│   ├── db.py                       # SQLite connection pool, init, row helpers
+│   ├── events.py                   # Synchronous in-process EventBus
+│   ├── models.py                   # Data access layer (comments, gates, labels, recurring, etc.)
+│   ├── pages.py                    # Page routes (board, ticket, settings, etc.)
+│   ├── system_logs.py              # Centralised audit logging + HTTP middleware
+│   ├── update.py                   # Git-based self-update (check + pull + backup + restart)
+│   └── api/                        # REST API blueprints
+│       ├── agents_api.py           # Agent CRUD
+│       ├── agent_runs.py           # Agent run logs + streaming
+│       ├── boards.py               # Board CRUD
+│       ├── comments.py             # Comment listing + creation
+│       ├── events.py               # SSE endpoint (EventBus → browser)
+│       ├── gate_reviews.py         # Gate review approval/rejection
+│       ├── import_export.py        # Workflow import/export
+│       ├── labels.py               # Label CRUD + ticket-label management
+│       ├── notifications.py        # Derived notifications (gates + questions)
+│       ├── quality_gates.py        # Quality gate CRUD
+│       ├── questions.py            # Question ask, answer, batch answer
+│       ├── recurring.py            # Recurring task CRUD, toggle, trigger, preview
+│       ├── settings.py             # Key-value settings + purge
+│       ├── statuses.py             # Status CRUD
+│       ├── system_logs.py          # System log listing, filtering, export
+│       ├── tickets.py              # Ticket CRUD + status change triggers
+│       ├── transitions.py          # Transition CRUD
+│       └── workflows.py            # Workflow CRUD
+├── static/
+│   ├── app.js                      # Board rendering, SSE listeners, drag-and-drop
+│   ├── assistant.js                # Chat bubble UI + API integration
+│   ├── recurring.js                # Recurring tasks table + form
+│   └── style.css                   # Mobile-first responsive styling
+├── templates/                      # Jinja2 templates (server-rendered pages)
+└── tests/                          # pytest suite
+```
+
+- **Backend:** Python 3.11+ + Flask + SQLite (stdlib, no ORM)
+- **Frontend:** Vanilla HTML/CSS/JS — no framework, no build step
+- **Agent runtime:** `pi` CLI spawned as subprocess in per-board working directories
+- **Real-time:** SSE (Server-Sent Events) for live UI updates, no polling
+
+## REST API
+
+### Core
+| Endpoint | Methods | Description |
+|----------|---------|-------------|
+| `/api/boards` | GET, POST | List / create boards |
+| `/api/boards/<id>` | GET, PUT, DELETE | Get / update / delete board (cascading: deletes all tickets, comments, runs) |
+| `/api/tickets` | GET, POST | List / create tickets (query: `board_id`) |
+| `/api/tickets/<id>` | GET, PUT | Get / update (PUT with new `status_id` triggers agent) |
+| `/api/tickets/<id>/comments` | GET, POST | List / add comments (append-only) |
+
+### Workflows
+| Endpoint | Methods | Description |
+|----------|---------|-------------|
+| `/api/workflows` | GET, POST | List / create workflows |
+| `/api/workflows/<id>` | GET, PUT, DELETE | Get / update / delete (blocked if boards reference it) |
+| `/api/workflows/<id>/export` | GET | Export workflow as JSON |
+| `/api/workflows/import` | POST | Import workflow JSON (creates new workflow) |
+
+### Agents, Statuses, Transitions
+| Endpoint | Methods | Description |
+|----------|---------|-------------|
+| `/api/agents` | GET, POST | List / create (query: `workflow_id`) |
+| `/api/agents/<id>` | GET, PUT, DELETE | Get / update / delete (blocked if assigned to a status) |
+| `/api/statuses` | GET, POST | List / create (query: `workflow_id`) |
+| `/api/statuses/<id>` | GET, PUT, DELETE | Get / update / delete (blocked if used by tickets or transitions) |
+| `/api/transitions` | GET, POST | List / create (query: `workflow_id`) |
+| `/api/transitions/<id>` | GET, PUT, DELETE | Get / update / delete |
+
+### Quality Gates & Reviews
+| Endpoint | Methods | Description |
+|----------|---------|-------------|
+| `/api/quality_gates` | GET, POST | List / create gates (query: `status_id`) |
+| `/api/quality_gates/<id>` | GET, PUT, DELETE | Get / update / delete gate |
+| `/api/gate_reviews` | GET | List reviews (query: `ticket_id`) |
+| `/api/gate_reviews/<id>` | PUT | Approve / reject manual gate review |
+
+### Questions
+| Endpoint | Methods | Description |
+|----------|---------|-------------|
+| `/api/tickets/<id>/questions` | GET, POST | List / ask questions with optional one-click options |
+| `/api/questions/<id>/answer` | PUT | Answer a single question |
+| `/api/tickets/<id>/answers` | POST | Batch answer multiple questions at once |
+
+### Labels
+| Endpoint | Methods | Description |
+|----------|---------|-------------|
+| `/api/labels` | GET, POST | List / create labels (query: `workflow_id`) |
+| `/api/labels/<id>` | GET, PUT, DELETE | Get / update / delete label |
+| `/api/tickets/<id>/labels` | GET, POST, DELETE | Manage ticket labels |
+
+### Recurring Tasks
+| Endpoint | Methods | Description |
+|----------|---------|-------------|
+| `/api/recurring` | GET, POST | List / create recurring tasks (query: `board_id`) |
+| `/api/recurring/<id>` | GET, PUT, DELETE | Get / update / delete (soft-disable if instances exist) |
+| `/api/recurring/<id>/toggle` | POST | Toggle enabled/disabled |
+| `/api/recurring/<id>/trigger` | POST | Manually trigger now (creates ticket immediately) |
+| `/api/recurring/preview` | GET | Preview next 5 trigger times (query: `cron`) |
+| `/api/tickets/<id>/recurring` | GET | Get parent recurring tasks of a ticket |
+
+### Observability
+| Endpoint | Methods | Description |
+|----------|---------|-------------|
+| `/api/tickets/<id>/agent_runs` | GET | List agent runs for a ticket |
+| `/api/agent_runs/<id>/log` | GET | Fetch raw agent log file |
+| `/api/agent_runs/<id>/stream` | GET | SSE stream of live agent output |
+| `/api/system_logs` | GET | List system logs with filtering and pagination |
+| `/api/system_logs/<id>` | GET | Get a single log entry |
+| `/api/system_logs/export` | GET | Export filtered logs as plain text |
+
+### Real-Time & Notifications
+| Endpoint | Methods | Description |
+|----------|---------|-------------|
+| `/api/events/stream` | GET | SSE stream of all board events (query: `board_id`) |
+| `/api/notifications` | GET | Derived notifications (pending gates + unanswered questions) |
+
+### Settings
+| Endpoint | Methods | Description |
+|----------|---------|-------------|
+| `/api/settings` | GET | List all key-value settings |
+| `/api/settings/<key>` | GET, PUT | Get / update a setting |
+| `/api/settings/purge-terminal-logs` | POST | Delete file-based logs for terminal-status tickets |
+
+### Assistant
+| Endpoint | Methods | Description |
+|----------|---------|-------------|
+| `/api/assistant/config` | GET, PUT | Get / update assistant configuration |
+| `/api/assistant/history` | GET | List chat messages |
+| `/api/assistant/chat` | POST | Send a message (spawns `pi` for response) |
+
+## Design Principles
+
+- **The board is the orchestrator** — statuses define which agent works, transitions define where they hand off
+- **No per-ticket prompting** — prompts are auto-generated from ticket state + workflow config
+- **Pipeline over preset** — you define the stages, agents, and rules. No hardcoded workflow
+- **Multiple boards, shared workflows** — define a pipeline once, use it across many boards
+- **Lean prompt architecture** — system prompt is identity only; context lives at the tail for recency bias
+- **Quality gates at every handoff** — manual approval or CLI checks before critical transitions
+- **Human gates where needed** — any transition can require approval before an agent proceeds
+- **No ticket deletion** — terminal statuses (Closed, Dropped) are the only way out
+- **Comments are append-only** — system comments track the full agent lifecycle
+- **Agents are stateless** — the board is the source of truth; agents read, work, comment, and move
+- **Session reuse** — warm spawns reuse cached context to save tokens
+- **Per-agent model tuning** — each agent can override `--model` and `--thinking` independently
+- **Real-time everywhere** — SSE pushes live updates to all open tabs, no polling
+
+## License
+
+MIT

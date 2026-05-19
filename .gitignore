@@ -1,0 +1,15 @@
+*__pycache__/*
+*/__pycache__/*
+*.db
+*.log
+*.pid
+*.env
+workspace
+.pi-sessions/
+.flask_secret
+.reload
+.update-state.json
+__pycache__/
+*.pyc
+*.db-*
+end_at

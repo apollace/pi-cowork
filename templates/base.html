@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>{% block title %}pi-CoWork{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <a class="sidebar-brand-link" href="{{ url_for('board') }}">
+          <span class="logo">π</span>
+          <span>pi-CoWork</span>
+        </a>
+        <div class="notification-bell" id="sidebar-bell" onclick="toggleNotifications()">
+          <span class="bell-icon">🔔</span>
+          <span class="notification-count" id="sidebar-count" style="display:none;">0</span>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">Main</div>
+          <a class="nav-link {% if request.endpoint == 'board' %}active{% endif %}" href="{{ url_for('board') }}">
+            <span class="icon">📋</span> Board
+          </a>
+          <a class="nav-link {% if request.endpoint == 'update_page' %}active{% endif %}" href="{{ url_for('update_page') }}">
+            <span class="icon">⬆️</span> Update
+          </a>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">Configure</div>
+          <a class="nav-link {% if request.endpoint == 'workflows_page' %}active{% endif %}" href="{{ url_for('workflows_page') }}">
+            <span class="icon">🔄</span> Workflows
+          </a>
+          <a class="nav-link {% if request.endpoint == 'backup_page' %}active{% endif %}" href="{{ url_for('backup_page') }}">
+            <span class="icon">💾</span> Backup & Restore
+          </a>
+          <a class="nav-link {% if request.endpoint == 'settings_page' %}active{% endif %}" href="{{ url_for('settings_page') }}">
+            <span class="icon">⚙️</span> Settings
+          </a>
+          <a class="nav-link {% if request.endpoint == 'system_logs_page' %}active{% endif %}" href="{{ url_for('system_logs_page') }}">
+            <span class="icon">📜</span> System Logs
+          </a>
+        </div>
+      </nav>
+    </aside>
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="hamburger" onclick="toggleSidebar()" aria-label="Menu">
+          <span></span><span></span><span></span>
+        </button>
+        <span style="font-weight:700;color:var(--primary);">pi-CoWork</span>
+        <div class="notification-bell" id="topbar-bell" onclick="toggleNotifications()">
+          <span class="bell-icon">🔔</span>
+          <span class="notification-count" id="topbar-count" style="display:none;">0</span>
+        </div>
+      </header>
+      <main class="container">
+        {% if persistent_flash %}
+          <div class="flash-messages">
+            <div class="flash flash-{{ persistent_flash.level }}">{{ persistent_flash.message }}</div>
+          </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <div class="notification-panel" id="notification-panel" style="display:none;">
+    <div class="notification-header">
+      <strong>Notifications</strong>
+      <div class="notification-header-actions">
+        <button class="btn small ghost" id="dismiss-all-btn" onclick="dismissAllNotifications()" style="display:none;">Clear All</button>
+        <button class="btn small ghost" onclick="toggleNotifications()">✕</button>
+      </div>
+    </div>
+    <div class="notification-list" id="notification-list">
+      <div class="notification-empty">No pending notifications</div>
+    </div>
+  </div>
+
+  <script>
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('sidebar-overlay').classList.toggle('open');
+    }
+    function closeSidebar() {
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('sidebar-overlay').classList.remove('open');
+    }
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    const PALETTE_24 = [
+      '#ef4444','#f97316','#f59e0b','#eab308','#84cc16','#22c55e',
+      '#10b981','#14b8a6','#06b6d4','#0ea5e9','#3b82f6','#2b6cb0',
+      '#6366f1','#8b5cf6','#a855f7','#d946ef','#ec4899','#f43f5e',
+      '#be123c','#78716c','#a8a29e','#94a3b8','#64748b','#475569'
+    ];
+
+    class LabelPicker {
+      constructor(options) {
+        this.container = options.container;
+        this.workflowId = options.workflowId;
+        this.mode = options.mode || 'live';
+        this.popover = options.popover || false;
+        this.ticketId = options.ticketId || null;
+        this.onChange = options.onChange || null;
+        this.selectedIds = new Set(options.selectedIds || []);
+        this.allLabels = [];
+        this._newLabelColor = PALETTE_24[0];
+        this._createExpanded = false;
+        this._popoverEl = null;
+        this._closeHandler = null;
+        this._escHandler = null;
+      }
+
+      async init() {
+        await this.loadLabels();
+        if (this.popover) {
+          this._renderPopover();
+        } else {
+          this.render();
+        }
+      }
+
+      async loadLabels() {
+        try {
+          const res = await fetch(`/api/labels?workflow_id=${this.workflowId}`);
+          if (res.ok) this.allLabels = await res.json();
+        } catch (e) { console.error('Failed to load labels', e); }
+      }
+
+      render() {
+        this.container.innerHTML = '';
+        const wrap = document.createElement('div');
+        wrap.className = 'label-picker-inline';
+
+        const selectedRow = document.createElement('div');
+        selectedRow.className = 'label-picker-chips';
+        if (this.selectedIds.size === 0) {
+          selectedRow.innerHTML = '<span class="muted" style="font-size:0.85rem;">No labels</span>';
+        } else {
+          for (const id of this.selectedIds) {
+            const l = this.allLabels.find(x => x.id == id);
+            if (!l) continue;
+            const chip = document.createElement('span');
+            chip.className = 'badge label-pill';
+            chip.style.cssText = `background:${escapeHtml(l.color)}33;color:${escapeHtml(l.color)};border:1px solid ${escapeHtml(l.color)}55;cursor:pointer;`;
+            chip.innerHTML = `${escapeHtml(l.name)} <span style="opacity:.7;margin-left:.2rem;">✕</span>`;
+            chip.onclick = (e) => { e.stopPropagation(); e.preventDefault(); this.toggleLabel(l.id); };
+            selectedRow.appendChild(chip);
+          }
+        }
+        wrap.appendChild(selectedRow);
+
+        const available = this.allLabels.filter(l => !this.selectedIds.has(l.id));
+        if (available.length > 0) {
+          const availRow = document.createElement('div');
+          availRow.className = 'label-picker-available';
+          for (const l of available) {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'badge label-picker-chip label-pill';
+            chip.style.cssText = `background:${escapeHtml(l.color)}33;color:${escapeHtml(l.color)};border:1px solid ${escapeHtml(l.color)}55;`;
+            chip.textContent = `+ ${l.name}`;
+            chip.onclick = (e) => { e.stopPropagation(); e.preventDefault(); this.toggleLabel(l.id); };
+            availRow.appendChild(chip);
+          }
+          wrap.appendChild(availRow);
+        }
+
+        // Collapsible "Create new label" section
+        const createToggle = document.createElement('button');
+        createToggle.type = 'button';
+        createToggle.className = 'label-picker-create-toggle';
+        createToggle.textContent = this._createExpanded ? '− Create new label' : '+ Create new label';
+        createToggle.onclick = (e) => { e.stopPropagation(); e.preventDefault(); this._createExpanded = !this._createExpanded; this.render(); };
+        wrap.appendChild(createToggle);
+
+        if (this._createExpanded) {
+          const createSection = document.createElement('div');
+          createSection.className = 'label-picker-create';
+          createSection.innerHTML = `
+            <input type="text" class="edit-input" placeholder="New label name…" value="">
+            <div class="color-palette"></div>
+            <button type="button" class="btn primary small">Create label</button>
+          `;
+          const palette = createSection.querySelector('.color-palette');
+          for (const c of PALETTE_24) {
+            const swatch = document.createElement('button');
+            swatch.type = 'button';
+            swatch.className = 'color-swatch' + (c === this._newLabelColor ? ' active' : '');
+            swatch.style.background = c;
+            swatch.title = c;
+            swatch.onclick = (e) => { e.stopPropagation(); this._newLabelColor = c; this.render(); };
+            palette.appendChild(swatch);
+          }
+          const createBtn = createSection.querySelector('.btn');
+          const nameInput = createSection.querySelector('input');
+          createBtn.onclick = (e) => { e.stopPropagation(); this._handleCreate(nameInput); };
+          nameInput.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); this._handleCreate(nameInput); } };
+          wrap.appendChild(createSection);
+        }
+
+        this.container.appendChild(wrap);
+      }
+
+      // ── Popover mode for board cards ──
+      _renderPopover() {
+        // container is the trigger element; we create a positioned overlay
+        if (this._popoverEl) { this.closePopover(); return; }
+
+        const popover = document.createElement('div');
+        popover.className = 'label-popover';
+        this._popoverEl = popover;
+
+        // Selected labels
+        const selectedRow = document.createElement('div');
+        selectedRow.className = 'label-picker-chips label-popover-section';
+        if (this.selectedIds.size === 0) {
+          selectedRow.innerHTML = '<span class="muted" style="font-size:0.85rem;">No labels</span>';
+        } else {
+          for (const id of this.selectedIds) {
+            const l = this.allLabels.find(x => x.id == id);
+            if (!l) continue;
+            const chip = document.createElement('span');
+            chip.className = 'badge label-pill label-popover-chip-selected';
+            chip.style.cssText = `background:${escapeHtml(l.color)}33;color:${escapeHtml(l.color)};border:1px solid ${escapeHtml(l.color)}55;cursor:pointer;`;
+            chip.innerHTML = `${escapeHtml(l.name)} <span style="opacity:.7;margin-left:.2rem;">✕</span>`;
+            chip.onclick = (e) => { e.stopPropagation(); e.preventDefault(); this.toggleLabel(l.id); };
+            selectedRow.appendChild(chip);
+          }
+        }
+        popover.appendChild(selectedRow);
+
+        // Available labels to add
+        const available = this.allLabels.filter(l => !this.selectedIds.has(l.id));
+        if (available.length > 0) {
+          const availRow = document.createElement('div');
+          availRow.className = 'label-picker-available label-popover-section';
+          for (const l of available) {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'badge label-picker-chip label-pill';
+            chip.style.cssText = `background:${escapeHtml(l.color)}33;color:${escapeHtml(l.color)};border:1px solid ${escapeHtml(l.color)}55;`;
+            chip.textContent = `+ ${l.name}`;
+            chip.onclick = (e) => { e.stopPropagation(); e.preventDefault(); this.toggleLabel(l.id); };
+            availRow.appendChild(chip);
+          }
+          popover.appendChild(availRow);
+        }
+
+        // Collapsible create section
+        const createToggle = document.createElement('button');
+        createToggle.type = 'button';
+        createToggle.className = 'label-picker-create-toggle';
+        createToggle.textContent = this._createExpanded ? '− Create new label' : '+ Create new label';
+        createToggle.onclick = (e) => { e.stopPropagation(); e.preventDefault(); this._createExpanded = !this._createExpanded; this._reRenderPopover(); };
+        popover.appendChild(createToggle);
+
+        if (this._createExpanded) {
+          const createSection = document.createElement('div');
+          createSection.className = 'label-picker-create';
+          createSection.innerHTML = `
+            <input type="text" class="edit-input" placeholder="New label name…" value="">
+            <div class="color-palette" style="max-height:100px;overflow-y:auto;"></div>
+            <button type="button" class="btn primary small">Create label</button>
+          `;
+          const palette = createSection.querySelector('.color-palette');
+          for (const c of PALETTE_24) {
+            const swatch = document.createElement('button');
+            swatch.type = 'button';
+            swatch.className = 'color-swatch' + (c === this._newLabelColor ? ' active' : '');
+            swatch.style.background = c;
+            swatch.title = c;
+            swatch.onclick = (e) => { e.stopPropagation(); this._newLabelColor = c; this._reRenderPopover(); };
+            palette.appendChild(swatch);
+          }
+          const createBtn = createSection.querySelector('.btn');
+          const nameInput = createSection.querySelector('input');
+          createBtn.onclick = (e) => { e.stopPropagation(); this._handleCreate(nameInput); };
+          nameInput.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); this._handleCreate(nameInput); } };
+          popover.appendChild(createSection);
+        }
+
+        // Position popover relative to trigger button
+        document.body.appendChild(popover);
+        const rect = this.container.getBoundingClientRect();
+        const popoverRect = popover.getBoundingClientRect();
+        // Position below the button, aligned to left edge
+        let top = rect.bottom + window.scrollY + 4;
+        let left = rect.left + window.scrollX;
+        // Keep within viewport
+        if (left + popoverRect.width > window.innerWidth) {
+          left = window.innerWidth - popoverRect.width - 8;
+        }
+        if (left < 8) left = 8;
+        if (top + popoverRect.height > window.innerHeight + window.scrollY) {
+          top = rect.top + window.scrollY - popoverRect.height - 4;
+        }
+        popover.style.position = 'absolute';
+        popover.style.top = top + 'px';
+        popover.style.left = left + 'px';
+
+        // Click-away and Escape to close
+        this._closeHandler = (e) => {
+          if (!popover.contains(e.target) && e.target !== this.container && !this.container.contains(e.target)) {
+            this.closePopover();
+          }
+        };
+        this._escHandler = (e) => {
+          if (e.key === 'Escape') { this.closePopover(); }
+        };
+        setTimeout(() => {
+          document.addEventListener('click', this._closeHandler);
+          document.addEventListener('keydown', this._escHandler);
+        }, 0);
+      }
+
+      _reRenderPopover() {
+        this.closePopover();
+        this._renderPopover();
+      }
+
+      closePopover() {
+        if (this._popoverEl) {
+          this._popoverEl.remove();
+          this._popoverEl = null;
+        }
+        if (this._closeHandler) {
+          document.removeEventListener('click', this._closeHandler);
+          this._closeHandler = null;
+        }
+        if (this._escHandler) {
+          document.removeEventListener('keydown', this._escHandler);
+          this._escHandler = null;
+        }
+      }
+
+      async _handleCreate(input) {
+        const name = (input.value || '').trim();
+        if (!name) { input.focus(); return; }
+        const existing = this.allLabels.find(l => l.name.toLowerCase() === name.toLowerCase());
+        if (existing) {
+          if (!this.selectedIds.has(existing.id)) {
+            await this.toggleLabel(existing.id);
+          }
+          return;
+        }
+        const res = await fetch('/api/labels', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({name, color: this._newLabelColor, workflow_id: this.workflowId}),
+        });
+        if (res.ok) {
+          const label = await res.json();
+          this.allLabels.push({id: label.id, name: name, color: this._newLabelColor});
+          if (this.mode === 'live' && this.ticketId) {
+            await this.attachLabel(label.id);
+          } else {
+            this.selectedIds.add(label.id);
+            if (this.onChange) this.onChange(Array.from(this.selectedIds));
+            input.value = '';
+            this._newLabelColor = PALETTE_24[0];
+            this._reRender();
+          }
+        } else {
+          const data = await res.json();
+          alert(data.error || 'Failed to create label');
+        }
+      }
+
+      _reRender() {
+        if (this.popover) {
+          this._reRenderPopover();
+        } else {
+          this.render();
+        }
+      }
+
+      async toggleLabel(labelId) {
+        if (this.selectedIds.has(labelId)) {
+          if (this.mode === 'live' && this.ticketId) {
+            await this.detachLabel(labelId);
+          } else {
+            this.selectedIds.delete(labelId);
+            if (this.onChange) this.onChange(Array.from(this.selectedIds));
+            this._reRender();
+          }
+        } else {
+          if (this.mode === 'live' && this.ticketId) {
+            await this.attachLabel(labelId);
+          } else {
+            this.selectedIds.add(labelId);
+            if (this.onChange) this.onChange(Array.from(this.selectedIds));
+            this._reRender();
+          }
+        }
+      }
+
+      async attachLabel(labelId) {
+        const res = await fetch(`/api/tickets/${this.ticketId}/labels`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({label_ids: [labelId]}),
+        });
+        if (res.ok) {
+          this.selectedIds.add(labelId);
+          if (this.onChange) this.onChange(Array.from(this.selectedIds));
+          this._reRender();
+        }
+      }
+
+      async detachLabel(labelId) {
+        const res = await fetch(`/api/tickets/${this.ticketId}/labels?label_id=${labelId}`, {method: 'DELETE'});
+        if (res.ok) {
+          this.selectedIds.delete(labelId);
+          if (this.onChange) this.onChange(Array.from(this.selectedIds));
+          this._reRender();
+        }
+      }
+
+      getSelectedIds() { return Array.from(this.selectedIds); }
+      setSelectedIds(ids) { this.selectedIds = new Set(ids); this._reRender(); }
+    }
+
+    (function() {
+      let notifications = [];
+      let panelOpen = false;
+
+      window.toggleNotifications = function() {
+        panelOpen = !panelOpen;
+        document.getElementById('notification-panel').style.display = panelOpen ? 'flex' : 'none';
+      };
+
+      function renderNotifications() {
+        const list = document.getElementById('notification-list');
+        const counts = document.querySelectorAll('.notification-count');
+        const dismissAllBtn = document.getElementById('dismiss-all-btn');
+        if (!notifications.length) {
+          list.innerHTML = '<div class="notification-empty">No pending notifications</div>';
+          counts.forEach(el => el.style.display = 'none');
+          if (dismissAllBtn) dismissAllBtn.style.display = 'none';
+          return;
+        }
+        counts.forEach(el => {
+          el.textContent = notifications.length;
+          el.style.display = 'inline-flex';
+        });
+        if (dismissAllBtn) dismissAllBtn.style.display = '';
+        list.innerHTML = notifications.map(n => {
+          const icon = n.type === 'gate_review' ? '🚧' : '❓';
+          return `<a class="notification-item" href="/ticket/${n.ticket_id}">
+            <div class="notification-item-icon">${icon}</div>
+            <div class="notification-item-body">
+              <div class="notification-item-title">#${n.ticket_id} ${escapeHtml(n.ticket_title)}</div>
+              <div class="notification-item-meta">${escapeHtml(n.message)} · ${escapeHtml(n.board_name)} · ${escapeHtml(n.status_name)}</div>
+            </div>
+            <div class="notification-item-actions">
+              <button class="notif-btn dismiss-btn" title="Hide this notification" onclick="event.preventDefault();event.stopPropagation();dismissNotification(${n.ticket_id},'${n.type}')">✕</button>
+            </div>
+          </a>`;
+        }).join('');
+      }
+
+      window.dismissNotification = async function(ticketId, type) {
+        try {
+          const res = await fetch('/api/notifications/dismiss', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ticket_id: ticketId, type: type})
+          });
+          if (res.ok) {
+            await loadNotifications();
+          }
+        } catch (e) {
+          // silently fail
+        }
+      };
+
+      window.dismissAllNotifications = async function() {
+        try {
+          const res = await fetch('/api/notifications/dismiss-all', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'}
+          });
+          if (res.ok) {
+            await loadNotifications();
+          }
+        } catch (e) {
+          // silently fail
+        }
+      };
+
+      async function loadNotifications() {
+        try {
+          const res = await fetch('/api/notifications');
+          if (res.ok) {
+            notifications = await res.json();
+            renderNotifications();
+          }
+        } catch (e) {
+          // silently fail
+        }
+      }
+
+      document.addEventListener('click', (e) => {
+        const panel = document.getElementById('notification-panel');
+        const bells = [document.getElementById('sidebar-bell'), document.getElementById('topbar-bell')];
+        if (panelOpen && !panel.contains(e.target) && !bells.some(b => b && b.contains(e.target))) {
+          toggleNotifications();
+        }
+      });
+
+      loadNotifications();
+
+      // Real-time notification refresh via SSE (replaces 30s polling)
+      window.addEventListener('sse:gate.pending', () => { debounceNotifications(); });
+      window.addEventListener('sse:gate.passed', () => { debounceNotifications(); });
+      window.addEventListener('sse:gate.failed', () => { debounceNotifications(); });
+      window.addEventListener('sse:question.asked', () => { debounceNotifications(); });
+      window.addEventListener('sse:question.answered', () => { debounceNotifications(); });
+
+      let _notifDebounce = null;
+      function debounceNotifications() {
+        clearTimeout(_notifDebounce);
+        _notifDebounce = setTimeout(loadNotifications, 1000);
+      }
+    })();
+
+    // ── Global SSE (EventSource) connection ──
+    (function() {
+      let es = null;
+      let currentBoardId = localStorage.getItem('activeBoard');
+
+      function connectSSE() {
+        if (es) {
+          es.close();
+          es = null;
+        }
+        const bid = localStorage.getItem('activeBoard');
+        if (!bid) return;
+        const url = '/api/events/stream?board_id=' + encodeURIComponent(bid);
+        es = new EventSource(url);
+
+        es.onopen = function() {
+          console.log('[SSE] Connected to event stream (board ' + bid + ')');
+          // Re-sync state on reconnect
+          window.dispatchEvent(new CustomEvent('sse:open'));
+        };
+
+        es.onerror = function() {
+          console.warn('[SSE] Connection error — EventSource will auto-reconnect');
+        };
+
+        // Listen for all 12 event types and dispatch as CustomEvents on window
+        const eventTypes = [
+          'ticket.created', 'ticket.status_changed', 'ticket.updated',
+          'comment.added', 'question.asked', 'question.answered',
+          'agent.spawned', 'agent.completed', 'agent.failed',
+          'gate.pending', 'gate.passed', 'gate.failed'
+        ];
+        eventTypes.forEach(function(type) {
+          es.addEventListener(type, function(e) {
+            let data = {};
+            try { data = JSON.parse(e.data); } catch(err) {}
+            window.dispatchEvent(new CustomEvent('sse:' + type, { detail: data }));
+          });
+        });
+      }
+
+      // Initial connection
+      connectSSE();
+
+      // Reconnect when board changes
+      window.addEventListener('storage', function(e) {
+        if (e.key === 'activeBoard' && e.newValue !== currentBoardId) {
+          currentBoardId = e.newValue;
+          connectSSE();
+        }
+      });
+
+      // Expose for other scripts
+      window._reconnectSSE = function() {
+        connectSSE();
+      };
+    })();
+  </script>
+  {% block scripts %}{% endblock %}
+  <div class="assistant-bubble" id="assistant-bubble" title="Assistant">✨</div>
+  <div class="assistant-panel" id="assistant-panel">
+    <div class="assistant-header">
+      <strong>Assistant</strong>
+      <div class="assistant-actions">
+        <button id="assistant-settings-btn" title="Settings">⚙️</button>
+        <button id="assistant-compact" title="Compact">Compact</button>
+        <button id="assistant-reset" title="Reset">Reset</button>
+        <button id="assistant-close" title="Close">Close</button>
+      </div>
+    </div>
+    <div class="assistant-messages" id="assistant-messages">
+      <div class="assistant-empty">No messages yet</div>
+    </div>
+    <div class="saved-prompts-bar" id="assistant-saved-prompts">
+      <span class="muted" style="font-size:0.8rem;">No saved prompts</span>
+    </div>
+    <div class="assistant-footer">
+      <input type="text" id="assistant-input" placeholder="Ask the assistant…" autocomplete="off" />
+      <button id="assistant-send">Send</button>
+    </div>
+  </div>
+  <script src="{{ url_for('static', filename='assistant.js') }}"></script>
+</body>
+</html>

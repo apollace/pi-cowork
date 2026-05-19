@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Live Run #{{ run.id }} — pi-CoWork{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Live Log — Agent Run #{{ run.id }}</h1>
+    <div class="meta" style="margin:0.25rem 0 0;">
+      <span class="badge status">{{ run.status }}</span>
+      <span class="badge agent">🤖 {{ run.agent_name }}</span>
+      <span class="badge muted">Ticket #{{ run.ticket_id }}: {{ run.ticket_title }}</span>
+      <span class="badge status">{{ run.status_name }}</span>
+      <span class="badge muted" id="elapsed">—</span>
+    </div>
+  </div>
+  <div class="page-actions">
+    <button id="kill-btn" class="btn kill-btn" style="display:none;">🛑 Kill Agent</button>
+    <a class="btn" href="/ticket/{{ run.ticket_id }}">← Ticket</a>
+    <a class="btn" href="/board">← Board</a>
+  </div>
+</div>
+
+<section class="live-log-page">
+  <pre id="log-content" class="log-content live-log">Loading…</pre>
+</section>
+
+<script>
+  const runId = {{ run.id }};
+  const runStatus = '{{ run.status }}';
+  const startedAt = new Date('{{ run.started_at }}');
+  const logPre = document.getElementById('log-content');
+  const elapsedBadge = document.getElementById('elapsed');
+  const killBtn = document.getElementById('kill-btn');
+
+  // Show kill button only if run is still running
+  if (runStatus === 'running') {
+    killBtn.style.display = '';
+  }
+
+  killBtn.addEventListener('click', async function() {
+    if (!confirm('Are you sure you want to kill this agent?')) return;
+    killBtn.disabled = true;
+    killBtn.textContent = 'Killing…';
+    try {
+      const res = await fetch('/api/agent_runs/' + runId + '/kill', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        killBtn.textContent = 'Killed';
+        killBtn.classList.add('killed');
+      } else {
+        killBtn.textContent = '🛑 Kill Agent';
+        killBtn.disabled = false;
+        alert(data.error || 'Failed to kill agent');
+      }
+    } catch (e) {
+      killBtn.textContent = '🛑 Kill Agent';
+      killBtn.disabled = false;
+      alert('Error: ' + e.message);
+    }
+  });
+
+  function formatElapsed(ms) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    const parts = [];
+    if (h) parts.push(h + 'h');
+    if (m || h) parts.push(m + 'm');
+    parts.push(s + 's');
+    return parts.join(' ');
+  }
+
+  function updateElapsed() {
+    const now = new Date();
+    elapsedBadge.textContent = formatElapsed(now - startedAt);
+  }
+
+  // Only connect the live stream if the run is still running.
+  // Already-completed runs never produce new data, so opening an SSE
+  // connection would just poll forever (server returns 410 Gone) or
+  // reconnect in a loop.
+  let streamConnected = false;
+
+  function connectStream() {
+    const es = new EventSource('/api/agent_runs/' + runId + '/stream');
+    let buffer = '';
+
+    es.onmessage = function(e) {
+      buffer += e.data + '\n';
+    };
+
+    // Flush buffer every 250ms to reduce DOM thrashing
+    const flushInterval = setInterval(function() {
+      if (buffer) {
+        if (logPre.textContent === 'Loading…') {
+          logPre.textContent = '';
+        }
+        logPre.textContent += buffer;
+        buffer = '';
+        logPre.scrollTop = logPre.scrollHeight;
+      }
+    }, 250);
+
+    es.addEventListener('done', function(e) {
+      clearInterval(flushInterval);
+      if (buffer) {
+        logPre.textContent += buffer;
+        buffer = '';
+      }
+      logPre.scrollTop = logPre.scrollHeight;
+      es.close();
+      streamConnected = false;
+      // Hide kill button when run finishes naturally
+      if (killBtn) killBtn.style.display = 'none';
+    });
+
+    es.addEventListener('error', function(e) {
+      clearInterval(flushInterval);
+      if (buffer) {
+        logPre.textContent += buffer;
+        buffer = '';
+      }
+      logPre.scrollTop = logPre.scrollHeight;
+      es.close();
+    });
+
+    es.onerror = function() {
+      clearInterval(flushInterval);
+      es.close();
+      streamConnected = false;
+      // Only reconnect if the run was known to be running when we
+      // opened the page AND the page is still visible.
+      // Completed/failed runs never produce new data, so there is
+      // no point reconnecting (the server will just return 410).
+      if (runStatus === 'running' && document.visibilityState === 'visible') {
+        setTimeout(connectStream, 3000);
+      }
+    };
+  }
+
+  // Fallback initial fetch so content appears immediately while SSE connects
+  async function fetchLog() {
+    try {
+      const res = await fetch('/api/agent_runs/' + runId + '/log');
+      if (res.ok) {
+        const text = await res.text();
+        if (logPre.textContent === 'Loading…') {
+          logPre.textContent = text;
+          logPre.scrollTop = logPre.scrollHeight;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  fetchLog();
+  updateElapsed();
+  setInterval(updateElapsed, 1000);
+
+  // Only open the live SSE stream for running agents.
+  // For completed/failed runs, the one-shot fetchLog() above is sufficient.
+  if (runStatus === 'running') {
+    streamConnected = true;
+    connectStream();
+  }
+</script>
+{% endblock %}

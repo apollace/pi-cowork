@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Update — pi-CoWork{% endblock %}
+{% block content %}
+<div class="section">
+  <h1>Update</h1>
+
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="card-row">
+      <strong>Current branch:</strong> {{ info.branch }}
+    </div>
+    <div class="card-row">
+      <strong>Current commit:</strong> <code>{{ info.commit }}</code>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-messages">
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="toolbar" style="margin-top:1rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+    <form action="{{ url_for('update_check') }}" method="post" style="display:inline;">
+      <button type="submit" class="btn">Check for updates</button>
+    </form>
+    <form action="{{ url_for('update_run') }}" method="post" style="display:inline;">
+      <button type="submit" class="btn primary">Update app</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}{% if ticket %}#{{ ticket.id }} {{ ticket.title }}{% else %}New Ticket{% endif %} — pi-CoWork{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{% if ticket %}Edit #{{ ticket.id }}{% else %}New Ticket{% endif %}</h1>
+</div>
+
+<form id="ticket-form" class="form-card">
+  <label>
+    Title
+    <input type="text" name="title" required value="{{ ticket.title if ticket else '' }}">
+  </label>
+  <label>
+    Description
+    <textarea name="body" rows="6">{{ ticket.body if ticket else '' }}</textarea>
+  </label>
+  <label>
+    Priority
+    <select name="priority" required>
+      <option value="Low">Low</option>
+      <option value="Medium" selected>Medium</option>
+      <option value="High">High</option>
+      <option value="Critical">Critical</option>
+    </select>
+  </label>
+  <label>
+    Board
+    <select name="board_id" required {% if ticket %}disabled{% endif %}>
+      <option value="">— Select —</option>
+    </select>
+  </label>
+  <label>
+    Status
+    <select name="status_id" required>
+      <option value="">— Select —</option>
+    </select>
+  </label>
+  <div class="form-group" id="labels-group" style="margin-bottom:1rem;">
+    <label>Labels</label>
+    <div id="labels-picker"></div>
+  </div>
+  <div class="form-actions">
+    <button type="submit" class="btn primary">Save</button>
+    {% if ticket %}
+    <a class="btn" href="{{ url_for('ticket_detail', ticket_id=ticket.id) }}">Cancel</a>
+    {% else %}
+    <a class="btn" href="{{ url_for('board') }}">Cancel</a>
+    {% endif %}
+  </div>
+</form>
+
+<script>
+  const ticketId = {{ ticket.id if ticket else 'null' }};
+  const currentBoardId = {{ ticket.board_id if ticket else 'null' }};
+  const currentStatusId = {{ ticket.status_id if ticket else 'null' }};
+  const currentPriority = '{{ ticket.priority if ticket else 'Medium' }}';
+  let currentLabelIds = [];
+
+  async function loadBoards() {
+    const res = await fetch('/api/boards');
+    const boards = await res.json();
+    const sel = document.querySelector('#ticket-form select[name="board_id"]');
+    sel.innerHTML = '<option value="">— Select —</option>';
+    for (const b of boards) {
+      const opt = document.createElement('option');
+      opt.value = b.id;
+      opt.textContent = b.name;
+      sel.appendChild(opt);
+    }
+    // Set active board as default for new tickets
+    if (!ticketId) {
+      const active = localStorage.getItem('activeBoard');
+      if (active && boards.some(b => b.id === parseInt(active))) {
+        sel.value = active;
+      }
+    } else {
+      sel.value = currentBoardId;
+    }
+    // Load statuses based on selected board's workflow
+    if (sel.value) {
+      await loadBoardData(parseInt(sel.value));
+    }
+    sel.addEventListener('change', (e) => {
+      loadBoardData(parseInt(e.target.value));
+    });
+  }
+
+  async function loadBoardData(boardId) {
+    const boardRes = await fetch(`/api/boards/${boardId}`);
+    const board = await boardRes.json();
+    if (!boardRes.ok) return;
+    await loadStatuses(board.workflow_id);
+    await initLabelPickerForm(board.workflow_id);
+  }
+
+  async function loadStatuses(workflowId) {
+    const res = await fetch(`/api/statuses?workflow_id=${workflowId}`);
+    const statuses = await res.json();
+    const sel = document.querySelector('#ticket-form select[name="status_id"]');
+    sel.innerHTML = '<option value="">— Select —</option>';
+    for (const s of statuses) {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.name;
+      if (currentStatusId !== null && s.id === currentStatusId) {
+        opt.selected = true;
+      } else if (currentStatusId === null && s.is_default) {
+        opt.selected = true;
+      }
+      sel.appendChild(opt);
+    }
+  }
+
+  let labelPickerForm = null;
+
+  async function initLabelPickerForm(workflowId) {
+    const container = document.getElementById('labels-picker');
+    if (!container) return;
+    if (!labelPickerForm) {
+      labelPickerForm = new LabelPicker({
+        container,
+        workflowId,
+        mode: 'form',
+        selectedIds: currentLabelIds,
+      });
+      await labelPickerForm.init();
+    } else {
+      const previousIds = labelPickerForm.getSelectedIds();
+      labelPickerForm.workflowId = workflowId;
+      await labelPickerForm.loadLabels();
+      const validIds = labelPickerForm.allLabels.map(l => l.id);
+      const preserved = previousIds.filter(id => validIds.includes(id));
+      labelPickerForm.selectedIds = new Set(preserved);
+      labelPickerForm.render();
+    }
+  }
+
+  document.getElementById('ticket-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const labelIds = labelPickerForm ? labelPickerForm.getSelectedIds() : [];
+    const body = {
+      title: fd.get('title'),
+      body: fd.get('body'),
+      status_id: parseInt(fd.get('status_id')),
+      board_id: parseInt(fd.get('board_id')),
+      priority: fd.get('priority'),
+      labels: labelIds,
+    };
+    const url = ticketId ? `/api/tickets/${ticketId}` : '/api/tickets';
+    const method = ticketId ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method,
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      if (ticketId) {
+        window.location.href = `/ticket/${ticketId}`;
+      } else {
+        const data = await res.json();
+        window.location.href = `/ticket/${data.id}`;
+      }
+    } else {
+      const data = await res.json();
+      alert(data.error || 'Something went wrong');
+    }
+  });
+
+  // If editing, fetch current labels and set priority
+  async function initLabels() {
+    if (ticketId) {
+      const res = await fetch(`/api/tickets/${ticketId}`);
+      const ticketData = await res.json();
+      currentLabelIds = (ticketData.labels || []).map(l => l.id);
+    }
+    document.querySelector('#ticket-form select[name="priority"]').value = currentPriority;
+    await loadBoards();
+  }
+
+  initLabels();
+</script>
+{% endblock %}

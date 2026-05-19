@@ -1,0 +1,678 @@
+{% extends "base.html" %}
+{% block title %}Settings — pi-CoWork{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Settings</h1>
+  <div class="page-actions">
+    <a class="btn" href="{{ url_for('board') }}">Cancel</a>
+  </div>
+</div>
+
+<div class="settings-form">
+  <!-- Assistant Category (collapsed by default) -->
+  <div class="settings-category collapsed" id="category-assistant">
+    <div class="settings-category-header" onclick="toggleCategory('assistant')">
+      <div class="settings-category-header-left">
+        <span class="settings-chevron">▶</span>
+        <span class="settings-category-title">🤖 Assistant</span>
+      </div>
+    </div>
+    <div class="settings-category-detail collapsed" id="detail-assistant">
+      <div class="form-card">
+        <label class="form-row">
+          <span>Enabled</span>
+          <input type="checkbox" id="cfg-enabled" />
+        </label>
+        <label class="form-row">
+          <span>Auto context</span>
+          <input type="checkbox" id="cfg-auto-context" />
+        </label>
+        <label class="form-row">
+          <span>Model</span>
+          <select id="cfg-model"><option value="">default</option></select>
+        </label>
+        <label class="form-row">
+          <span>Thinking</span>
+          <select id="cfg-thinking"><option value="">medium</option></select>
+        </label>
+        <label class="form-row">
+          <span>Working directory</span>
+          <input type="text" id="cfg-working-directory" />
+        </label>
+      </div>
+      <div class="form-card" style="margin-top: 1rem;">
+        <h2>System Prompt</h2>
+        <textarea id="cfg-system-prompt" class="system-prompt-textarea" rows="20"></textarea>
+      </div>
+      <div class="form-card" style="margin-top: 1rem;">
+        <fieldset class="api-endpoints-fieldset" id="assistant-api-endpoints-fieldset">
+          <legend>API Endpoints</legend>
+          <div id="assistant-api-endpoints-checkboxes">Loading…</div>
+        </fieldset>
+      </div>
+      <div class="form-card" style="margin-top: 1rem;">
+        <h2>Saved Prompts</h2>
+        <div id="saved-prompts-list" style="margin-bottom:0.75rem;">Loading…</div>
+        <div class="saved-prompts-inline-add">
+          <input type="text" id="sp-add-name" class="edit-input" placeholder="Name…" />
+          <textarea id="sp-add-text" class="edit-input" rows="2" placeholder="Prompt text…"></textarea>
+          <button type="button" class="btn primary small" onclick="createSavedPrompt()">Add</button>
+          <span id="sp-feedback" class="feedback"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- General Category (collapsed by default) -->
+  <div class="settings-category collapsed" id="category-general">
+    <div class="settings-category-header" onclick="toggleCategory('general')">
+      <div class="settings-category-header-left">
+        <span class="settings-chevron">▶</span>
+        <span class="settings-category-title">⚙️ General</span>
+      </div>
+    </div>
+    <div class="settings-category-detail collapsed" id="detail-general">
+      <div class="form-card">
+        <label class="form-row">
+          <span>API base URL</span>
+          <input type="text" id="cfg-pi-cowork-url" placeholder="http://localhost:5000" />
+        </label>
+        <label class="form-row">
+          <span>Port</span>
+          <input type="number" id="cfg-port" min="1" max="65535" />
+        </label>
+        <label class="form-row">
+          <span>Max parallel agents</span>
+          <input type="number" id="cfg-max-parallel" min="1" max="100" />
+        </label>
+        <label class="form-row">
+          <span>Max spawns per hour</span>
+          <input type="number" id="cfg-max-per-hour" min="1" max="10000" />
+        </label>
+        <label class="form-row">
+          <span>Warm spawn threshold (seconds)</span>
+          <input type="number" id="cfg-warm-spawn-threshold" min="0" max="86400" />
+        </label>
+        <label class="form-row">
+          <span>Run max age (seconds)</span>
+          <input type="number" id="cfg-run-max-age" min="60" max="86400" />
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Logs & Storage Category (collapsed by default) -->
+  <div class="settings-category collapsed" id="category-logs">
+    <div class="settings-category-header" onclick="toggleCategory('logs')">
+      <div class="settings-category-header-left">
+        <span class="settings-chevron">▶</span>
+        <span class="settings-category-title">📜 Logs &amp; Storage</span>
+      </div>
+    </div>
+    <div class="settings-category-detail collapsed" id="detail-logs">
+      <div class="form-card">
+        <label class="form-row">
+          <span>Log retention (days)</span>
+          <input type="number" id="cfg-log-retention" min="1" max="3650" />
+        </label>
+        <div class="form-row" style="margin-top:0.5rem;">
+          <span></span>
+          <button class="btn danger" id="btn-purge-terminal-logs">Purge terminal ticket logs</button>
+          <span id="purge-feedback" class="feedback"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-actions" style="margin-top: 1rem;">
+    <button class="btn primary" id="cfg-save">Save</button>
+    <a class="btn" href="{{ url_for('board') }}">Cancel</a>
+    <span id="cfg-feedback" class="feedback"></span>
+  </div>
+</div>
+
+<script>
+  /* ── Category toggle ── */
+  function toggleCategory(name) {
+    const category = document.getElementById('category-' + name);
+    const detail = document.getElementById('detail-' + name);
+    const chevron = category.querySelector('.settings-chevron');
+    if (category.classList.contains('collapsed')) {
+      category.classList.remove('collapsed');
+      detail.classList.remove('collapsed');
+      chevron.textContent = '▼';
+    } else {
+      category.classList.add('collapsed');
+      detail.classList.add('collapsed');
+      chevron.textContent = '▶';
+    }
+  }
+
+  /* ── General settings defaults ── */
+  const GENERAL_DEFAULTS = {
+    pi_cowork_url: 'http://localhost:5000',
+    port: '5000',
+    max_parallel: '1',
+    max_per_hour: '100',
+    warm_spawn_threshold: '3600',
+    run_max_age: '7200'
+  };
+
+  /* ── pi-models helpers ── */
+  let piModelsData = { models: [], thinking_levels: [] };
+
+  async function loadPiModels() {
+    try {
+      const res = await fetch('/api/pi-models');
+      if (res.ok) {
+        piModelsData = await res.json();
+      }
+    } catch (e) {
+      console.warn('Failed to load pi models', e);
+    }
+  }
+
+  function populateModelSelect(selectEl, currentValue) {
+    if (!selectEl) return;
+    selectEl.innerHTML = '<option value="">default</option>';
+    const models = piModelsData.models || [];
+    for (const m of models) {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.id;
+      selectEl.appendChild(opt);
+    }
+    if (currentValue) {
+      if (!Array.from(selectEl.options).some(o => o.value === currentValue)) {
+        const opt = document.createElement('option');
+        opt.value = currentValue;
+        opt.textContent = currentValue + ' (unavailable)';
+        selectEl.appendChild(opt);
+      }
+      selectEl.value = currentValue;
+    }
+  }
+
+  function getModelThinkingLevels(modelId) {
+    if (!modelId) return null;
+    const models = piModelsData.models || [];
+    const model = models.find(m => m.id === modelId);
+    if (!model) return null;
+    return model.thinking_levels || null;
+  }
+
+  function populateThinkingSelect(selectEl, currentValue, modelThinkingLevels) {
+    if (!selectEl) return;
+    selectEl.innerHTML = '<option value="">default</option>';
+    const allLevels = piModelsData.thinking_levels || ['off','minimal','low','medium','high','xhigh'];
+    const levels = Array.isArray(modelThinkingLevels) ? modelThinkingLevels : allLevels;
+    for (const level of levels) {
+      const opt = document.createElement('option');
+      opt.value = level;
+      opt.textContent = level;
+      selectEl.appendChild(opt);
+    }
+    if (currentValue && !levels.includes(currentValue)) {
+      selectEl.value = '';
+    } else {
+      selectEl.value = currentValue || '';
+    }
+  }
+
+  /* ── Config load / save ── */
+  async function loadConfig() {
+    try {
+      // Load assistant config
+      const res = await fetch('/api/assistant/config');
+      const config = await res.json();
+      await loadPiModels();
+      const modelSelect = document.getElementById('cfg-model');
+      populateModelSelect(modelSelect, config.model || '');
+      populateThinkingSelect(document.getElementById('cfg-thinking'), config.thinking || 'medium', getModelThinkingLevels(modelSelect.value));
+      document.getElementById('cfg-enabled').checked = !!config.enabled;
+      document.getElementById('cfg-auto-context').checked = !!config.auto_context;
+      document.getElementById('cfg-working-directory').value = config.working_directory || 'workspace';
+      document.getElementById('cfg-system-prompt').value = config.system_prompt || '';
+      window._assistantApiEndpoints = config.api_endpoints || null;
+      await loadAssistantEndpointRegistry();
+      renderAssistantEndpointCheckboxes(window._assistantApiEndpoints);
+
+      // Load general settings
+      const generalKeys = ['pi_cowork_url', 'port', 'max_parallel', 'max_per_hour', 'warm_spawn_threshold', 'run_max_age'];
+      for (const key of generalKeys) {
+        try {
+          const r = await fetch('/api/settings/' + key);
+          if (r.ok) {
+            const d = await r.json();
+            const elId = key === 'pi_cowork_url' ? 'cfg-pi-cowork-url' :
+                         key === 'port' ? 'cfg-port' :
+                         key === 'max_parallel' ? 'cfg-max-parallel' :
+                         key === 'max_per_hour' ? 'cfg-max-per-hour' :
+                         key === 'warm_spawn_threshold' ? 'cfg-warm-spawn-threshold' :
+                         key === 'run_max_age' ? 'cfg-run-max-age' : '';
+            if (elId) {
+              const el = document.getElementById(elId);
+              if (el) {
+                el.value = key === 'pi_cowork_url' ? d.value : parseInt(d.value, 10);
+              }
+            }
+          }
+        } catch (e) {
+          // Use default if fetch fails
+          const elId = key === 'pi_cowork_url' ? 'cfg-pi-cowork-url' :
+                       key === 'port' ? 'cfg-port' :
+                       key === 'max_parallel' ? 'cfg-max-parallel' :
+                       key === 'max_per_hour' ? 'cfg-max-per-hour' :
+                       key === 'warm_spawn_threshold' ? 'cfg-warm-spawn-threshold' :
+                       key === 'run_max_age' ? 'cfg-run-max-age' : '';
+          if (elId) {
+            const el = document.getElementById(elId);
+            if (el) {
+              el.value = key === 'pi_cowork_url' ? GENERAL_DEFAULTS[key] : parseInt(GENERAL_DEFAULTS[key], 10);
+            }
+          }
+        }
+      }
+
+      // Load log retention setting
+      const logRes = await fetch('/api/settings/log_retention_days');
+      if (logRes.ok) {
+        const logData = await logRes.json();
+        document.getElementById('cfg-log-retention').value = parseInt(logData.value, 10) || 30;
+      } else {
+        document.getElementById('cfg-log-retention').value = 30;
+      }
+
+      await loadSavedPrompts();
+    } catch (e) {
+      showFeedback('Failed to load settings', 'error');
+    }
+  }
+
+  document.getElementById('cfg-model').addEventListener('change', function() {
+    const thinkingLevels = getModelThinkingLevels(this.value);
+    const thinkingSelect = document.getElementById('cfg-thinking');
+    populateThinkingSelect(thinkingSelect, thinkingSelect.value, thinkingLevels);
+  });
+
+  function showSavedPromptFeedback(text, type) {
+    const el = document.getElementById('sp-feedback');
+    el.textContent = text;
+    el.className = 'feedback feedback-' + type;
+    if (type === 'success') {
+      setTimeout(() => { el.textContent = ''; el.className = 'feedback'; }, 3000);
+    }
+  }
+
+  function showFeedback(text, type) {
+    const el = document.getElementById('cfg-feedback');
+    el.textContent = text;
+    el.className = 'feedback feedback-' + type;
+    if (type === 'success') {
+      setTimeout(() => { el.textContent = ''; el.className = 'feedback'; }, 3000);
+    }
+  }
+
+  function showPurgeFeedback(text, type) {
+    const el = document.getElementById('purge-feedback');
+    el.textContent = text;
+    el.className = 'feedback feedback-' + type;
+    if (type === 'success') {
+      setTimeout(() => { el.textContent = ''; el.className = 'feedback'; }, 4000);
+    }
+  }
+
+  async function saveConfig() {
+    // Collect assistant endpoint selections
+    const checked = document.querySelectorAll('#assistant-api-endpoints-checkboxes .ep-checkbox:checked');
+    const selectedKeys = Array.from(checked).map(cb => cb.value);
+    const allKeys = Array.from(document.querySelectorAll('#assistant-api-endpoints-checkboxes .ep-checkbox')).map(cb => cb.value);
+    const apiEndpoints = selectedKeys.length === allKeys.length ? null : selectedKeys;
+
+    const payload = {
+      enabled: document.getElementById('cfg-enabled').checked,
+      auto_context: document.getElementById('cfg-auto-context').checked,
+      model: document.getElementById('cfg-model').value.trim() || null,
+      thinking: document.getElementById('cfg-thinking').value,
+      working_directory: document.getElementById('cfg-working-directory').value.trim() || 'workspace',
+      system_prompt: document.getElementById('cfg-system-prompt').value.trim() || null,
+      api_endpoints: apiEndpoints,
+    };
+
+    // Validate general settings
+    const maxParallel = parseInt(document.getElementById('cfg-max-parallel').value, 10);
+    if (isNaN(maxParallel) || maxParallel < 1) {
+      showFeedback('Max parallel agents must be at least 1', 'error');
+      return;
+    }
+    const maxPerHour = parseInt(document.getElementById('cfg-max-per-hour').value, 10);
+    if (isNaN(maxPerHour) || maxPerHour < 1) {
+      showFeedback('Max spawns per hour must be at least 1', 'error');
+      return;
+    }
+    const warmThreshold = parseInt(document.getElementById('cfg-warm-spawn-threshold').value, 10);
+    if (isNaN(warmThreshold) || warmThreshold < 0) {
+      showFeedback('Warm spawn threshold must be 0 or more', 'error');
+      return;
+    }
+    const runMaxAge = parseInt(document.getElementById('cfg-run-max-age').value, 10);
+    if (isNaN(runMaxAge) || runMaxAge < 60) {
+      showFeedback('Run max age must be at least 60 seconds', 'error');
+      return;
+    }
+
+    const logRetention = parseInt(document.getElementById('cfg-log-retention').value, 10);
+    if (isNaN(logRetention) || logRetention < 1) {
+      showFeedback('Log retention days must be at least 1', 'error');
+      return;
+    }
+
+    const piCoworkUrl = document.getElementById('cfg-pi-cowork-url').value.trim();
+    if (!piCoworkUrl) {
+      showFeedback('API base URL cannot be empty', 'error');
+      return;
+    }
+
+    const portVal = parseInt(document.getElementById('cfg-port').value, 10);
+    if (isNaN(portVal) || portVal < 1 || portVal > 65535) {
+      showFeedback('Port must be between 1 and 65535', 'error');
+      return;
+    }
+
+    try {
+      // Build auto-synced URL (replace only port component)
+      let syncedUrl = piCoworkUrl;
+      try {
+        const urlObj = new URL(piCoworkUrl);
+        urlObj.port = String(portVal);
+        syncedUrl = urlObj.toString();
+      } catch (e) {
+        // If URL parsing fails, keep the raw value and skip auto-sync
+      }
+
+      // Save assistant config
+      const res = await fetch('/api/assistant/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        showFeedback('Failed to save assistant: ' + (data.error || 'unknown error'), 'error');
+        return;
+      }
+
+      // Save general settings
+      const generalSettings = {
+        pi_cowork_url: syncedUrl,
+        port: String(portVal),
+        max_parallel: String(maxParallel),
+        max_per_hour: String(maxPerHour),
+        warm_spawn_threshold: String(warmThreshold),
+        run_max_age: String(runMaxAge),
+      };
+      for (const [key, value] of Object.entries(generalSettings)) {
+        const sRes = await fetch('/api/settings/' + key, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value: value }),
+        });
+        const sData = await sRes.json();
+        if (!sData.success) {
+          showFeedback('Failed to save ' + key + ': ' + (sData.error || 'unknown error'), 'error');
+          return;
+        }
+      }
+
+      // Save log retention days
+      const logRes = await fetch('/api/settings/log_retention_days', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: String(logRetention) }),
+      });
+      const logData = await logRes.json();
+      if (!logData.success) {
+        showFeedback('Failed to save log retention: ' + (logData.error || 'unknown error'), 'error');
+        return;
+      }
+
+      showFeedback('Settings saved', 'success');
+    } catch (e) {
+      showFeedback('Failed to save: ' + e.message, 'error');
+    }
+  }
+
+  async function loadSavedPrompts() {
+    try {
+      const res = await fetch('/api/assistant/saved-prompts');
+      if (!res.ok) throw new Error('Failed to load saved prompts');
+      const rows = await res.json();
+      renderSavedPrompts(rows);
+    } catch (e) {
+      document.getElementById('saved-prompts-list').textContent = 'Failed to load saved prompts';
+    }
+  }
+
+  let _savedPromptsRows = [];
+  let _editingPromptId = null;
+
+  function renderSavedPrompts(rows) {
+    _savedPromptsRows = rows;
+    const container = document.getElementById('saved-prompts-list');
+    if (rows.length === 0) {
+      container.innerHTML = '<span class="muted">No saved prompts yet.</span>';
+      return;
+    }
+    let html = '<div class="saved-prompts-table">';
+    for (const r of rows) {
+      if (_editingPromptId === r.id) {
+        html += `
+          <div class="saved-prompts-row saved-prompts-row-edit">
+            <div class="saved-prompts-row-info" style="flex-direction:column;gap:0.35rem;">
+              <input type="text" id="sp-edit-name-${r.id}" class="edit-input" value="${escapeHtml(r.name)}" />
+              <textarea id="sp-edit-text-${r.id}" class="edit-input" rows="2">${escapeHtml(r.prompt_text)}</textarea>
+            </div>
+            <div class="saved-prompts-row-actions">
+              <button type="button" class="btn small primary" onclick="saveSavedPromptEdit(${r.id})">Save</button>
+              <button type="button" class="btn small" onclick="cancelSavedPromptEdit()">Cancel</button>
+            </div>
+          </div>`;
+      } else {
+        html += `
+          <div class="saved-prompts-row">
+            <div class="saved-prompts-row-info">
+              <strong>${escapeHtml(r.name)}</strong>
+              <span class="saved-prompts-row-text">${escapeHtml(r.prompt_text)}</span>
+            </div>
+            <div class="saved-prompts-row-actions">
+              <button type="button" class="btn small" onclick="startEditSavedPrompt(${r.id})">Edit</button>
+              <button type="button" class="btn small danger" onclick="deleteSavedPrompt(${r.id})">Delete</button>
+            </div>
+          </div>`;
+      }
+    }
+    html += '</div>';
+    container.innerHTML = html;
+  }
+
+  function startEditSavedPrompt(id) {
+    _editingPromptId = id;
+    renderSavedPrompts(_savedPromptsRows);
+    const input = document.getElementById('sp-edit-name-' + id);
+    if (input) input.focus();
+  }
+
+  function cancelSavedPromptEdit() {
+    _editingPromptId = null;
+    renderSavedPrompts(_savedPromptsRows);
+  }
+
+  async function saveSavedPromptEdit(id) {
+    const name = document.getElementById('sp-edit-name-' + id).value.trim();
+    const promptText = document.getElementById('sp-edit-text-' + id).value.trim();
+    if (!name) { showSavedPromptFeedback('Name is required', 'error'); return; }
+    if (!promptText) { showSavedPromptFeedback('Prompt text is required', 'error'); return; }
+    try {
+      const res = await fetch('/api/assistant/saved-prompts/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, prompt_text: promptText }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        _editingPromptId = null;
+        showSavedPromptFeedback('Saved prompt updated', 'success');
+        await loadSavedPrompts();
+      } else {
+        showSavedPromptFeedback(data.error || 'Failed to update', 'error');
+      }
+    } catch (e) {
+      showSavedPromptFeedback('Failed to update: ' + e.message, 'error');
+    }
+  }
+
+  async function createSavedPrompt() {
+    const name = document.getElementById('sp-add-name').value.trim();
+    const promptText = document.getElementById('sp-add-text').value.trim();
+    if (!name) { showSavedPromptFeedback('Name is required', 'error'); return; }
+    if (!promptText) { showSavedPromptFeedback('Prompt text is required', 'error'); return; }
+    try {
+      const res = await fetch('/api/assistant/saved-prompts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, prompt_text: promptText }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        document.getElementById('sp-add-name').value = '';
+        document.getElementById('sp-add-text').value = '';
+        showSavedPromptFeedback('Saved prompt added', 'success');
+        await loadSavedPrompts();
+      } else {
+        showSavedPromptFeedback(data.error || 'Failed to add', 'error');
+      }
+    } catch (e) {
+      showSavedPromptFeedback('Failed to add: ' + e.message, 'error');
+    }
+  }
+
+  async function deleteSavedPrompt(id) {
+    if (!confirm('Delete this saved prompt?')) return;
+    try {
+      const res = await fetch('/api/assistant/saved-prompts/' + id, { method: 'DELETE' });
+      if (res.ok) {
+        await loadSavedPrompts();
+      } else {
+        const data = await res.json();
+        showSavedPromptFeedback(data.error || 'Failed to delete', 'error');
+      }
+    } catch (e) {
+      showSavedPromptFeedback('Failed to delete: ' + e.message, 'error');
+    }
+  }
+
+  async function purgeTerminalLogs() {
+    if (!confirm('This will permanently delete file-based agent logs for all tickets in terminal statuses (Closed, Dropped, etc.). Continue?')) {
+      return;
+    }
+    const btn = document.getElementById('btn-purge-terminal-logs');
+    btn.disabled = true;
+    showPurgeFeedback('Purging…', '');
+    try {
+      const res = await fetch('/api/settings/purge-terminal-logs', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        showPurgeFeedback(`Done — ${data.purged_count} ticket log dir(s) removed`, 'success');
+      } else {
+        showPurgeFeedback('Failed: ' + (data.error || 'unknown error'), 'error');
+      }
+    } catch (e) {
+      showPurgeFeedback('Failed: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  let assistantEndpointRegistryCache = null;
+
+  async function loadAssistantEndpointRegistry() {
+    if (assistantEndpointRegistryCache) return assistantEndpointRegistryCache;
+    const res = await fetch('/api/endpoint-registry');
+    assistantEndpointRegistryCache = (await res.json()).endpoints;
+    return assistantEndpointRegistryCache;
+  }
+
+  function renderAssistantEndpointCheckboxes(selectedKeys) {
+    const container = document.getElementById('assistant-api-endpoints-checkboxes');
+    if (!assistantEndpointRegistryCache) {
+      container.textContent = 'Loading…';
+      return;
+    }
+    const grouped = {};
+    for (const ep of assistantEndpointRegistryCache) {
+      if (!grouped[ep.category]) grouped[ep.category] = [];
+      grouped[ep.category].push(ep);
+    }
+    // Default: all checked when null/empty
+    const effectiveSet = new Set(selectedKeys && selectedKeys.length ? selectedKeys : []);
+    let html = '';
+    for (const [cat, eps] of Object.entries(grouped)) {
+      html += `<div class="ep-category"><strong>${escapeHtml(cat)}</strong>`;
+      for (const ep of eps) {
+        const checked = selectedKeys === null || selectedKeys.length === 0 || effectiveSet.has(ep.key) ? 'checked' : '';
+        html += `<label class="ep-checkbox-label"><input type="checkbox" class="ep-checkbox" value="${escapeHtml(ep.key)}" ${checked}> ${escapeHtml(ep.method)} ${escapeHtml(ep.path_template)} — ${escapeHtml(ep.label)}</label>`;
+      }
+      html += '</div>';
+    }
+    container.innerHTML = html;
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  document.getElementById('cfg-save').addEventListener('click', saveConfig);
+  document.getElementById('btn-purge-terminal-logs').addEventListener('click', purgeTerminalLogs);
+  loadConfig();
+</script>
+<style>
+  .api-endpoints-fieldset {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem;
+    margin: 0.5rem 0;
+  }
+  .api-endpoints-fieldset legend {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    padding: 0 0.4rem;
+  }
+  .ep-category {
+    margin-bottom: 0.5rem;
+  }
+  .ep-category strong {
+    display: block;
+    font-size: 0.82rem;
+    margin-bottom: 0.2rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .ep-checkbox-label {
+    display: flex;
+    align-items: baseline;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    gap: 0.3rem;
+    line-height: 1.5;
+    cursor: pointer;
+  }
+  .ep-checkbox-label input[type="checkbox"] {
+    margin: 0.15rem 0.3rem 0.15rem 0;
+    flex-shrink: 0;
+  }
+</style>
+{% endblock %}

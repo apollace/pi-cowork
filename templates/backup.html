@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Backup & Restore — pi-CoWork{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Backup & Restore</h1>
+</div>
+
+<div class="form-card">
+  <h2>Export Workflow</h2>
+  <label>
+    Select Workflow
+    <select id="export-workflow"><option value="">Loading…</option></select>
+  </label>
+  <div class="form-actions">
+    <button class="btn primary" onclick="doExport()">Download Export</button>
+  </div>
+</div>
+
+<div class="form-card" style="border-color: var(--danger, #ef4444);">
+  <h2 style="color: var(--danger, #ef4444);">⚠️ Import Workflow</h2>
+  <p>
+    This will create a <strong>new workflow</strong> from the imported JSON file.
+    No existing data will be deleted.
+  </p>
+  <label>
+    Select workflow JSON file
+    <input type="file" id="import-file" accept=".json,application/json">
+  </label>
+  <div class="form-actions">
+    <button id="import-btn" class="btn primary" onclick="doImport()">Import Workflow</button>
+  </div>
+  <pre id="import-result" style="margin-top:1rem;white-space:pre-wrap;word-break:break-word"></pre>
+</div>
+
+<script>
+  async function loadWorkflows() {
+    const res = await fetch('/api/workflows');
+    const workflows = await res.json();
+    const sel = document.getElementById('export-workflow');
+    sel.innerHTML = '';
+    for (const w of workflows) {
+      const opt = document.createElement('option');
+      opt.value = w.id;
+      opt.textContent = w.name;
+      sel.appendChild(opt);
+    }
+    const saved = localStorage.getItem('activeWorkflow');
+    if (saved && workflows.some(w => w.id === parseInt(saved))) {
+      sel.value = saved;
+    }
+  }
+
+  async function doExport() {
+    const workflowId = document.getElementById('export-workflow').value;
+    if (!workflowId) { alert('Select a workflow'); return; }
+    const res = await fetch(`/api/workflows/${workflowId}/export`);
+    const data = await res.json();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${data.name}-export-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function doImport() {
+    const file = document.getElementById('import-file').files[0];
+    if (!file) return;
+    const text = await file.text();
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      document.getElementById('import-result').textContent = 'Error: Invalid JSON file.';
+      return;
+    }
+    const res = await fetch('/api/workflows/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(json),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      document.getElementById('import-result').textContent =
+        `✅ Import successful! Created workflow "${json.name || 'Imported'}" with ${data.agents} agents, ${data.statuses} statuses, ${data.transitions} transitions.`;
+      loadWorkflows();
+    } else {
+      document.getElementById('import-result').textContent =
+        `❌ Import failed: ${data.error || 'Unknown error'}`;
+    }
+  }
+
+  loadWorkflows();
+</script>
+{% endblock %}

@@ -1,0 +1,410 @@
+{% extends "base.html" %}
+
+{% block title %}System Logs — pi-CoWork{% endblock %}
+
+{% block content %}
+<div class="system-logs-page">
+  <h2>📜 System Logs</h2>
+
+  <div class="logs-filters">
+    <div class="filter-row">
+      <label>
+        Level
+        <select id="filter-level">
+          <option value="">All</option>
+          <option value="INFO">INFO</option>
+          <option value="WARNING">WARNING</option>
+          <option value="ERROR">ERROR</option>
+          <option value="CRITICAL">CRITICAL</option>
+        </select>
+      </label>
+
+      <label>
+        Type
+        <select id="filter-action-type">
+          <option value="">All</option>
+          <option value="http_request">HTTP Request</option>
+          <option value="db_change">DB Change</option>
+          <option value="agent_event">Agent Event</option>
+        </select>
+      </label>
+
+      <label>
+        Ticket ID
+        <input type="number" id="filter-ticket-id" placeholder="e.g. 37" min="1">
+      </label>
+
+      <label>
+        From
+        <input type="datetime-local" id="filter-date-from">
+      </label>
+
+      <label>
+        To
+        <input type="datetime-local" id="filter-date-to">
+      </label>
+
+      <label>
+        Search
+        <input type="text" id="filter-search" placeholder="Search message...">
+      </label>
+    </div>
+
+    <div class="filter-actions">
+      <button class="btn" onclick="loadLogs()">Apply Filters</button>
+      <button class="btn ghost" onclick="clearFilters()">Clear</button>
+      <button class="btn" onclick="exportLogs()">⬇ Export</button>
+    </div>
+  </div>
+
+  <div class="logs-table-container">
+    <table class="logs-table">
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Level</th>
+          <th>Type</th>
+          <th>Message</th>
+          <th>Details</th>
+          <th>Ticket</th>
+        </tr>
+      </thead>
+      <tbody id="logs-tbody">
+        <tr><td colspan="6" class="logs-empty">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="logs-pagination" id="logs-pagination"></div>
+</div>
+
+<style>
+.system-logs-page {
+  padding: 0 0 2rem 0;
+}
+.system-logs-page h2 {
+  margin-bottom: 1rem;
+}
+.logs-filters {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  flex: 1;
+}
+.filter-row label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  gap: 0.25rem;
+}
+.filter-row select,
+.filter-row input {
+  font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+.filter-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+.logs-table-container {
+  overflow-x: auto;
+}
+.logs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  background: var(--surface);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.logs-table th,
+.logs-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.logs-table th {
+  background: var(--surface);
+  font-weight: 600;
+  color: var(--text-muted);
+  position: sticky;
+  top: 0;
+}
+.logs-table tr:hover {
+  background: var(--hover-bg);
+}
+.logs-empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 2rem;
+}
+.level-INFO { color: #22c55e; font-weight: 600; }
+.level-WARNING { color: #f59e0b; font-weight: 600; }
+.level-ERROR { color: #ef4444; font-weight: 600; }
+.level-CRITICAL { color: #dc2626; font-weight: 700; background: #fef2f2; }
+.type-badge {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.type-http_request { background: #dbeafe; color: #1e40af; }
+.type-db_change { background: #fef3c7; color: #92400e; }
+.type-agent_event { background: #e0e7ff; color: #3730a3; }
+.details-cell {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.details-link {
+  color: var(--link-color, #6366f1);
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: 0.8rem;
+}
+.details-link:hover {
+  opacity: 0.8;
+}
+.no-details {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+.logs-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding: 0.5rem;
+}
+.logs-pagination .btn {
+  min-width: 32px;
+}
+.logs-pagination .page-info {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.details-popup-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.details-popup {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 1.5rem;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+}
+.details-popup h3 {
+  margin-bottom: 0.75rem;
+}
+.details-popup pre {
+  background: var(--bg);
+  padding: 1rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.details-popup .close-btn {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  let currentPage = 1;
+  let totalPages = 1;
+  const perPage = 50;
+
+  function getFilters() {
+    const params = new URLSearchParams();
+    const level = document.getElementById('filter-level').value;
+    const actionType = document.getElementById('filter-action-type').value;
+    const ticketId = document.getElementById('filter-ticket-id').value;
+    const dateFrom = document.getElementById('filter-date-from').value;
+    const dateTo = document.getElementById('filter-date-to').value;
+    const search = document.getElementById('filter-search').value;
+
+    if (level) params.set('level', level);
+    if (actionType) params.set('action_type', actionType);
+    if (ticketId) params.set('ticket_id', ticketId);
+    if (dateFrom) params.set('date_from', dateFrom + ':00');
+    if (dateTo) params.set('date_to', dateTo + ':59');
+    if (search) params.set('search', search);
+    return params;
+  }
+
+  window.loadLogs = function(page) {
+    if (page) currentPage = page;
+    const params = getFilters();
+    params.set('page', currentPage);
+    params.set('per_page', perPage);
+
+    fetch('/api/system_logs?' + params.toString())
+      .then(res => res.json())
+      .then(data => {
+        const tbody = document.getElementById('logs-tbody');
+        if (!data.logs || data.logs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="logs-empty">No logs found</td></tr>';
+          document.getElementById('logs-pagination').innerHTML = '';
+          return;
+        }
+
+        currentPage = data.page;
+        totalPages = data.total_pages;
+
+        tbody.innerHTML = data.logs.map(log => {
+          const levelClass = 'level-' + log.level;
+          const typeClass = 'type-' + log.action_type;
+          const typeLabel = log.action_type.replace('_', ' ');
+          const hasDetails = log.has_details || (log.details != null);
+          const detailsCell = hasDetails
+            ? `<span class="details-link" onclick="showDetails(${log.id})" title="Click to view full details">View details</span>`
+            : '<span class="no-details">—</span>';
+          const ticketLink = log.ticket_id ? `<a href="/ticket/${log.ticket_id}">#${log.ticket_id}</a>` : '';
+          return `<tr>
+            <td>${escapeHtml(log.timestamp || '')}</td>
+            <td><span class="${levelClass}">${escapeHtml(log.level)}</span></td>
+            <td><span class="type-badge ${typeClass}">${escapeHtml(typeLabel)}</span></td>
+            <td>${escapeHtml(log.message || '')}</td>
+            <td class="details-cell">${detailsCell}</td>
+            <td>${ticketLink}</td>
+          </tr>`;
+        }).join('');
+
+        renderPagination(data.total, data.page, data.total_pages);
+      })
+      .catch(err => {
+        console.error('Failed to load logs:', err);
+        document.getElementById('logs-tbody').innerHTML = '<tr><td colspan="6" class="logs-empty">Error loading logs</td></tr>';
+      });
+  };
+
+  function renderPagination(total, page, total_pages) {
+    const container = document.getElementById('logs-pagination');
+    if (total_pages <= 1) {
+      container.innerHTML = `<span class="page-info">${total} log entries</span>`;
+      return;
+    }
+    let html = '';
+    html += `<button class="btn small" ${page <= 1 ? 'disabled' : ''} onclick="loadLogs(${page - 1})">← Prev</button>`;
+
+    const maxButtons = 7;
+    let startPage = Math.max(1, page - Math.floor(maxButtons / 2));
+    let endPage = Math.min(total_pages, startPage + maxButtons - 1);
+    if (endPage - startPage < maxButtons - 1) {
+      startPage = Math.max(1, endPage - maxButtons + 1);
+    }
+
+    if (startPage > 1) {
+      html += `<button class="btn small" onclick="loadLogs(1)">1</button>`;
+      if (startPage > 2) html += `<span class="page-info">...</span>`;
+    }
+    for (let i = startPage; i <= endPage; i++) {
+      html += `<button class="btn small ${i === page ? 'primary' : ''}" onclick="loadLogs(${i})">${i}</button>`;
+    }
+    if (endPage < total_pages) {
+      if (endPage < total_pages - 1) html += `<span class="page-info">...</span>`;
+      html += `<button class="btn small" onclick="loadLogs(${total_pages})">${total_pages}</button>`;
+    }
+
+    html += `<button class="btn small" ${page >= total_pages ? 'disabled' : ''} onclick="loadLogs(${page + 1})">Next →</button>`;
+    html += `<span class="page-info">${total} entries · Page ${page} of ${total_pages}</span>`;
+    container.innerHTML = html;
+  }
+
+  window.clearFilters = function() {
+    document.getElementById('filter-level').value = '';
+    document.getElementById('filter-action-type').value = '';
+    document.getElementById('filter-ticket-id').value = '';
+    document.getElementById('filter-date-from').value = '';
+    document.getElementById('filter-date-to').value = '';
+    document.getElementById('filter-search').value = '';
+    currentPage = 1;
+    loadLogs(1);
+  };
+
+  window.exportLogs = function() {
+    const params = getFilters();
+    window.location.href = '/api/system_logs/export?' + params.toString();
+  };
+
+  window.showDetails = function(logId) {
+    // Fetch a single log entry by ID instead of re-querying the entire page
+    fetch('/api/system_logs/' + logId)
+      .then(res => {
+        if (!res.ok) throw new Error('Not found');
+        return res.json();
+      })
+      .then(log => {
+        const overlay = document.createElement('div');
+        overlay.className = 'details-popup-overlay';
+        overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+        const detailsContent = log.details
+          ? (typeof log.details === 'string' ? log.details : JSON.stringify(log.details, null, 2))
+          : '(none)';
+        overlay.innerHTML = `
+          <div class="details-popup">
+            <button class="close-btn" onclick="this.closest('.details-popup-overlay').remove()">✕</button>
+            <h3>Log Entry #${log.id}</h3>
+            <p><strong>Timestamp:</strong> ${escapeHtml(log.timestamp || '')}</p>
+            <p><strong>Level:</strong> <span class="level-${log.level}">${escapeHtml(log.level)}</span></p>
+            <p><strong>Type:</strong> ${escapeHtml(log.action_type)}</p>
+            <p><strong>Message:</strong> ${escapeHtml(log.message || '')}</p>
+            ${log.ticket_id ? `<p><strong>Ticket:</strong> <a href="/ticket/${log.ticket_id}">#${log.ticket_id}</a></p>` : ''}
+            <h4>Details</h4>
+            <pre>${escapeHtml(detailsContent)}</pre>
+          </div>
+        `;
+        document.body.appendChild(overlay);
+      })
+      .catch(err => {
+        console.error('Failed to load log detail:', err);
+      });
+  };
+
+  // Load initial data
+  loadLogs(1);
+})();
+</script>
+{% endblock %}

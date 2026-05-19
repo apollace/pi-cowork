@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+{% block title %}Board — pi-CoWork{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="board-header-left">
+    <h1 id="board-title">Board</h1>
+    <div class="board-meta" id="board-meta"></div>
+  </div>
+  <div class="page-actions" style="display:flex;gap:0.5rem;align-items:center;">
+    <a class="btn primary" id="new-ticket-btn" href="{{ url_for('new_ticket') }}">+ New Ticket</a>
+    <button class="btn" id="manage-boards-btn" onclick="toggleBoardPanel()" title="Manage boards">
+      <span>📁</span> Boards
+    </button>
+  </div>
+</div>
+
+<!-- Board Manager Slide-out -->
+<div id="board-panel-overlay" class="panel-overlay" onclick="toggleBoardPanel()"></div>
+<div id="board-panel" class="slide-panel">
+  <div class="slide-panel-header">
+    <h2>Boards</h2>
+    <button class="btn small" onclick="toggleBoardPanel()">✕</button>
+  </div>
+  <div class="slide-panel-body">
+    <button class="btn primary" style="margin-bottom:1rem;width:100%;" onclick="showCreateBoard()">+ New Board</button>
+    <div id="board-list"></div>
+  </div>
+</div>
+
+<!-- Create Board Modal -->
+<div id="create-board-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2>New Board</h2>
+    <form id="create-board-form" class="form-card">
+      <label>
+        Name *
+        <input type="text" name="name" required>
+      </label>
+      <label>
+        Workflow *
+        <select name="workflow_id" required>
+          <option value="">Loading…</option>
+        </select>
+      </label>
+      <label>
+        Working Directory
+        <input type="text" name="working_directory" placeholder="workspace">
+      </label>
+      <label>
+        Long-Term Vision
+        <textarea name="long_term_vision" rows="4" placeholder="Describe the long-term vision for this board (optional)"></textarea>
+      </label>
+      <div class="form-actions">
+        <button type="submit" class="btn primary">Create</button>
+        <button type="button" class="btn" onclick="hideCreateBoard()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit Board Modal -->
+<div id="edit-board-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2>Edit Board</h2>
+    <form id="edit-board-form" class="form-card">
+      <input type="hidden" name="id">
+      <label>
+        Name *
+        <input type="text" name="name" required>
+      </label>
+      <label>
+        Workflow *
+        <select name="workflow_id" required></select>
+      </label>
+      <label>
+        Working Directory
+        <input type="text" name="working_directory" placeholder="workspace">
+      </label>
+      <label>
+        Long-Term Vision
+        <textarea name="long_term_vision" rows="4" placeholder="Describe the long-term vision for this board (optional)"></textarea>
+      </label>
+      <div class="form-actions">
+        <button type="submit" class="btn primary">Save</button>
+        <button type="button" class="btn" onclick="hideEditBoard()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="running-agents" class="running-panel" style="display:none;"></div>
+
+<div class="board-tabs">
+  <button class="tab-btn active" data-tab="board" onclick="switchTab('board')">📋 Board</button>
+  <button class="tab-btn" data-tab="recurring" onclick="switchTab('recurring')">🔄 Recurring</button>
+</div>
+
+<div class="tab-content active" id="tab-board">
+<div class="board-controls">
+  <div class="filter-bar">
+    <input type="text" id="ticket-search" placeholder="Search tickets..." autocomplete="off">
+    <div class="filter-group priority-filters">
+      <label><input type="checkbox" value="Critical"> Critical</label>
+      <label><input type="checkbox" value="High"> High</label>
+      <label><input type="checkbox" value="Medium"> Medium</label>
+      <label><input type="checkbox" value="Low"> Low</label>
+    </div>
+    <div class="filter-group label-filters" id="label-filters"></div>
+  </div>
+  <label><input type="checkbox" id="show-terminal"> Show terminal statuses</label>
+</div>
+<div class="board" id="board"></div>
+</div>
+
+<div class="tab-content" id="tab-recurring" style="display:none;">
+  <div id="recurring-content">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:1rem;">
+      <button class="btn primary" onclick="showCreateRecurring()">+ New Recurring Task</button>
+    </div>
+    <div id="recurring-list"></div>
+  </div>
+</div>
+
+<!-- Board Assistant -->
+<div class="board-assistant-bubble" id="board-assistant-bubble" title="Board Assistant">🎯</div>
+<div class="board-assistant-panel" id="board-assistant-panel">
+  <div class="board-assistant-header">
+    <strong>Board Assistant</strong>
+    <div class="assistant-actions">
+      <button id="board-assistant-compact" title="Compact">Compact</button>
+      <button id="board-assistant-reset" title="Reset">Reset</button>
+      <button id="board-assistant-close" title="Close">Close</button>
+    </div>
+  </div>
+  <div class="board-assistant-messages" id="board-assistant-messages">
+    <div class="assistant-empty">No messages yet</div>
+  </div>
+  <div class="saved-prompts-bar" id="board-assistant-saved-prompts">
+    <span class="muted" style="font-size:0.8rem;">No saved prompts</span>
+  </div>
+  <div class="board-assistant-footer">
+    <input type="text" id="board-assistant-input" placeholder="Ask the board assistant…" autocomplete="off" />
+    <button id="board-assistant-send">Send</button>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+<script src="{{ url_for('static', filename='recurring.js') }}"></script>
+<script src="{{ url_for('static', filename='board_assistant.js') }}"></script>
+<script>
+  // Board manager panel
+  let boardStats = {};
+
+  function toggleBoardPanel() {
+    document.getElementById('board-panel').classList.toggle('open');
+    document.getElementById('board-panel-overlay').classList.toggle('open');
+  }
+
+  async function loadBoardStats() {
+    const res = await fetch('/api/boards/stats');
+    boardStats = await res.json();
+  }
+
+  async function renderBoardList() {
+    await loadBoardStats();
+    const res = await fetch('/api/boards');
+    const boards = await res.json();
+    const currentId = localStorage.getItem('activeBoard');
+    const list = document.getElementById('board-list');
+    list.innerHTML = '';
+    if (boards.length === 0) {
+      list.innerHTML = '<p class="empty">No boards yet. Create one above.</p>';
+      return;
+    }
+    for (const b of boards) {
+      const count = boardStats[b.id] || 0;
+      const isCurrent = String(b.id) === currentId;
+      const card = document.createElement('div');
+      card.className = 'board-card' + (isCurrent ? ' active' : '');
+      card.innerHTML = `
+        <div class="board-card-main" onclick="selectBoard(${b.id})">
+          <div class="board-card-name">${escapeHtml(b.name)}</div>
+          <div class="board-card-meta">
+            <span class="badge muted">${escapeHtml(b.workflow_name)}</span>
+            <span class="badge muted">${count} ticket${count !== 1 ? 's' : ''}</span>
+          </div>
+        </div>
+        <div class="board-card-actions">
+          <button class="btn small ghost" onclick="event.stopPropagation();showEditBoard(${b.id})" title="Edit">✏️</button>
+          <button class="btn small ghost danger-text" onclick="event.stopPropagation();deleteBoard(${b.id})" title="Delete">🗑️</button>
+        </div>
+      `;
+      list.appendChild(card);
+    }
+  }
+
+  function selectBoard(id) {
+    localStorage.setItem('activeBoard', id);
+    toggleBoardPanel();
+    // Re-init board with new selection
+    document.getElementById('board-selector-silent')?.remove();
+    initBoard();
+  }
+
+  async function showCreateBoard() {
+    const res = await fetch('/api/workflows');
+    const workflows = await res.json();
+    const sel = document.querySelector('#create-board-form select[name="workflow_id"]');
+    sel.innerHTML = '';
+    if (workflows.length === 0) {
+      sel.innerHTML = '<option value="">No workflows — create one first</option>';
+    } else {
+      for (const w of workflows) {
+        const opt = document.createElement('option');
+        opt.value = w.id;
+        opt.textContent = w.name;
+        sel.appendChild(opt);
+      }
+    }
+    document.getElementById('create-board-modal').style.display = 'flex';
+  }
+  function hideCreateBoard() {
+    document.getElementById('create-board-modal').style.display = 'none';
+    document.getElementById('create-board-form').reset();
+  }
+
+  document.getElementById('create-board-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const res = await fetch('/api/boards', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        name: fd.get('name'),
+        workflow_id: parseInt(fd.get('workflow_id')),
+        working_directory: fd.get('working_directory') || undefined,
+        long_term_vision: fd.get('long_term_vision') || undefined,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      hideCreateBoard();
+      localStorage.setItem('activeBoard', data.id);
+      renderBoardList();
+      initBoard();
+    } else {
+      const data = await res.json();
+      alert(data.error || 'Failed to create board');
+    }
+  });
+
+  async function showEditBoard(id) {
+    const res = await fetch(`/api/boards/${id}`);
+    const board = await res.json();
+    if (!res.ok) { alert('Board not found'); return; }
+    const wfRes = await fetch('/api/workflows');
+    const workflows = await wfRes.json();
+    const form = document.getElementById('edit-board-form');
+    form.elements.id.value = board.id;
+    form.elements.name.value = board.name;
+    form.elements.working_directory.value = board.working_directory || '';
+    form.elements.long_term_vision.value = board.long_term_vision || '';
+    const sel = form.elements.workflow_id;
+    sel.innerHTML = '';
+    for (const w of workflows) {
+      const opt = document.createElement('option');
+      opt.value = w.id;
+      opt.textContent = w.name;
+      if (w.id === board.workflow_id) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    document.getElementById('edit-board-modal').style.display = 'flex';
+  }
+  function hideEditBoard() {
+    document.getElementById('edit-board-modal').style.display = 'none';
+  }
+
+  document.getElementById('edit-board-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const id = fd.get('id');
+    const res = await fetch(`/api/boards/${id}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        name: fd.get('name'),
+        workflow_id: parseInt(fd.get('workflow_id')),
+        working_directory: fd.get('working_directory') || undefined,
+        long_term_vision: fd.get('long_term_vision') || undefined,
+      }),
+    });
+    if (res.ok) {
+      hideEditBoard();
+      renderBoardList();
+      initBoard();
+    } else {
+      const data = await res.json();
+      alert(data.error || 'Failed to update board');
+    }
+  });
+
+  async function deleteBoard(id) {
+    if (!confirm('Delete this board? ALL tickets, comments, and agent runs will be permanently lost.')) return;
+    const res = await fetch(`/api/boards/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      const current = localStorage.getItem('activeBoard');
+      if (parseInt(current) === id) {
+        localStorage.removeItem('activeBoard');
+      }
+      renderBoardList();
+      initBoard();
+    } else {
+      const data = await res.json();
+      alert(data.error || 'Failed to delete');
+    }
+  }
+
+  initBoard();
+  renderBoardList();
+</script>
+{% endblock %}

@@ -1,0 +1,1277 @@
+{% extends "base.html" %}
+{% block title %}Workflows — pi-CoWork{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Workflows</h1>
+  <div class="page-actions">
+    <button class="btn primary" onclick="showCreateWorkflow()">+ New Workflow</button>
+  </div>
+</div>
+
+<div id="workflows-list"></div>
+
+<!-- Create Workflow Modal -->
+<div id="create-wf-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2>New Workflow</h2>
+    <form id="create-wf-form" class="form-card">
+      <label>Name *<input type="text" name="name" required></label>
+      <label>Description<textarea name="description" rows="3"></textarea></label>
+      <div class="form-actions">
+        <button type="submit" class="btn primary">Create</button>
+        <button type="button" class="btn" onclick="hideCreateWorkflow()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit Workflow Modal -->
+<div id="edit-wf-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2>Edit Workflow</h2>
+    <form id="edit-wf-form" class="form-card">
+      <input type="hidden" name="id">
+      <label>Name *<input type="text" name="name" required></label>
+      <label>Description<textarea name="description" rows="3"></textarea></label>
+      <div class="form-actions">
+        <button type="submit" class="btn primary">Save</button>
+        <button type="button" class="btn" onclick="hideEditWorkflow()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Agent Modal (create/edit) -->
+<div id="agent-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2 id="agent-modal-title">New Agent</h2>
+    <form id="agent-form" class="form-card">
+      <input type="hidden" name="id">
+      <input type="hidden" name="workflow_id">
+      <label>Name *<input type="text" name="name" required></label>
+      <label>Description *<textarea name="description" rows="4" required></textarea></label>
+      <label>Model<select name="model" id="agent-model-select"><option value="">default</option></select></label>
+      <label>Thinking<select name="thinking" id="agent-thinking-select"><option value="">default</option></select></label>
+      <fieldset class="api-endpoints-fieldset">
+        <legend>API Endpoints</legend>
+        <div id="api-endpoints-checkboxes">Loading…</div>
+      </fieldset>
+      <div class="form-actions">
+        <button type="submit" class="btn primary">Save</button>
+        <button type="button" class="btn" onclick="hideAgentModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Status Modal (create/edit) -->
+<div id="status-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2 id="status-modal-title">New Status</h2>
+    <form id="status-form" class="form-card">
+      <input type="hidden" name="id">
+      <input type="hidden" name="workflow_id">
+      <label>Name *<input type="text" name="name" required></label>
+      <label>Sort Order *<input type="number" name="sort_order" required></label>
+      <label>Agent<select name="agent_id"><option value="">None</option></select></label>
+      <label><input type="checkbox" name="is_default"> Default</label>
+      <label><input type="checkbox" name="is_terminal"> Terminal</label>
+      <label>Goal<textarea name="goal" rows="3"></textarea></label>
+      <label>Model<select name="model" id="status-model-select"><option value="">default</option></select></label>
+      <label>Thinking<select name="thinking" id="status-thinking-select"><option value="">default</option></select></label>
+      <div class="form-actions">
+        <button type="submit" class="btn primary">Save</button>
+        <button type="button" class="btn" onclick="hideStatusModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Transition Modal (create/edit) -->
+<div id="transition-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2 id="transition-modal-title">New Transition</h2>
+    <form id="transition-form" class="form-card">
+      <input type="hidden" name="id">
+      <input type="hidden" name="workflow_id">
+      <label>From Status *<select name="from_status_id" required><option value="">Select…</option></select></label>
+      <label>To Status *<select name="to_status_id" required><option value="">Select…</option></select></label>
+      <label>Instructions<textarea name="instructions" rows="3"></textarea></label>
+      <div class="form-actions">
+        <button type="submit" class="btn primary">Save</button>
+        <button type="button" class="btn" onclick="hideTransitionModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Create Board from Workflow Modal -->
+<div id="create-board-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2>New Board from Workflow</h2>
+    <form id="create-board-form" class="form-card">
+      <input type="hidden" name="workflow_id">
+      <label>Board Name *<input type="text" name="name" required></label>
+      <label>Working Directory<input type="text" name="working_directory" placeholder="workspace"></label>
+      <div class="form-actions">
+        <button type="submit" class="btn primary">Create Board</button>
+        <button type="button" class="btn" onclick="hideCreateBoard()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Quality Gate Modal (create/edit) -->
+<div id="gate-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2 id="gate-modal-title">New Quality Gate</h2>
+    <form id="gate-form" class="form-card">
+      <input type="hidden" name="id">
+      <input type="hidden" name="workflow_id">
+      <label>Name *<input type="text" name="name" required></label>
+      <label>From Status *<select name="from_status_id" required><option value="">Select…</option></select></label>
+      <label>To Status *<select name="to_status_id" required><option value="">Select…</option></select></label>
+      <label>Gate Type *<select name="gate_type" required onchange="toggleGateConfig()"><option value="manual">Manual</option><option value="cli">CLI</option></select></label>
+      <label id="gate-config-label" style="display:none;">Command *<input type="text" name="config_command" placeholder="pytest --cov"></label>
+      <label>Sort Order<input type="number" name="sort_order" value="0"></label>
+      <label><input type="checkbox" name="enabled" checked> Enabled</label>
+      <div class="form-actions">
+        <button type="submit" class="btn primary">Save</button>
+        <button type="button" class="btn" onclick="hideGateModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Label Modal (create/edit) -->
+<div id="label-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2 id="label-modal-title">New Label</h2>
+    <form id="label-form" class="form-card">
+      <input type="hidden" name="id">
+      <input type="hidden" name="workflow_id">
+      <label>Name *<input type="text" name="name" required></label>
+      <label>Color *</label>
+      <div class="color-palette" id="label-color-palette"></div>
+      <input type="hidden" name="color" value="#6b7280">
+      <div class="form-actions">
+        <button type="submit" class="btn primary">Save</button>
+        <button type="button" class="btn" onclick="hideLabelModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+let workflowsData = {};
+let expandedWorkflows = new Set();
+
+// ── Modal helpers ──
+function openModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (!modal) return;
+  modal.style.display = 'flex';
+  modal.setAttribute('aria-hidden', 'false');
+
+  const focusables = modal.querySelectorAll('button, [href], input:not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"])');
+  if (focusables.length) {
+    focusables[0].focus();
+    const trap = (e) => {
+      if (e.key !== 'Tab') return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    modal._trapFocus = trap;
+    modal.addEventListener('keydown', trap);
+  }
+
+  const onEscape = (e) => {
+    if (e.key === 'Escape') {
+      const cancelBtn = modal.querySelector('button[type="button"][onclick^="hide"]');
+      if (cancelBtn) cancelBtn.click();
+    }
+  };
+  modal._onEscape = onEscape;
+  document.addEventListener('keydown', onEscape);
+
+  const onBackdrop = (e) => {
+    if (e.target === modal) {
+      const cancelBtn = modal.querySelector('button[type="button"][onclick^="hide"]');
+      if (cancelBtn) cancelBtn.click();
+    }
+  };
+  modal._onBackdrop = onBackdrop;
+  modal.addEventListener('click', onBackdrop);
+}
+
+function closeModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (!modal) return;
+  modal.style.display = 'none';
+  modal.setAttribute('aria-hidden', 'true');
+  if (modal._trapFocus) {
+    modal.removeEventListener('keydown', modal._trapFocus);
+    delete modal._trapFocus;
+  }
+  if (modal._onEscape) {
+    document.removeEventListener('keydown', modal._onEscape);
+    delete modal._onEscape;
+  }
+  if (modal._onBackdrop) {
+    modal.removeEventListener('click', modal._onBackdrop);
+    delete modal._onBackdrop;
+  }
+}
+
+// ── Workflows ──
+
+async function loadWorkflows() {
+  const res = await fetch('/api/workflows');
+  const workflows = await res.json();
+  const container = document.getElementById('workflows-list');
+  container.innerHTML = '';
+  if (workflows.length === 0) {
+    container.innerHTML = '<p class="empty">No workflows yet. Create one above.</p>';
+    return;
+  }
+  for (const w of workflows) {
+    workflowsData[w.id] = w;
+    const section = document.createElement('div');
+    section.className = 'workflow-section';
+    section.dataset.workflowId = w.id;
+    const isExpanded = expandedWorkflows.has(w.id);
+    section.innerHTML = `
+      <div class="workflow-header" onclick="toggleWorkflow(${w.id})">
+        <div class="workflow-header-left">
+          <span class="workflow-chevron">${isExpanded ? '▼' : '▶'}</span>
+          <div>
+            <div class="workflow-name">${escapeHtml(w.name)}</div>
+            <div class="workflow-desc">${escapeHtml(w.description || 'No description')}</div>
+          </div>
+        </div>
+        <div class="workflow-header-actions">
+          <button class="btn small" onclick="event.stopPropagation();showCreateBoardFromWf(${w.id})" title="Create board">+ Board</button>
+          <button class="btn small" onclick="event.stopPropagation();exportWorkflow(${w.id})" title="Export">📥</button>
+          <button class="btn small ghost" onclick="event.stopPropagation();showEditWorkflow(${w.id})" title="Edit">✏️</button>
+          <button class="btn small ghost danger-text" onclick="event.stopPropagation();deleteWorkflow(${w.id})" title="Delete">🗑️</button>
+        </div>
+      </div>
+      <div class="workflow-detail ${isExpanded ? '' : 'collapsed'}" id="wf-detail-${w.id}">
+        <div class="wf-loading">Loading…</div>
+      </div>
+    `;
+    container.appendChild(section);
+    if (isExpanded) {
+      loadWorkflowDetail(w.id);
+    }
+  }
+}
+
+function toggleWorkflow(id) {
+  if (expandedWorkflows.has(id)) {
+    expandedWorkflows.delete(id);
+  } else {
+    expandedWorkflows.add(id);
+  }
+  loadWorkflows();
+}
+
+async function loadWorkflowDetail(id) {
+  const detail = document.getElementById(`wf-detail-${id}`);
+  if (!detail) return;
+  const [agentsRes, statusesRes, transitionsRes, boardsRes, gatesRes, labelsRes] = await Promise.all([
+    fetch(`/api/agents?workflow_id=${id}`),
+    fetch(`/api/statuses?workflow_id=${id}`),
+    fetch(`/api/transitions?workflow_id=${id}`),
+    fetch('/api/boards'),
+    fetch(`/api/quality_gates?workflow_id=${id}`),
+    fetch(`/api/labels?workflow_id=${id}`),
+  ]);
+  const agents = await agentsRes.json();
+  const statuses = await statusesRes.json();
+  const transitions = await transitionsRes.json();
+  const allBoards = await boardsRes.json();
+  const gates = await gatesRes.json();
+  const labels = await labelsRes.json();
+  const wfBoards = allBoards.filter(b => b.workflow_id === id);
+
+  // Cache agents/statuses for forms
+  workflowsData[id] = { ...workflowsData[id], agents, statuses, transitions, gates, labels };
+
+  let boardsHtml = '';
+  if (wfBoards.length > 0) {
+    boardsHtml = `
+      <div class="wf-subsection">
+        <h3 class="wf-subtitle">Boards using this workflow</h3>
+        <div class="wf-boards-list">
+          ${wfBoards.map(b => `
+            <span class="badge muted" style="cursor:pointer" onclick="selectAndGoBoard(${b.id})">📁 ${escapeHtml(b.name)}</span>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  detail.innerHTML = `
+    ${boardsHtml}
+    <div class="wf-subsection">
+      <h3 class="wf-subtitle">Agents <button class="btn small" onclick="showAgentCreate(${id})" style="margin-left:0.5rem;">+ Add</button></h3>
+      ${agents.length === 0 ? '<p class="empty-sm">No agents yet.</p>' : `
+      <div class="wf-cards">
+        ${agents.map(a => `
+          <div class="wf-card agent-card">
+            <div class="wf-card-name">🤖 ${escapeHtml(a.name)}${a.model ? ' 📦 ' + escapeHtml(a.model) : ''}${a.thinking ? ' 🧠 ' + escapeHtml(a.thinking) : ''}</div>
+            <div class="wf-card-desc">${escapeHtml(a.description)}</div>
+            <div class="wf-card-actions">
+              <button class="btn small ghost" onclick="showAgentEdit(${a.id}, ${id})">✏️</button>
+              <button class="btn small ghost danger-text" onclick="deleteAgent(${a.id}, ${id})">🗑️</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>`}
+    </div>
+    <div class="wf-subsection">
+      <h3 class="wf-subtitle">Statuses <button class="btn small" onclick="showStatusCreate(${id})" style="margin-left:0.5rem;">+ Add</button></h3>
+      ${statuses.length === 0 ? '<p class="empty-sm">No statuses yet.</p>' : `
+      <div class="table-wrapper" style="margin-top:0.5rem;">
+        <table class="data-table">
+          <thead><tr><th>Name</th><th>Sort</th><th>Agent</th><th>Default</th><th>Terminal</th><th>Goal</th><th>Model</th><th>Thinking</th><th></th></tr></thead>
+          <tbody>
+            ${statuses.map(s => `
+              <tr>
+                <td><strong>${escapeHtml(s.name)}</strong></td>
+                <td>${s.sort_order}</td>
+                <td>${s.agent_name ? '🤖 ' + escapeHtml(s.agent_name) : '—'}</td>
+                <td>${s.is_default ? '✅' : ''}</td>
+                <td>${s.is_terminal ? '✅' : ''}</td>
+                <td>${escapeHtml(s.goal || '—')}</td>
+                <td>${s.model ? '📦 ' + escapeHtml(s.model) : '—'}</td>
+                <td>${s.thinking ? '🧠 ' + escapeHtml(s.thinking) : '—'}</td>
+                <td class="row-actions">
+                  <button class="btn small ghost" onclick="showStatusEdit(${s.id}, ${id})">✏️</button>
+                  <button class="btn small ghost danger-text" onclick="deleteStatus(${s.id}, ${id})">🗑️</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>`}
+    </div>
+    <div class="wf-subsection">
+      <h3 class="wf-subtitle">Transitions <button class="btn small" onclick="showTransitionCreate(${id})" style="margin-left:0.5rem;">+ Add</button></h3>
+      ${transitions.length === 0 ? '<p class="empty-sm">No transitions yet.</p>' : `
+      <div class="table-wrapper" style="margin-top:0.5rem;">
+        <table class="data-table">
+          <thead><tr><th>From</th><th>To</th><th>Instructions</th><th></th></tr></thead>
+          <tbody>
+            ${transitions.map(t => `
+              <tr>
+                <td>${escapeHtml(t.from_status_name)}</td>
+                <td>${escapeHtml(t.to_status_name)}</td>
+                <td>${escapeHtml(t.instructions || '—')}</td>
+                <td class="row-actions">
+                  <button class="btn small ghost" onclick="showTransitionEdit(${t.id}, ${id})">✏️</button>
+                  <button class="btn small ghost danger-text" onclick="deleteTransition(${t.id}, ${id})">🗑️</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>`}
+    </div>
+    <div class="wf-subsection">
+      <h3 class="wf-subtitle">Quality Gates <button class="btn small" onclick="showGateCreate(${id})" style="margin-left:0.5rem;">+ Add</button></h3>
+      ${gates.length === 0 ? '<p class="empty-sm">No quality gates configured.</p>' : `
+      <div class="table-wrapper" style="margin-top:0.5rem;">
+        <table class="data-table">
+          <thead><tr><th>From → To</th><th>Name</th><th>Type</th><th>Sort</th><th>Enabled</th><th></th></tr></thead>
+          <tbody>
+            ${gates.map(g => {
+              const fromName = g.from_status_name || statuses.find(s => s.id === g.from_status_id)?.name || '?';
+              const toName = g.to_status_name || statuses.find(s => s.id === g.to_status_id)?.name || '?';
+              return `
+              <tr>
+                <td>${escapeHtml(fromName)} → ${escapeHtml(toName)}</td>
+                <td><strong>${escapeHtml(g.name)}</strong></td>
+                <td><span class="badge muted">${g.gate_type === 'cli' ? 'CLI' : 'Manual'}</span></td>
+                <td>${g.sort_order}</td>
+                <td>${g.enabled ? '✅' : '—'}</td>
+                <td class="row-actions">
+                  <button class="btn small ghost" onclick="showGateEdit(${g.id}, ${id})">✏️</button>
+                  <button class="btn small ghost danger-text" onclick="deleteGate(${g.id}, ${id})">🗑️</button>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`}
+    </div>
+    <div class="wf-subsection">
+      <h3 class="wf-subtitle">Labels <button class="btn small" onclick="showLabelCreate(${id})" style="margin-left:0.5rem;">+ Add</button></h3>
+      ${labels.length === 0 ? '<p class="empty-sm">No labels yet.</p>' : `
+      <div class="wf-cards">
+        ${labels.map(l => `
+          <div class="wf-card label-card">
+            <div class="wf-card-name"><span style="display:inline-block;width:0.75rem;height:0.75rem;border-radius:999px;background:${escapeHtml(l.color)};margin-right:0.4rem;"></span>${escapeHtml(l.name)}</div>
+            <div class="wf-card-actions">
+              <button class="btn small ghost" onclick="showLabelEdit(${l.id}, ${id})">✏️</button>
+              <button class="btn small ghost danger-text" onclick="deleteLabel(${l.id}, ${id})">🗑️</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>`}
+    </div>
+  `;
+}
+
+function selectAndGoBoard(id) {
+  localStorage.setItem('activeBoard', id);
+  window.location.href = '/board';
+}
+
+// ── Workflow CRUD ──
+
+function showCreateWorkflow() { openModal('create-wf-modal'); }
+function hideCreateWorkflow() { closeModal('create-wf-modal'); document.getElementById('create-wf-form').reset(); }
+
+document.getElementById('create-wf-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const res = await fetch('/api/workflows', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ name: fd.get('name'), description: fd.get('description') }),
+  });
+  if (res.ok) {
+    const data = await res.json();
+    expandedWorkflows.add(data.id);
+    hideCreateWorkflow();
+    loadWorkflows();
+  } else {
+    const d = await res.json(); alert(d.error || 'Failed');
+  }
+});
+
+function showEditWorkflow(id) {
+  const wf = workflowsData[id];
+  const form = document.getElementById('edit-wf-form');
+  form.elements.id.value = wf.id;
+  form.elements.name.value = wf.name;
+  form.elements.description.value = wf.description || '';
+  openModal('edit-wf-modal');
+}
+function hideEditWorkflow() { closeModal('edit-wf-modal'); }
+
+document.getElementById('edit-wf-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const id = fd.get('id');
+  const res = await fetch(`/api/workflows/${id}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ name: fd.get('name'), description: fd.get('description') }),
+  });
+  if (res.ok) { hideEditWorkflow(); loadWorkflows(); }
+  else { const d = await res.json(); alert(d.error || 'Failed'); }
+});
+
+async function deleteWorkflow(id) {
+  if (!confirm('Delete this workflow? All agents, statuses, and transitions will be lost.')) return;
+  const res = await fetch(`/api/workflows/${id}`, { method: 'DELETE' });
+  if (res.ok) { loadWorkflows(); }
+  else { const d = await res.json(); alert(d.error || 'Failed'); }
+}
+
+async function exportWorkflow(id) {
+  const res = await fetch(`/api/workflows/${id}/export`);
+  const data = await res.json();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${data.name}-export-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ── Create Board from Workflow ──
+
+function showCreateBoardFromWf(workflowId) {
+  const form = document.getElementById('create-board-form');
+  form.elements.workflow_id.value = workflowId;
+  form.elements.name.value = '';
+  form.elements.working_directory.value = '';
+  openModal('create-board-modal');
+}
+function hideCreateBoard() { closeModal('create-board-modal'); }
+
+document.getElementById('create-board-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const res = await fetch('/api/boards', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      name: fd.get('name'),
+      workflow_id: parseInt(fd.get('workflow_id')),
+      working_directory: fd.get('working_directory') || undefined,
+    }),
+  });
+  if (res.ok) { hideCreateBoard(); loadWorkflowDetail(parseInt(fd.get('workflow_id'))); loadWorkflows(); }
+  else { const d = await res.json(); alert(d.error || 'Failed'); }
+});
+
+// ── Endpoint Registry (cached) ──
+
+let endpointRegistryCache = null;
+
+async function loadEndpointRegistry() {
+  if (endpointRegistryCache) return endpointRegistryCache;
+  const res = await fetch('/api/endpoint-registry');
+  endpointRegistryCache = (await res.json()).endpoints;
+  return endpointRegistryCache;
+}
+
+function renderEndpointCheckboxes(selectedKeys) {
+  const container = document.getElementById('api-endpoints-checkboxes');
+  if (!endpointRegistryCache) {
+    container.textContent = 'Loading…';
+    return;
+  }
+  // Group by category
+  const grouped = {};
+  for (const ep of endpointRegistryCache) {
+    if (!grouped[ep.category]) grouped[ep.category] = [];
+    grouped[ep.category].push(ep);
+  }
+  // Default keys when null (no explicit selection)
+  const defaults = ['ticket_put', 'ticket_comments_post', 'ticket_questions_post'];
+  const effective = selectedKeys || defaults;
+  const effectiveSet = new Set(effective);
+
+  let html = '';
+  for (const [cat, eps] of Object.entries(grouped)) {
+    html += `<div class="ep-category"><strong>${escapeHtml(cat)}</strong>`;
+    for (const ep of eps) {
+      const checked = effectiveSet.has(ep.key) ? 'checked' : '';
+      html += `<label class="ep-checkbox-label"><input type="checkbox" class="ep-checkbox" value="${escapeHtml(ep.key)}" ${checked}> ${escapeHtml(ep.method)} ${escapeHtml(ep.path_template)} — ${escapeHtml(ep.label)}</label>`;
+    }
+    html += '</div>';
+  }
+  container.innerHTML = html;
+}
+
+// ── pi-models (shared cache) ──
+
+let piModelsData = { models: [], thinking_levels: [] };
+let piModelsLoaded = false;
+
+async function loadPiModels() {
+  if (piModelsLoaded) return piModelsData;
+  try {
+    const res = await fetch('/api/pi-models');
+    if (res.ok) {
+      piModelsData = await res.json();
+      piModelsLoaded = true;
+    }
+  } catch (e) {
+    console.warn('Failed to load pi models', e);
+  }
+  return piModelsData;
+}
+
+function populateModelSelect(selectEl, currentValue) {
+  if (!selectEl) return;
+  selectEl.innerHTML = '<option value="">default</option>';
+  const models = piModelsData.models || [];
+  for (const m of models) {
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = m.id;
+    selectEl.appendChild(opt);
+  }
+  if (currentValue) {
+    if (!Array.from(selectEl.options).some(o => o.value === currentValue)) {
+      const opt = document.createElement('option');
+      opt.value = currentValue;
+      opt.textContent = currentValue + ' (unavailable)';
+      selectEl.appendChild(opt);
+    }
+    selectEl.value = currentValue;
+  } else {
+    selectEl.value = '';
+  }
+}
+
+function getModelThinkingLevels(modelId) {
+  if (!modelId) return null;
+  const models = piModelsData.models || [];
+  const model = models.find(m => m.id === modelId);
+  if (!model) return null;
+  return model.thinking_levels || null;
+}
+
+function populateThinkingSelect(selectEl, currentValue, modelThinkingLevels) {
+  if (!selectEl) return;
+  selectEl.innerHTML = '<option value="">default</option>';
+  const allLevels = piModelsData.thinking_levels || ['off','minimal','low','medium','high','xhigh'];
+  const levels = Array.isArray(modelThinkingLevels) ? modelThinkingLevels : allLevels;
+  for (const level of levels) {
+    const opt = document.createElement('option');
+    opt.value = level;
+    opt.textContent = level;
+    selectEl.appendChild(opt);
+  }
+  if (currentValue && !levels.includes(currentValue)) {
+    selectEl.value = '';
+  } else {
+    selectEl.value = currentValue || '';
+  }
+}
+
+// ── Agent CRUD ──
+
+let _agentEditEndpoints = null; // null = use defaults, array = explicit selection
+
+async function showAgentCreate(workflowId) {
+  const form = document.getElementById('agent-form');
+  form.elements.id.value = '';
+  form.elements.workflow_id.value = workflowId;
+  form.elements.name.value = '';
+  form.elements.description.value = '';
+  document.getElementById('agent-modal-title').textContent = 'New Agent';
+  await loadPiModels();
+  const agentModelSelect = document.getElementById('agent-model-select');
+  populateModelSelect(agentModelSelect, '');
+  populateThinkingSelect(document.getElementById('agent-thinking-select'), '', getModelThinkingLevels(agentModelSelect.value));
+  _agentEditEndpoints = null; // defaults
+  await loadEndpointRegistry();
+  renderEndpointCheckboxes(null);
+  openModal('agent-modal');
+}
+async function showAgentEdit(agentId, workflowId) {
+  const agents = workflowsData[workflowId]?.agents || [];
+  const agent = agents.find(a => a.id === agentId);
+  if (!agent) return;
+  const form = document.getElementById('agent-form');
+  form.elements.id.value = agent.id;
+  form.elements.workflow_id.value = workflowId;
+  form.elements.name.value = agent.name;
+  form.elements.description.value = agent.description;
+  await loadPiModels();
+  populateModelSelect(document.getElementById('agent-model-select'), agent.model || '');
+  populateThinkingSelect(document.getElementById('agent-thinking-select'), agent.thinking || '', getModelThinkingLevels(agent.model || ''));
+  // Parse api_endpoints from agent data (JSON string or null)
+  let epKeys = null;
+  if (agent.api_endpoints) {
+    try {
+      epKeys = JSON.parse(agent.api_endpoints);
+    } catch(e) { epKeys = null; }
+  }
+  _agentEditEndpoints = epKeys;
+  document.getElementById('agent-modal-title').textContent = 'Edit Agent';
+  await loadEndpointRegistry();
+  renderEndpointCheckboxes(epKeys);
+  openModal('agent-modal');
+}
+function hideAgentModal() { closeModal('agent-modal'); }
+
+document.getElementById('agent-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const id = fd.get('id');
+  const workflowId = parseInt(fd.get('workflow_id'));
+  const body = { name: fd.get('name'), description: fd.get('description') };
+  // Include model/thinking in create/update
+  const model = fd.get('model');
+  const thinking = fd.get('thinking');
+  if (id) {
+    // On update, only send if explicitly provided (empty = clear override)
+    if (model !== null) body.model = model;
+    if (thinking !== null) body.thinking = thinking;
+  } else {
+    // On create, send values (empty string gets stored as null)
+    if (model) body.model = model;
+    if (thinking) body.thinking = thinking;
+  }
+  // Collect selected endpoint keys from checkboxes
+  const checked = document.querySelectorAll('#api-endpoints-checkboxes .ep-checkbox:checked');
+  const defaultKeys = ['ticket_put', 'ticket_comments_post', 'ticket_questions_post'];
+  const selectedKeys = Array.from(checked).map(cb => cb.value);
+  // Sort to match default order for comparison
+  const sorted = [...selectedKeys].sort();
+  const sortedDefault = [...defaultKeys].sort();
+  const isDefault = sorted.length === sortedDefault.length && sorted.every((k, i) => k === sortedDefault[i]);
+  // Send null for defaults, the selected list otherwise
+  body.api_endpoints = isDefault ? null : selectedKeys;
+  const url = id ? `/api/agents/${id}` : '/api/agents';
+  const method = id ? 'PUT' : 'POST';
+  if (!id) body.workflow_id = workflowId;
+  const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+  if (res.ok) { hideAgentModal(); loadWorkflowDetail(workflowId); }
+  else { const d = await res.json(); alert(d.error || 'Failed'); }
+});
+
+async function deleteAgent(agentId, workflowId) {
+  if (!confirm('Delete this agent?')) return;
+  const res = await fetch(`/api/agents/${agentId}`, { method: 'DELETE' });
+  if (res.ok) loadWorkflowDetail(workflowId);
+  else { const d = await res.json(); alert(d.error || 'Failed'); }
+}
+
+// ── Status CRUD ──
+
+async function showStatusCreate(workflowId) {
+  const form = document.getElementById('status-form');
+  form.elements.id.value = '';
+  form.elements.workflow_id.value = workflowId;
+  form.elements.name.value = '';
+  form.elements.sort_order.value = '';
+  form.elements.is_default.checked = false;
+  form.elements.is_terminal.checked = false;
+  form.elements.goal.value = '';
+  await populateStatusAgentSelect(workflowId);
+  await loadPiModels();
+  const statusModelSelect = document.getElementById('status-model-select');
+  populateModelSelect(statusModelSelect, '');
+  populateThinkingSelect(document.getElementById('status-thinking-select'), '', getModelThinkingLevels(statusModelSelect.value));
+  document.getElementById('status-modal-title').textContent = 'New Status';
+  openModal('status-modal');
+}
+
+async function showStatusEdit(statusId, workflowId) {
+  const statuses = workflowsData[workflowId]?.statuses || [];
+  const status = statuses.find(s => s.id === statusId);
+  if (!status) return;
+  await populateStatusAgentSelect(workflowId);
+  const form = document.getElementById('status-form');
+  form.elements.id.value = status.id;
+  form.elements.workflow_id.value = workflowId;
+  form.elements.name.value = status.name;
+  form.elements.sort_order.value = status.sort_order;
+  form.elements.is_default.checked = !!status.is_default;
+  form.elements.is_terminal.checked = !!status.is_terminal;
+  form.elements.agent_id.value = status.agent_id || '';
+  form.elements.goal.value = status.goal || '';
+  await loadPiModels();
+  populateModelSelect(document.getElementById('status-model-select'), status.model || '');
+  populateThinkingSelect(document.getElementById('status-thinking-select'), status.thinking || '', getModelThinkingLevels(status.model || ''));
+  document.getElementById('status-modal-title').textContent = 'Edit Status';
+  openModal('status-modal');
+}
+
+async function populateStatusAgentSelect(workflowId) {
+  const agents = workflowsData[workflowId]?.agents || [];
+  const sel = document.querySelector('#status-form select[name="agent_id"]');
+  sel.innerHTML = '<option value="">None</option>';
+  for (const a of agents) {
+    const opt = document.createElement('option');
+    opt.value = a.id;
+    opt.textContent = a.name;
+    sel.appendChild(opt);
+  }
+}
+
+function hideStatusModal() { closeModal('status-modal'); }
+
+document.getElementById('status-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const id = fd.get('id');
+  const workflowId = parseInt(fd.get('workflow_id'));
+  const body = {
+    name: fd.get('name'),
+    sort_order: parseInt(fd.get('sort_order')),
+    is_default: fd.get('is_default') === 'on',
+    is_terminal: fd.get('is_terminal') === 'on',
+    agent_id: fd.get('agent_id') ? parseInt(fd.get('agent_id')) : null,
+    goal: fd.get('goal'),
+    model: fd.get('model'),
+    thinking: fd.get('thinking'),
+  };
+  const url = id ? `/api/statuses/${id}` : '/api/statuses';
+  const method = id ? 'PUT' : 'POST';
+  if (!id) body.workflow_id = workflowId;
+  const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+  if (res.ok) { hideStatusModal(); loadWorkflowDetail(workflowId); }
+  else { const d = await res.json(); alert(d.error || 'Failed'); }
+});
+
+async function deleteStatus(statusId, workflowId) {
+  if (!confirm('Delete this status?')) return;
+  const res = await fetch(`/api/statuses/${statusId}`, { method: 'DELETE' });
+  if (res.ok) loadWorkflowDetail(workflowId);
+  else { const d = await res.json(); alert(d.error || 'Failed'); }
+}
+
+// ── Transition CRUD ──
+
+async function showTransitionCreate(workflowId) {
+  const form = document.getElementById('transition-form');
+  form.elements.id.value = '';
+  form.elements.workflow_id.value = workflowId;
+  await populateTransitionSelects(workflowId);
+  form.elements.from_status_id.value = '';
+  form.elements.to_status_id.value = '';
+  form.elements.instructions.value = '';
+  document.getElementById('transition-modal-title').textContent = 'New Transition';
+  openModal('transition-modal');
+}
+
+async function showTransitionEdit(transitionId, workflowId) {
+  const transitions = workflowsData[workflowId]?.transitions || [];
+  const transition = transitions.find(t => t.id === transitionId);
+  if (!transition) return;
+  await populateTransitionSelects(workflowId);
+  const form = document.getElementById('transition-form');
+  form.elements.id.value = transition.id;
+  form.elements.workflow_id.value = workflowId;
+  form.elements.from_status_id.value = transition.from_status_id;
+  form.elements.to_status_id.value = transition.to_status_id;
+  form.elements.instructions.value = transition.instructions || '';
+  document.getElementById('transition-modal-title').textContent = 'Edit Transition';
+  openModal('transition-modal');
+}
+
+async function populateTransitionSelects(workflowId) {
+  const statuses = workflowsData[workflowId]?.statuses || [];
+  const fromSel = document.querySelector('#transition-form select[name="from_status_id"]');
+  const toSel = document.querySelector('#transition-form select[name="to_status_id"]');
+  fromSel.innerHTML = '<option value="">Select…</option>';
+  toSel.innerHTML = '<option value="">Select…</option>';
+  for (const s of statuses) {
+    const opt1 = document.createElement('option'); opt1.value = s.id; opt1.textContent = s.name;
+    const opt2 = document.createElement('option'); opt2.value = s.id; opt2.textContent = s.name;
+    fromSel.appendChild(opt1);
+    toSel.appendChild(opt2);
+  }
+}
+
+function hideTransitionModal() { closeModal('transition-modal'); }
+
+document.getElementById('transition-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const id = fd.get('id');
+  const workflowId = parseInt(fd.get('workflow_id'));
+  const body = {
+    from_status_id: parseInt(fd.get('from_status_id')),
+    to_status_id: parseInt(fd.get('to_status_id')),
+    instructions: fd.get('instructions'),
+  };
+  const url = id ? `/api/transitions/${id}` : '/api/transitions';
+  const method = id ? 'PUT' : 'POST';
+  if (!id) body.workflow_id = workflowId;
+  const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+  if (res.ok) { hideTransitionModal(); loadWorkflowDetail(workflowId); }
+  else { const d = await res.json(); alert(d.error || 'Failed'); }
+});
+
+async function deleteTransition(transitionId, workflowId) {
+  if (!confirm('Delete this transition?')) return;
+  const res = await fetch(`/api/transitions/${transitionId}`, { method: 'DELETE' });
+  if (res.ok) loadWorkflowDetail(workflowId);
+  else { const d = await res.json(); alert(d.error || 'Failed'); }
+}
+
+// ── Quality Gates ──
+
+function toggleGateConfig() {
+  const type = document.querySelector('#gate-form select[name="gate_type"]').value;
+  const cmdLabel = document.getElementById('gate-config-label');
+  const cmdInput = cmdLabel.querySelector('input');
+  cmdLabel.style.display = type === 'cli' ? 'block' : 'none';
+  cmdInput.required = type === 'cli';
+}
+
+function showGateCreate(workflowId) {
+  const form = document.getElementById('gate-form');
+  form.elements.id.value = '';
+  form.elements.workflow_id.value = workflowId;
+  form.elements.name.value = '';
+  form.elements.gate_type.value = 'manual';
+  form.elements.config_command.value = '';
+  form.elements.sort_order.value = '0';
+  form.elements.enabled.checked = true;
+  document.getElementById('gate-modal-title').textContent = 'New Quality Gate';
+  // Populate from/to status dropdowns
+  const wf = workflowsData[workflowId];
+  populateGateStatusSelects(wf, 'create', null);
+  toggleGateConfig();
+  openModal('gate-modal');
+}
+
+async function showGateEdit(gateId, workflowId) {
+  const res = await fetch(`/api/quality_gates/${gateId}`);
+  if (!res.ok) { alert('Gate not found'); return; }
+  const gate = await res.json();
+  const form = document.getElementById('gate-form');
+  form.elements.id.value = gate.id;
+  form.elements.workflow_id.value = workflowId;
+  form.elements.name.value = gate.name;
+  form.elements.gate_type.value = gate.gate_type;
+  // Parse config for CLI command
+  let cmd = '';
+  try { cmd = JSON.parse(gate.config || '{}').command || ''; } catch(e) {}
+  form.elements.config_command.value = cmd;
+  form.elements.sort_order.value = gate.sort_order;
+  form.elements.enabled.checked = !!gate.enabled;
+  document.getElementById('gate-modal-title').textContent = 'Edit Quality Gate';
+  // Populate from/to status dropdowns with current selection
+  const wf = workflowsData[workflowId];
+  populateGateStatusSelects(wf, 'edit', gate);
+  toggleGateConfig();
+  openModal('gate-modal');
+}
+
+function populateGateStatusSelects(wf, mode, gate) {
+  const fromSel = document.querySelector('#gate-form select[name="from_status_id"]');
+  const toSel = document.querySelector('#gate-form select[name="to_status_id"]');
+  fromSel.innerHTML = '<option value="">Select…</option>';
+  toSel.innerHTML = '<option value="">Select…</option>';
+  if (wf && wf.statuses) {
+    for (const s of wf.statuses) {
+      const opt1 = document.createElement('option');
+      opt1.value = s.id;
+      opt1.textContent = s.name;
+      if (mode === 'edit' && gate && s.id === gate.from_status_id) opt1.selected = true;
+      fromSel.appendChild(opt1);
+
+      const opt2 = document.createElement('option');
+      opt2.value = s.id;
+      opt2.textContent = s.name;
+      if (mode === 'edit' && gate && s.id === gate.to_status_id) opt2.selected = true;
+      toSel.appendChild(opt2);
+    }
+  }
+}
+
+function hideGateModal() {
+  closeModal('gate-modal');
+  document.getElementById('gate-form').reset();
+}
+
+document.getElementById('gate-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const id = fd.get('id');
+  const workflowId = parseInt(fd.get('workflow_id'));
+  const gateType = fd.get('gate_type');
+  const body = {
+    name: fd.get('name'),
+    from_status_id: parseInt(fd.get('from_status_id')),
+    to_status_id: parseInt(fd.get('to_status_id')),
+    gate_type: gateType,
+    sort_order: parseInt(fd.get('sort_order') || '0'),
+    enabled: fd.has('enabled'),
+    workflow_id: workflowId,
+  };
+  if (gateType === 'cli') {
+    body.config = JSON.stringify({ command: fd.get('config_command') });
+  }
+  const url = id ? `/api/quality_gates/${id}` : '/api/quality_gates';
+  const method = id ? 'PUT' : 'POST';
+  if (id) {
+    const updateBody = { name: body.name, gate_type: body.gate_type, sort_order: body.sort_order, enabled: body.enabled, from_status_id: body.from_status_id, to_status_id: body.to_status_id };
+    if (gateType === 'cli') updateBody.config = body.config;
+    const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(updateBody) });
+    if (res.ok) { hideGateModal(); loadWorkflowDetail(workflowId); }
+    else { const d = await res.json(); alert(d.error || 'Failed'); }
+  } else {
+    const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+    if (res.ok) { hideGateModal(); loadWorkflowDetail(workflowId); }
+    else { const d = await res.json(); alert(d.error || 'Failed'); }
+  }
+});
+
+async function deleteGate(gateId, workflowId) {
+  if (!confirm('Delete this quality gate?')) return;
+  const res = await fetch(`/api/quality_gates/${gateId}`, { method: 'DELETE' });
+  if (res.ok) loadWorkflowDetail(workflowId);
+  else { const d = await res.json(); alert(d.error || 'Failed'); }
+}
+
+// ── Labels ──
+
+function renderLabelColorPalette(selectedColor) {
+  const container = document.getElementById('label-color-palette');
+  if (!container) return;
+  container.innerHTML = '';
+  for (const c of PALETTE_24) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'color-swatch' + (c === selectedColor ? ' active' : '');
+    btn.style.background = c;
+    btn.title = c;
+    btn.onclick = () => {
+      document.querySelector('#label-form input[name="color"]').value = c;
+      renderLabelColorPalette(c);
+    };
+    container.appendChild(btn);
+  }
+}
+
+function showLabelCreate(workflowId) {
+  const form = document.getElementById('label-form');
+  form.elements.id.value = '';
+  form.elements.workflow_id.value = workflowId;
+  form.elements.name.value = '';
+  form.elements.color.value = '#6b7280';
+  document.getElementById('label-modal-title').textContent = 'New Label';
+  renderLabelColorPalette('#6b7280');
+  openModal('label-modal');
+}
+
+function showLabelEdit(labelId, workflowId) {
+  const labels = workflowsData[workflowId]?.labels || [];
+  const label = labels.find(l => l.id === labelId);
+  if (!label) return;
+  const form = document.getElementById('label-form');
+  form.elements.id.value = label.id;
+  form.elements.workflow_id.value = workflowId;
+  form.elements.name.value = label.name;
+  form.elements.color.value = label.color || '#6b7280';
+  document.getElementById('label-modal-title').textContent = 'Edit Label';
+  renderLabelColorPalette(label.color || '#6b7280');
+  openModal('label-modal');
+}
+
+function hideLabelModal() {
+  closeModal('label-modal');
+  document.getElementById('label-form').reset();
+}
+
+document.getElementById('label-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const id = fd.get('id');
+  const workflowId = parseInt(fd.get('workflow_id'));
+  const body = {
+    name: fd.get('name'),
+    color: fd.get('color'),
+  };
+  const url = id ? `/api/labels/${id}` : '/api/labels';
+  const method = id ? 'PUT' : 'POST';
+  if (!id) body.workflow_id = workflowId;
+  const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+  if (res.ok) { hideLabelModal(); loadWorkflowDetail(workflowId); }
+  else { const d = await res.json(); alert(d.error || 'Failed'); }
+});
+
+async function deleteLabel(labelId, workflowId) {
+  if (!confirm('Delete this label?')) return;
+  const res = await fetch(`/api/labels/${labelId}`, { method: 'DELETE' });
+  if (res.ok) loadWorkflowDetail(workflowId);
+  else { const d = await res.json(); alert(d.error || 'Failed'); }
+}
+
+document.getElementById('agent-model-select').addEventListener('change', function() {
+  const thinkingLevels = getModelThinkingLevels(this.value);
+  const thinkingSelect = document.getElementById('agent-thinking-select');
+  populateThinkingSelect(thinkingSelect, thinkingSelect.value, thinkingLevels);
+});
+
+document.getElementById('status-model-select').addEventListener('change', function() {
+  const thinkingLevels = getModelThinkingLevels(this.value);
+  const thinkingSelect = document.getElementById('status-thinking-select');
+  populateThinkingSelect(thinkingSelect, thinkingSelect.value, thinkingLevels);
+});
+
+// Boot
+loadWorkflows();
+</script>
+
+<style>
+  .workflow-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    margin-bottom: 1rem;
+    overflow: hidden;
+  }
+
+  .workflow-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background .15s;
+  }
+  .workflow-header:hover { background: var(--bg); }
+
+  .workflow-header-left {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  .workflow-chevron {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    margin-top: 0.35rem;
+    flex-shrink: 0;
+    transition: transform .15s;
+  }
+
+  .workflow-name {
+    font-weight: 700;
+    font-size: 1.05rem;
+    line-height: 1.3;
+  }
+  .workflow-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-top: 0.15rem;
+  }
+
+  .workflow-header-actions {
+    display: flex;
+    gap: 0.35rem;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .workflow-detail {
+    border-top: 1px solid var(--border);
+    padding: 1.25rem;
+    overflow: hidden;
+    transition: max-height .25s ease, opacity .2s ease, padding .25s ease;
+  }
+  .workflow-detail.collapsed {
+    max-height: 0;
+    opacity: 0;
+    padding: 0 1.25rem;
+    border-top: none;
+  }
+
+  .wf-loading { color: var(--text-muted); font-style: italic; }
+
+  .wf-subsection { margin-bottom: 1.5rem; }
+  .wf-subsection:last-child { margin-bottom: 0; }
+
+  .wf-subtitle {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0 0 0.5rem;
+    display: flex;
+    align-items: center;
+  }
+
+  .wf-boards-list {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  .wf-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .wf-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .wf-card-name { font-weight: 600; font-size: 0.9rem; }
+  .wf-card-desc {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    flex: 1;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+  }
+  .wf-card-actions {
+    display: flex;
+    gap: 0.3rem;
+    justify-content: flex-end;
+  }
+
+  .empty-sm {
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: 0.9rem;
+    padding: 0.5rem 0;
+  }
+
+  .danger-text { color: var(--danger) !important; }
+
+  .api-endpoints-fieldset {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem;
+    margin: 0.5rem 0;
+  }
+
+  .api-endpoints-fieldset legend {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    padding: 0 0.4rem;
+  }
+
+  .ep-category {
+    margin-bottom: 0.5rem;
+  }
+  .ep-category strong {
+    display: block;
+    font-size: 0.82rem;
+    margin-bottom: 0.2rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .ep-checkbox-label {
+    display: flex;
+    align-items: baseline;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    gap: 0.3rem;
+    line-height: 1.5;
+    cursor: pointer;
+  }
+
+  .ep-checkbox-label input[type="checkbox"] {
+    margin: 0.15rem 0.3rem 0.15rem 0;
+    flex-shrink: 0;
+  }
+
+  @media (max-width: 768px) {
+    .workflow-header {
+      flex-direction: column;
+      gap: 0.75rem;
+      align-items: flex-start;
+    }
+    .workflow-header-actions {
+      align-self: flex-end;
+    }
+    .wf-cards {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+{% endblock %}

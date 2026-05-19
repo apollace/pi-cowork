@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Assistant Settings — pi-CoWork{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Assistant Settings</h1>
+  <div class="page-actions">
+    <a class="btn" href="{{ url_for('board') }}">Cancel</a>
+  </div>
+</div>
+
+<div class="settings-form">
+  <div class="form-card">
+    <h2>General</h2>
+    <label class="form-row">
+      <span>Enabled</span>
+      <input type="checkbox" id="cfg-enabled" />
+    </label>
+    <label class="form-row">
+      <span>Auto context</span>
+      <input type="checkbox" id="cfg-auto-context" />
+    </label>
+    <label class="form-row">
+      <span>Model</span>
+      <select id="cfg-model"><option value="">default</option></select>
+    </label>
+    <label class="form-row">
+      <span>Thinking</span>
+      <select id="cfg-thinking"><option value="">medium</option></select>
+    </label>
+    <label class="form-row">
+      <span>Working directory</span>
+      <input type="text" id="cfg-working-directory" />
+    </label>
+  </div>
+
+  <div class="form-card">
+    <h2>System Prompt</h2>
+    <textarea id="cfg-system-prompt" class="system-prompt-textarea" rows="20"></textarea>
+  </div>
+
+  <div class="form-actions" style="margin-top: 1rem;">
+    <button class="btn primary" id="cfg-save">Save</button>
+    <a class="btn" href="{{ url_for('board') }}">Cancel</a>
+    <span id="cfg-feedback" class="feedback"></span>
+  </div>
+</div>
+
+<script>
+  let piModelsData = { models: [], thinking_levels: [] };
+
+  async function loadPiModels() {
+    try {
+      const res = await fetch('/api/pi-models');
+      if (res.ok) {
+        piModelsData = await res.json();
+      }
+    } catch (e) {
+      console.warn('Failed to load pi models', e);
+    }
+  }
+
+  function populateModelSelect(selectEl, currentValue) {
+    if (!selectEl) return;
+    selectEl.innerHTML = '<option value="">default</option>';
+    const models = piModelsData.models || [];
+    for (const m of models) {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.id;
+      selectEl.appendChild(opt);
+    }
+    if (currentValue) {
+      if (!Array.from(selectEl.options).some(o => o.value === currentValue)) {
+        const opt = document.createElement('option');
+        opt.value = currentValue;
+        opt.textContent = currentValue + ' (unavailable)';
+        selectEl.appendChild(opt);
+      }
+      selectEl.value = currentValue;
+    }
+  }
+
+  function getModelThinkingLevels(modelId) {
+    if (!modelId) return null;
+    const models = piModelsData.models || [];
+    const model = models.find(m => m.id === modelId);
+    if (!model) return null;
+    return model.thinking_levels || null;
+  }
+
+  function populateThinkingSelect(selectEl, currentValue, modelThinkingLevels) {
+    if (!selectEl) return;
+    selectEl.innerHTML = '<option value="">default</option>';
+    const allLevels = piModelsData.thinking_levels || ['off','minimal','low','medium','high','xhigh'];
+    const levels = Array.isArray(modelThinkingLevels) ? modelThinkingLevels : allLevels;
+    for (const level of levels) {
+      const opt = document.createElement('option');
+      opt.value = level;
+      opt.textContent = level;
+      selectEl.appendChild(opt);
+    }
+    if (currentValue && !levels.includes(currentValue)) {
+      selectEl.value = '';
+    } else {
+      selectEl.value = currentValue || '';
+    }
+  }
+
+  async function loadConfig() {
+    try {
+      const res = await fetch('/api/assistant/config');
+      const config = await res.json();
+      await loadPiModels();
+      const modelSelect = document.getElementById('cfg-model');
+      populateModelSelect(modelSelect, config.model || '');
+      populateThinkingSelect(document.getElementById('cfg-thinking'), config.thinking || 'medium', getModelThinkingLevels(modelSelect.value));
+      document.getElementById('cfg-enabled').checked = !!config.enabled;
+      document.getElementById('cfg-auto-context').checked = !!config.auto_context;
+      document.getElementById('cfg-working-directory').value = config.working_directory || 'workspace';
+      document.getElementById('cfg-system-prompt').value = config.system_prompt || '';
+    } catch (e) {
+      showFeedback('Failed to load settings', 'error');
+    }
+  }
+
+  document.getElementById('cfg-model').addEventListener('change', function() {
+    const thinkingLevels = getModelThinkingLevels(this.value);
+    const thinkingSelect = document.getElementById('cfg-thinking');
+    populateThinkingSelect(thinkingSelect, thinkingSelect.value, thinkingLevels);
+  });
+
+  function showFeedback(text, type) {
+    const el = document.getElementById('cfg-feedback');
+    el.textContent = text;
+    el.className = 'feedback feedback-' + type;
+    if (type === 'success') {
+      setTimeout(() => { el.textContent = ''; el.className = 'feedback'; }, 3000);
+    }
+  }
+
+  async function saveConfig() {
+    const payload = {
+      enabled: document.getElementById('cfg-enabled').checked,
+      auto_context: document.getElementById('cfg-auto-context').checked,
+      model: document.getElementById('cfg-model').value.trim() || null,
+      thinking: document.getElementById('cfg-thinking').value,
+      working_directory: document.getElementById('cfg-working-directory').value.trim() || 'workspace',
+      system_prompt: document.getElementById('cfg-system-prompt').value.trim() || null,
+    };
+    try {
+      const res = await fetch('/api/assistant/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showFeedback('Settings saved', 'success');
+      } else {
+        showFeedback('Failed to save: ' + (data.error || 'unknown error'), 'error');
+      }
+    } catch (e) {
+      showFeedback('Failed to save: ' + e.message, 'error');
+    }
+  }
+
+  document.getElementById('cfg-save').addEventListener('click', saveConfig);
+  loadConfig();
+</script>
+{% endblock %}

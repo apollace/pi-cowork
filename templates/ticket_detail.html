@@ -1,0 +1,672 @@
+{% extends "base.html" %}
+{% block title %}#{{ ticket.id }} {{ ticket.title }} — pi-CoWork{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>#{{ ticket.id }} {{ ticket.title }}</h1>
+    <div class="meta" style="margin:0.25rem 0 0;">
+      <span class="badge status">{{ ticket.status_name }}</span>
+      {% if ticket.priority %}
+      {% set priority_colors = {'Low': '#6b7280', 'Medium': '#2563eb', 'High': '#d97706', 'Critical': '#dc2626'} %}
+      <span class="badge" style="background:{{ priority_colors.get(ticket.priority, '#2563eb') }}22;color:{{ priority_colors.get(ticket.priority, '#2563eb') }};border:1px solid {{ priority_colors.get(ticket.priority, '#2563eb') }}44;">🔥 {{ ticket.priority }}</span>
+      {% endif %}
+      {% if ticket.agent_name %}
+      <span class="badge agent">🤖 {{ ticket.agent_name }}</span>
+      {% endif %}
+      {% if ticket.board_name %}
+      <span class="badge">📁 {{ ticket.board_name }}</span>
+      {% endif %}
+      <span id="label-pills"></span>
+      <button id="run-agent-btn" class="btn run-agent" style="display:none;">🤖 Run Agent</button>
+      <button id="rerun-agent-btn" class="btn rerun-agent" style="display:none;">🔄 Re-run Agent</button>
+    </div>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{{ url_for('board') }}">← Board</a>
+    <a class="btn primary" href="{{ url_for('edit_ticket', ticket_id=ticket.id) }}">Edit</a>
+  </div>
+</div>
+
+<article class="ticket-detail">
+  <section class="description">
+    <p>{{ ticket.body or '— No description —' }}</p>
+  </section>
+  <section class="labels-section" id="labels-section">
+    <h2>🏷️ Labels</h2>
+    <div id="labels-picker"></div>
+  </section>
+  <section class="gate-reviews-section" id="gate-reviews-section" style="display:none;">
+    <h2>🚧 Quality Gates</h2>
+    <div id="gate-reviews-list"></div>
+  </section>
+  <section class="agent-runs-section" id="agent-runs-section" style="display:none;">
+    <h2>⚙️ Agent Runs</h2>
+    <div id="agent-runs-list"></div>
+    <div id="agent-runs-actions" style="margin-top:0.5rem;"></div>
+  </section>
+  <section class="questions-section" id="questions-section" style="display:none;">
+    <h2>❓ Questions</h2>
+    <div id="questions-list"></div>
+  </section>
+  <section class="comments">
+    <h2>Comments</h2>
+    <ul class="comment-list" id="comment-list"></ul>
+    <form id="comment-form" class="comment-form">
+      <textarea name="body" placeholder="Write a comment…" required rows="4"></textarea>
+      <button type="submit" class="btn primary">Add</button>
+    </form>
+  </section>
+  <section class="recurring-section" id="recurring-section" style="display:none;">
+    <h2>🔄 Recurring Task</h2>
+    <div id="recurring-info"></div>
+  </section>
+</article>
+
+<script>
+  async function loadGateReviews() {
+    const res = await fetch('/api/gate_reviews?ticket_id={{ ticket.id }}');
+    const reviews = await res.json();
+    const section = document.getElementById('gate-reviews-section');
+    const list = document.getElementById('gate-reviews-list');
+    
+    if (reviews.length === 0) {
+      section.style.display = 'none';
+      return;
+    }
+    
+    section.style.display = 'block';
+    list.innerHTML = '';
+    
+    for (const r of reviews) {
+      const card = document.createElement('div');
+      card.className = 'gate-review-card';
+      
+      const statusClass = r.status === 'pending' ? 'gate-pending' : 
+                          r.status === 'approved' || r.status === 'passed' ? 'gate-passed' : 'gate-failed';
+      const statusIcon = r.status === 'pending' ? '⏳' : 
+                         r.status === 'approved' ? '✅' : 
+                         r.status === 'passed' ? '✅' : '❌';
+      
+      let actionsHtml = '';
+      if (r.status === 'pending' && r.gate_type === 'manual') {
+        actionsHtml = `
+          <div class="gate-review-actions">
+            <button class="btn primary small" onclick="approveGate(${r.id})">Approve</button>
+            <div class="gate-reject-row">
+              <input type="text" id="reject-comment-${r.id}" placeholder="Rejection reason (required)…">
+              <button class="btn danger small" onclick="rejectGate(${r.id})">Reject</button>
+            </div>
+          </div>
+        `;
+      }
+      
+      const typeLabel = r.gate_type === 'cli' ? 'CLI' : 'Manual';
+      let outputHtml = '';
+      if (r.output) {
+        outputHtml = `<div class="gate-output"><pre>${escapeHtml(r.output)}</pre></div>`;
+      }
+      
+      card.innerHTML = `
+        <div class="gate-review-header">
+          <div>
+            <span class="gate-review-name">${escapeHtml(r.gate_name)}</span>
+            <span class="badge ${statusClass}">${statusIcon} ${r.status}</span>
+          </div>
+          <div class="gate-review-meta">
+            <span class="badge muted">${typeLabel}</span>
+            <span class="gate-transition">${escapeHtml(r.from_status_name)} → ${escapeHtml(r.to_status_name)}</span>
+          </div>
+        </div>
+        ${outputHtml}
+        ${actionsHtml}
+      `;
+      list.appendChild(card);
+    }
+  }
+
+  async function refreshTicketStatus() {
+    const res = await fetch('/api/tickets/{{ ticket.id }}');
+    if (!res.ok) return;
+    const t = await res.json();
+    const badge = document.querySelector('.page-header .badge.status');
+    if (badge) badge.textContent = t.status_name;
+    const agentBadge = document.querySelector('.page-header .badge.agent');
+    if (agentBadge && t.agent_name) agentBadge.innerHTML = '🤖 ' + escapeHtml(t.agent_name);
+    else if (agentBadge && !t.agent_name) agentBadge.remove();
+  }
+
+  async function approveGate(reviewId) {
+    const res = await fetch(`/api/gate_reviews/${reviewId}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json', 'X-Human-Action': '{{ human_action_secret }}'},
+      body: JSON.stringify({status: 'approved'}),
+    });
+    if (res.ok) {
+      loadGateReviews();
+      loadComments();
+      refreshTicketStatus();
+    } else {
+      const data = await res.json();
+      alert(data.error || 'Failed to approve');
+    }
+  }
+
+  async function rejectGate(reviewId) {
+    const input = document.getElementById(`reject-comment-${reviewId}`);
+    const comment = (input.value || '').trim();
+    if (!comment) {
+      alert('Rejection requires a comment.');
+      input.focus();
+      return;
+    }
+    const res = await fetch(`/api/gate_reviews/${reviewId}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json', 'X-Human-Action': '{{ human_action_secret }}'},
+      body: JSON.stringify({status: 'rejected', comment}),
+    });
+    if (res.ok) {
+      loadGateReviews();
+      loadComments();
+      refreshTicketStatus();
+    } else {
+      const data = await res.json();
+      alert(data.error || 'Failed to reject');
+    }
+  }
+
+  async function loadQuestions() {
+    const res = await fetch('/api/tickets/{{ ticket.id }}/questions');
+    const questions = await res.json();
+    const section = document.getElementById('questions-section');
+    const list = document.getElementById('questions-list');
+    if (questions.length === 0) {
+      section.style.display = 'none';
+      return;
+    }
+    section.style.display = 'block';
+    list.innerHTML = '';
+    for (const q of questions) {
+      const card = document.createElement('div');
+      card.className = 'question-card';
+      let optionsHtml = '';
+      if (q.options && q.options.length > 0) {
+        const radioName = `q-${q.id}`;
+        optionsHtml = `<div class="question-options">` +
+          q.options.map((opt, idx) => `
+            <label class="question-option">
+              <input type="radio" name="${radioName}" value="${escapeHtml(opt)}" ${idx === 0 ? 'checked' : ''} onchange="document.getElementById('custom-${q.id}').style.display='none';">
+              <span>${escapeHtml(opt)}</span>
+            </label>
+          `).join('') +
+          `
+            <label class="question-option">
+              <input type="radio" name="${radioName}" value="" onchange="document.getElementById('custom-${q.id}').style.display='block';">
+              <span>Other (custom)</span>
+            </label>
+            <input type="text" id="custom-${q.id}" placeholder="Enter custom answer…" style="display:none; margin-left:1.5rem; margin-top:0.25rem; margin-bottom:0.5rem; width:calc(100% - 1.5rem); padding:0.45rem 0.65rem; border:1px solid var(--border); border-radius:var(--radius); font:inherit; background:var(--bg);">
+          ` +
+          `</div>`;
+      } else {
+        optionsHtml = `
+          <textarea id="answer-${q.id}" placeholder="Your answer…" rows="3"></textarea>
+        `;
+      }
+      card.innerHTML = `
+        <div class="question-body">${escapeHtml(q.body)}</div>
+        ${optionsHtml}
+      `;
+      list.appendChild(card);
+    }
+    const submitBtn = document.createElement('button');
+    submitBtn.className = 'btn primary';
+    submitBtn.textContent = 'Submit All Answers';
+    submitBtn.style.marginTop = '0.5rem';
+    submitBtn.onclick = submitAllAnswers;
+    list.appendChild(submitBtn);
+  }
+
+  async function submitAllAnswers() {
+    const list = document.getElementById('questions-list');
+    const answers = [];
+    const checkedRadios = list.querySelectorAll('input[type="radio"]:checked');
+    for (const r of checkedRadios) {
+      const name = r.getAttribute('name');
+      const qid = parseInt(name.replace('q-', ''), 10);
+      if (!isNaN(qid)) {
+        let answer = r.value;
+        if (answer === '') {
+          const customInput = document.getElementById(`custom-${qid}`);
+          const customVal = customInput ? customInput.value.trim() : '';
+          if (!customVal) {
+            alert('Please enter a custom answer for the "Other" option.');
+            if (customInput) customInput.focus();
+            return;
+          }
+          answer = customVal;
+        }
+        answers.push({ question_id: qid, answer });
+      }
+    }
+    const textareas = list.querySelectorAll('textarea');
+    for (const ta of textareas) {
+      const val = ta.value.trim();
+      if (!val) continue;
+      const idMatch = ta.id.match(/^answer-(\d+)$/);
+      if (idMatch) {
+        answers.push({ question_id: parseInt(idMatch[1], 10), answer: val });
+      }
+    }
+    if (answers.length === 0) {
+      alert('Please answer at least one question.');
+      return;
+    }
+    const res = await fetch('/api/tickets/{{ ticket.id }}/answers', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ answers }),
+    });
+    if (res.ok) {
+      loadQuestions();
+      loadComments();
+    } else {
+      const data = await res.json();
+      alert(data.error || 'Failed to submit answers');
+    }
+  }
+
+  async function loadComments() {
+    const res = await fetch('/api/tickets/{{ ticket.id }}/comments');
+    const rows = await res.json();
+    const list = document.getElementById('comment-list');
+    list.innerHTML = '';
+    if (rows.length === 0) {
+      list.innerHTML = '<li class="empty">No comments yet.</li>';
+      return;
+    }
+    for (const c of rows) {
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <div class="comment-header">
+          <time>${new Date(c.created_at).toLocaleString()}</time>
+        </div>
+        <p>${escapeHtml(c.body)}</p>
+      `;
+      list.appendChild(li);
+    }
+  }
+
+  document.getElementById('comment-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const res = await fetch('/api/tickets/{{ ticket.id }}/comments', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({body: fd.get('body')}),
+    });
+    if (res.ok) {
+      e.target.reset();
+      loadComments();
+    } else {
+      const data = await res.json();
+      alert(data.error || 'Failed to add comment');
+    }
+  });
+
+  async function loadLabels() {
+    const res = await fetch('/api/tickets/{{ ticket.id }}');
+    if (!res.ok) return;
+    const ticketData = await res.json();
+    const pills = document.getElementById('label-pills');
+    const pillsHtml = (ticketData.labels || []).map(l =>
+      `<span class="badge label-pill" style="background:${escapeHtml(l.color)}33;color:${escapeHtml(l.color)};border:1px solid ${escapeHtml(l.color)}55;">${escapeHtml(l.name)}</span>`
+    ).join('');
+    pills.innerHTML = pillsHtml;
+    if (window._detailLabelPicker) {
+      window._detailLabelPicker.selectedIds = new Set((ticketData.labels || []).map(l => l.id));
+      await window._detailLabelPicker.loadLabels();
+      window._detailLabelPicker.render();
+    }
+  }
+
+  async function initLabelsPicker() {
+    const container = document.getElementById('labels-picker');
+    if (!container) return;
+    const res = await fetch('/api/tickets/{{ ticket.id }}');
+    const ticketData = res.ok ? await res.json() : {labels: []};
+    const selectedIds = (ticketData.labels || []).map(l => l.id);
+    window._detailLabelPicker = new LabelPicker({
+      container,
+      workflowId: {{ ticket.workflow_id }},
+      ticketId: {{ ticket.id }},
+      mode: 'live',
+      selectedIds: selectedIds,
+      onChange: loadLabels
+    });
+    await window._detailLabelPicker.init();
+  }
+
+  // ── Run Agent / Re-run Agent Button Logic ──
+  async function initRunAgentButton() {
+    const btn = document.getElementById('run-agent-btn');
+    const rerunBtn = document.getElementById('rerun-agent-btn');
+    if (!btn || !rerunBtn) return;
+    try {
+      const res = await fetch('/api/tickets/{{ ticket.id }}');
+      if (!res.ok) return;
+      const data = await res.json();
+      const isTerminal = data.is_terminal || false;
+      const hasAgent = !!data.agent_name;
+      const runningCount = data.running_agents || 0;
+      const agentRunCount = data.agent_run_count || 0;
+      const lastRun = data.last_agent_run;
+      const hasPreviousRun = agentRunCount > 0;
+
+      if (hasPreviousRun && !isTerminal && hasAgent && runningCount === 0) {
+        // Show re-run button when there's a previous run (completed or failed)
+        btn.style.display = 'none';
+        rerunBtn.style.display = 'inline-flex';
+        rerunBtn.disabled = false;
+        if (lastRun && lastRun.status === 'failed') {
+          rerunBtn.title = 'Re-run the agent (last run failed with exit code ' + (lastRun.exit_code != null ? lastRun.exit_code : 'unknown') + ')';
+        } else {
+          rerunBtn.title = 'Re-run the assigned agent on this ticket';
+        }
+      } else if (!hasPreviousRun && !isTerminal && hasAgent && runningCount === 0) {
+        // Show run button for first-time run
+        btn.style.display = 'inline-flex';
+        rerunBtn.style.display = 'none';
+        btn.disabled = false;
+        btn.title = 'Run the assigned agent on this ticket';
+      } else if (!isTerminal && hasAgent && runningCount > 0) {
+        // Agent already running — show re-run button disabled
+        btn.style.display = 'none';
+        rerunBtn.style.display = 'inline-flex';
+        rerunBtn.disabled = true;
+        rerunBtn.title = 'Cannot re-run agent: an agent is already running on this ticket';
+      } else if (isTerminal) {
+        btn.style.display = 'none';
+        rerunBtn.style.display = 'inline-flex';
+        rerunBtn.disabled = true;
+        rerunBtn.title = 'Cannot re-run agent: ticket is in a terminal status';
+      } else if (!hasAgent) {
+        btn.style.display = 'inline-flex';
+        btn.disabled = true;
+        btn.title = 'Cannot run agent: no agent assigned to current status';
+        rerunBtn.style.display = 'none';
+      }
+    } catch(e) {
+      console.error('Failed to init Run Agent button', e);
+    }
+  }
+
+  async function loadAgentRuns() {
+    const res = await fetch('/api/tickets/{{ ticket.id }}/agent_runs');
+    const runs = await res.json();
+    const section = document.getElementById('agent-runs-section');
+    const list = document.getElementById('agent-runs-list');
+    const actions = document.getElementById('agent-runs-actions');
+
+    if (runs.length === 0) {
+      section.style.display = 'none';
+      return;
+    }
+
+    section.style.display = 'block';
+    list.innerHTML = '';
+
+    for (const run of runs) {
+      const card = document.createElement('div');
+      card.className = 'agent-run-card';
+
+      const statusClass = run.status === 'running' ? 'run-running' :
+                          run.status === 'completed' ? 'run-completed' : 'run-failed';
+      const statusIcon = run.status === 'running' ? '⏳' :
+                         run.status === 'completed' ? '✅' : '❌';
+
+      let exitInfo = '';
+      if (run.exit_code != null && run.exit_code !== 0) {
+        exitInfo = ` <span class="badge muted">exit code: ${run.exit_code}</span>`;
+      }
+
+      let actionsHtml = '';
+      if (run.status === 'running') {
+        actionsHtml = `
+          <a class="btn small primary" href="/agent_run/${run.id}/live">📺 Live</a>
+          <button class="btn small kill-btn" onclick="killAgentRun(${run.id})">🛑 Kill</button>
+        `;
+      } else {
+        actionsHtml = `
+          <button class="btn small" onclick="toggleRunLog(${run.id})">📋 Log</button>
+        `;
+      }
+
+      card.innerHTML = `
+        <div class="agent-run-header">
+          <div class="agent-run-info">
+            <span class="agent-run-name">#${run.id} ${escapeHtml(run.agent_name)}</span>
+            <span class="badge ${statusClass}">${statusIcon} ${run.status}</span>
+            ${exitInfo}
+          </div>
+          <div class="agent-run-meta">
+            <time>${run.started_at ? new Date(run.started_at).toLocaleString() : '—'}</time>
+            ${run.completed_at ? `<span class="muted">→ ${new Date(run.completed_at).toLocaleString()}</span>` : ''}
+          </div>
+        </div>
+        <div class="agent-run-actions">${actionsHtml}</div>
+        <pre class="agent-run-log" id="agent-log-${run.id}" style="display:none; margin-top:0.5rem;"></pre>
+      `;
+      list.appendChild(card);
+    }
+
+    // Show re-run button in the section actions if last run is not running
+    const lastRun = runs[0]; // runs are sorted DESC
+    if (lastRun && lastRun.status !== 'running') {
+      actions.innerHTML = '';
+    } else {
+      actions.innerHTML = '';
+    }
+  }
+
+  async function toggleRunLog(runId) {
+    const pre = document.getElementById('agent-log-' + runId);
+    if (!pre) return;
+    if (pre.style.display !== 'none') {
+      pre.style.display = 'none';
+      return;
+    }
+    pre.textContent = 'Loading…';
+    pre.style.display = 'block';
+    try {
+      const res = await fetch('/api/agent_runs/' + runId + '/log');
+      if (res.ok) {
+        pre.textContent = await res.text();
+      } else {
+        pre.textContent = 'Failed to load log.';
+      }
+    } catch(e) {
+      pre.textContent = 'Failed to load log.';
+    }
+  }
+
+  async function killAgentRun(runId) {
+    if (!confirm('Kill this agent run?')) return;
+    try {
+      const res = await fetch('/api/agent_runs/' + runId + '/kill', { method: 'POST' });
+      if (res.ok) {
+        loadAgentRuns();
+        initRunAgentButton();
+        loadComments();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to kill agent');
+      }
+    } catch(e) {
+      alert('Network error: ' + e.message);
+    }
+  }
+
+
+  // ── Shared spawn handler (used by both Run Agent and Re-run Agent buttons) ──
+  async function handleSpawnClick(btn, loadingText, restoreText) {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = loadingText;
+    try {
+      const res = await fetch('/api/tickets/{{ ticket.id }}/spawn', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        // Incremental update — reload dynamic sections without full page refresh
+        await Promise.all([loadAgentRuns(), initRunAgentButton(), loadComments()]);
+      } else {
+        alert(data.error || 'Failed to spawn agent');
+        btn.disabled = false;
+        btn.textContent = restoreText;
+      }
+    } catch(e) {
+      alert('Network error: ' + e.message);
+      btn.disabled = false;
+      btn.textContent = restoreText;
+    }
+  }
+
+  document.getElementById('run-agent-btn').addEventListener('click', function() {
+    handleSpawnClick(this, '⏳ Spawning…', '🤖 Run Agent');
+  });
+
+  document.getElementById('rerun-agent-btn').addEventListener('click', function() {
+    handleSpawnClick(this, '⏳ Re-spawning…', '🔄 Re-run Agent');
+  });
+
+  loadGateReviews();
+  loadQuestions();
+  loadComments();
+  initLabelsPicker();
+  loadAgentRuns();
+  initRunAgentButton();
+  loadRecurringInfo();
+
+  async function loadRecurringInfo() {
+    const section = document.getElementById('recurring-section');
+    const info = document.getElementById('recurring-info');
+    try {
+      const res = await fetch('/api/tickets/{{ ticket.id }}/recurring');
+      const parents = await res.json();
+      if (!parents || parents.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+      section.style.display = 'block';
+      info.innerHTML = parents.map(p => `
+        <div class="recurring-card">
+          <strong>${escapeHtml(p.title)}</strong>
+          <span class="badge muted">${escapeHtml(p.human_readable || p.cron_expression)}</span>
+          ${p.enabled ? '<span class="badge active">Active</span>' : '<span class="badge muted">Disabled</span>'}
+          <div class="muted" style="margin-top:0.25rem;">Creates tickets in <strong>${escapeHtml(p.status_name)}</strong></div>
+        </div>
+      `).join('');
+    } catch (e) {
+      console.error('Failed to load recurring info', e);
+    }
+  }
+
+  // ── Ensure SSE is connected for this ticket's board ──
+  const currentTicketId = {{ ticket.id }};
+  const currentBoardId = '{{ ticket.board_id }}';
+  const storedBoard = localStorage.getItem('activeBoard');
+  if (storedBoard !== String(currentBoardId)) {
+    localStorage.setItem('activeBoard', currentBoardId);
+  }
+  if (typeof window._reconnectSSE === 'function') {
+    window._reconnectSSE();
+  }
+
+  // ── Real-time updates via SSE ──
+  let _detailDebounce = null;
+
+  function debounceDetailRefresh(fn, delay) {
+    clearTimeout(_detailDebounce);
+    _detailDebounce = setTimeout(fn, delay || 500);
+  }
+
+  // Helper: check if an SSE event is for this ticket
+  function isForThisTicket(e) {
+    return e.detail && e.detail.ticket_id === currentTicketId;
+  }
+
+  // comment.added → reload comments
+  window.addEventListener('sse:comment.added', function(e) {
+    if (isForThisTicket(e)) debounceDetailRefresh(loadComments, 300);
+  });
+
+  // question.asked / question.answered → reload questions + comments
+  window.addEventListener('sse:question.asked', function(e) {
+    if (isForThisTicket(e)) debounceDetailRefresh(function() {
+      loadQuestions(); loadComments();
+    }, 300);
+  });
+  window.addEventListener('sse:question.answered', function(e) {
+    if (isForThisTicket(e)) debounceDetailRefresh(function() {
+      loadQuestions(); loadComments();
+    }, 300);
+  });
+
+  // gate.pending / gate.passed / gate.failed → reload gates + comments
+  window.addEventListener('sse:gate.pending', function(e) {
+    if (isForThisTicket(e)) debounceDetailRefresh(function() {
+      loadGateReviews(); loadComments();
+    }, 300);
+  });
+  window.addEventListener('sse:gate.passed', function(e) {
+    if (isForThisTicket(e)) debounceDetailRefresh(function() {
+      loadGateReviews(); loadComments();
+    }, 300);
+  });
+  window.addEventListener('sse:gate.failed', function(e) {
+    if (isForThisTicket(e)) debounceDetailRefresh(function() {
+      loadGateReviews(); loadComments();
+    }, 300);
+  });
+
+  // agent.spawned / agent.completed / agent.failed → reload agent runs, button, and header status
+  window.addEventListener('sse:agent.spawned', function(e) {
+    if (isForThisTicket(e)) debounceDetailRefresh(function() {
+      refreshTicketStatus(); loadAgentRuns(); initRunAgentButton();
+    }, 300);
+  });
+  window.addEventListener('sse:agent.completed', function(e) {
+    if (isForThisTicket(e)) debounceDetailRefresh(function() {
+      refreshTicketStatus(); loadAgentRuns(); initRunAgentButton(); loadComments();
+    }, 300);
+  });
+  window.addEventListener('sse:agent.failed', function(e) {
+    if (isForThisTicket(e)) debounceDetailRefresh(function() {
+      refreshTicketStatus(); loadAgentRuns(); initRunAgentButton(); loadComments();
+    }, 300);
+  });
+
+  // ticket.updated → refresh header, labels, comments (edits from other sources)
+  window.addEventListener('sse:ticket.updated', function(e) {
+    if (isForThisTicket(e)) debounceDetailRefresh(function() {
+      refreshTicketStatus(); loadLabels(); loadComments();
+    }, 300);
+  });
+
+  // ticket.status_changed → full reload of all sections
+  window.addEventListener('sse:ticket.status_changed', function(e) {
+    if (isForThisTicket(e)) debounceDetailRefresh(function() {
+      refreshTicketStatus();
+      loadGateReviews(); loadQuestions(); loadComments();
+      loadLabels(); loadAgentRuns(); initRunAgentButton();
+    }, 300);
+  });
+
+  // Re-sync on SSE reconnect
+  window.addEventListener('sse:open', function() {
+    debounceDetailRefresh(function() {
+      refreshTicketStatus();
+      loadGateReviews(); loadQuestions(); loadComments();
+      loadLabels(); loadAgentRuns(); initRunAgentButton();
+    }, 100);
+  });
+</script>
+{% endblock %}
