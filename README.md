@@ -1,14 +1,16 @@
 # pi-CoWork
 
-**AI agents that hand off work to each other, powered by a workflow engine you configure.**
+Most agent frameworks assume the AI is smart enough to orchestrate itself.
 
-Define a pipeline of stages. Assign an AI agent to each stage. Drop a ticket in, and the agents take it from there — researching, drafting, coding, reviewing, testing — handing work between themselves automatically. You stay in control with quality gates, one-click approvals, and real-time visibility into everything that happens.
+pi-CoWork assumes the opposite.
 
-## Why This Exists
+AI agents are fast, cheap, and useful — but they need structure. pi-CoWork gives you a configurable workflow board where each stage has a dedicated agent, explicit instructions, allowed transitions, quality gates, and full audit logs.
 
-Most AI tools give you a single chatbot in a single window. Real work is a chain of specialists: triage → investigate → plan → implement → review → verify → ship. The hard part isn't the individual agent — it's the **handoff**. Context gets lost, prompts get copy-pasted, and someone has to manually push work from one stage to the next.
+Drop in a ticket. Move it into a stage. The assigned agent gets only the context it needs, does the work, comments its output, and can only hand off according to the workflow you defined.
 
-pi-CoWork solves this by making the board the single source of truth. Every stage is an agent inbox. When a ticket moves into a stage, the assigned agent spawns with full context (ticket, comments, goal, available transitions) and does the work. It then moves the ticket to the next stage. The next agent picks up exactly where the last one left off. No copy-paste. No lost context. No manual orchestration.
+No invisible planner. No vague autonomous swarm. No copy-pasting context between chats.
+
+Just controlled AI work, one stage at a time.
 
 ## Quick Start
 
