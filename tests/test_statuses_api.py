@@ -181,15 +181,21 @@ def test_create_status_with_empty_model_and_thinking(client, default_workflow):
 
 
 def test_create_status_invalid_thinking(client, default_workflow):
+    """Any non-empty thinking string is accepted."""
     res = client.post('/api/statuses', json={
         'name': 'BadThink',
         'sort_order': 1,
         'workflow_id': default_workflow['id'],
         'thinking': 'ultra',
     })
-    assert res.status_code == 400
+    assert res.status_code == 201
     data = json.loads(res.data)
-    assert 'thinking' in data['error'].lower()
+    status_id = data['id']
+
+    res = client.get(f'/api/statuses/{status_id}')
+    assert res.status_code == 200
+    status = json.loads(res.data)
+    assert status['thinking'] == 'ultra'
 
 
 def test_update_status_model_and_thinking(client, default_workflow):
@@ -235,6 +241,7 @@ def test_update_status_clears_model_and_thinking(client, default_workflow):
 
 
 def test_update_status_invalid_thinking(client, default_workflow):
+    """Any non-empty thinking string is accepted on update."""
     res = client.post('/api/statuses', json={
         'name': 'ThinkCheck',
         'sort_order': 1,
@@ -245,9 +252,9 @@ def test_update_status_invalid_thinking(client, default_workflow):
     res = client.put(f'/api/statuses/{status_id}', json={
         'thinking': 'invalid',
     })
-    assert res.status_code == 400
-    data = json.loads(res.data)
-    assert 'thinking' in data['error'].lower()
+    assert res.status_code == 200
+    status = json.loads(client.get(f'/api/statuses/{status_id}').data)
+    assert status['thinking'] == 'invalid'
 
 
 def test_create_status_invalid_model(client, default_workflow):

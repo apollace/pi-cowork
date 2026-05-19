@@ -1,10 +1,8 @@
 """pi CLI model discovery with caching."""
 
-import json
 import logging
 import os
 import re
-import shutil
 import subprocess
 import threading
 import time
@@ -23,116 +21,8 @@ _cache = {}
 _cache_lock = threading.Lock()
 _CACHE_TTL_SECONDS = 300  # 5 minutes
 
-DEFAULT_THINKING_LEVELS = ('off', 'minimal', 'low', 'medium', 'high', 'xhigh')
+DEFAULT_THINKING_LEVELS = ('off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')
 FALLBACK_MODELS = []
-
-
-# ---------------------------------------------------------------------------
-# Node.js helper to resolve per-model thinking levels
-# ---------------------------------------------------------------------------
-
-def _get_pi_nodejs_paths():
-    """Resolve absolute paths to pi's internal Node.js modules.
-
-    Returns a dict with keys:
-        models_js, model_registry_js, auth_storage_js, config_js
-    or None if any required file is missing.
-    """
-    pi_path = shutil.which('pi')
-    if not pi_path:
-        return None
-    real = os.path.realpath(pi_path)
-    current = os.path.dirname(real)
-    coding_agent_dir = None
-    # Walk upward until we find the pi-coding-agent package root
-    # (directory containing dist/core/model-registry.js, dist/core/auth-storage.js, dist/config.js)
-    while current and current != os.path.dirname(current):
-        if (
-            os.path.isfile(os.path.join(current, 'dist', 'core', 'model-registry.js'))
-            and os.path.isfile(os.path.join(current, 'dist', 'core', 'auth-storage.js'))
-            and os.path.isfile(os.path.join(current, 'dist', 'config.js'))
-        ):
-            coding_agent_dir = current
-            break
-        current = os.path.dirname(current)
-    if not coding_agent_dir:
-        return None
-
-    # pi-ai may be nested inside pi-coding-agent/node_modules or deduped at the same level
-    pi_ai_dist = None
-    candidates = [
-        os.path.join(coding_agent_dir, 'node_modules', '@earendil-works', 'pi-ai', 'dist'),
-        os.path.join(
-            os.path.dirname(os.path.dirname(coding_agent_dir)),
-            '@earendil-works',
-            'pi-ai',
-            'dist',
-        ),
-    ]
-    for candidate in candidates:
-        if os.path.isfile(os.path.join(candidate, 'models.js')):
-            pi_ai_dist = candidate
-            break
-    if not pi_ai_dist:
-        return None
-
-    paths = {
-        'models_js': os.path.join(pi_ai_dist, 'models.js'),
-        'model_registry_js': os.path.join(coding_agent_dir, 'dist', 'core', 'model-registry.js'),
-        'auth_storage_js': os.path.join(coding_agent_dir, 'dist', 'core', 'auth-storage.js'),
-        'config_js': os.path.join(coding_agent_dir, 'dist', 'config.js'),
-    }
-    for v in paths.values():
-        if not os.path.isfile(v):
-            return None
-    return paths
-
-
-def _fetch_thinking_levels_map() -> dict:
-    """Run a Node.js subprocess to extract per-model thinking levels.
-
-    Returns a dict mapping ``provider/model_id`` to a list of supported
-    thinking level strings.  Returns an empty dict on any failure so callers
-    can fall back to boolean-based logic.
-    """
-    paths = _get_pi_nodejs_paths()
-    if not paths:
-        return {}
-
-    # Build a one-off Node.js script using absolute require paths so it
-    # works regardless of the current working directory.
-    script = (
-        f'const {{ ModelRegistry }} = require("{paths["model_registry_js"]}");\n'
-        f'const {{ AuthStorage }} = require("{paths["auth_storage_js"]}");\n'
-        f'const {{ getAgentDir }} = require("{paths["config_js"]}");\n'
-        f'const {{ getSupportedThinkingLevels }} = require("{paths["models_js"]}");\n'
-        'const path = require("path");\n'
-        'const auth = AuthStorage.create(getAgentDir());\n'
-        'const registry = ModelRegistry.create(auth, path.join(getAgentDir(), "models.json"));\n'
-        'const result = {};\n'
-        'for (const m of registry.getAll()) {\n'
-        '  result[m.provider + "/" + m.id] = getSupportedThinkingLevels(m);\n'
-        '}\n'
-        'console.log(JSON.stringify(result));\n'
-    )
-
-    try:
-        result = subprocess.run(
-            ['node', '-e', script],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return json.loads(result.stdout.strip())
-        if result.returncode != 0 and result.stderr.strip():
-            logger.warning(
-                "Node.js thinking-level helper failed: %s", result.stderr.strip()
-            )
-    except Exception as e:
-        logger.warning("Node.js thinking-level helper failed: %s", e)
-
-    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -142,9 +32,8 @@ def _fetch_thinking_levels_map() -> dict:
 def _parse_pi_list_models() -> dict:
     """Run `pi --list-models` and parse tabular output.
 
-    Additionally calls a Node.js helper to resolve exact per-model thinking
-    levels. Falls back to the boolean ``thinking`` field from the tabular
-    output if the Node.js helper is unavailable.
+    Returns models with a ``thinking`` boolean field and a top-level
+    ``thinking_levels`` array of fixed default levels.
     """
     try:
         result = subprocess.run(
@@ -167,14 +56,6 @@ def _parse_pi_list_models() -> dict:
     if len(cols) < 6:
         return {"models": FALLBACK_MODELS, "thinking_levels": list(DEFAULT_THINKING_LEVELS)}
 
-    # Try to enrich with exact per-model thinking levels from pi internals.
-    thinking_map = _fetch_thinking_levels_map()
-    if thinking_map:
-        logger.info(
-            "Enriched %d models with exact thinking levels from pi internals",
-            len(thinking_map),
-        )
-
     models = []
     for line in lines[1:]:
         if not line.strip():
@@ -186,15 +67,6 @@ def _parse_pi_list_models() -> dict:
         model_id = f"{provider}/{name}"
         thinking_bool = thinking_str.lower() in ('yes', 'true', '1')
 
-        # Prefer exact thinking levels from Node.js helper; fall back to boolean.
-        exact_levels = thinking_map.get(model_id)
-        if exact_levels is not None:
-            thinking_levels = exact_levels
-        elif thinking_bool:
-            thinking_levels = list(DEFAULT_THINKING_LEVELS)
-        else:
-            thinking_levels = ['off']
-
         models.append({
             "id": model_id,
             "provider": provider,
@@ -203,7 +75,6 @@ def _parse_pi_list_models() -> dict:
             "max_out": max_out,
             "thinking": thinking_bool,
             "images": images_str.lower() in ('yes', 'true', '1'),
-            "thinking_levels": thinking_levels,
         })
 
     return {"models": models, "thinking_levels": list(DEFAULT_THINKING_LEVELS)}
@@ -226,8 +97,8 @@ def get_pi_models() -> dict:
 
 
 def get_thinking_levels() -> tuple:
-    """Return valid thinking levels from pi CLI (or fallback hardcoded list)."""
-    return tuple(get_pi_models()['thinking_levels'])
+    """Return valid thinking levels."""
+    return DEFAULT_THINKING_LEVELS
 
 
 def get_model_ids() -> tuple:

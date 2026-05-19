@@ -92,16 +92,21 @@ def test_create_agent_with_empty_model_and_thinking(client, default_workflow):
 
 
 def test_create_agent_invalid_thinking(client, default_workflow):
-    """Thinking must be one of: off, minimal, low, medium, high, xhigh."""
+    """Any non-empty thinking string is accepted."""
     res = client.post('/api/agents', json={
         'name': 'BadThinking',
         'description': 'd',
         'workflow_id': default_workflow['id'],
         'thinking': 'ultra',
     })
-    assert res.status_code == 400
+    assert res.status_code == 201
     data = json.loads(res.data)
-    assert 'thinking' in data['error'].lower()
+    agent_id = data['id']
+
+    res = client.get(f'/api/agents/{agent_id}')
+    assert res.status_code == 200
+    agent = json.loads(res.data)
+    assert agent['thinking'] == 'ultra'
 
 
 def test_create_agent_model_accepts_any_string(client, default_workflow):
@@ -169,6 +174,7 @@ def test_update_agent_clears_model_and_thinking(client, default_workflow):
 
 
 def test_update_agent_invalid_thinking(client, default_workflow):
+    """Any non-empty thinking string is accepted on update."""
     res = client.post('/api/agents', json={
         'name': 'ThinkCheck',
         'description': 'd',
@@ -179,13 +185,13 @@ def test_update_agent_invalid_thinking(client, default_workflow):
     res = client.put(f'/api/agents/{agent_id}', json={
         'thinking': 'invalid',
     })
-    assert res.status_code == 400
-    data = json.loads(res.data)
-    assert 'thinking' in data['error'].lower()
+    assert res.status_code == 200
+    agent = json.loads(client.get(f'/api/agents/{agent_id}').data)
+    assert agent['thinking'] == 'invalid'
 
 
 def test_update_agent_valid_thinking_values(client, default_workflow):
-    """All valid thinking values should be accepted."""
+    """All default and custom thinking values should be accepted."""
     res = client.post('/api/agents', json={
         'name': 'ThinkVals',
         'description': 'd',
@@ -193,7 +199,7 @@ def test_update_agent_valid_thinking_values(client, default_workflow):
     })
     agent_id = json.loads(res.data)['id']
 
-    for val in ('off', 'minimal', 'low', 'medium', 'high', 'xhigh'):
+    for val in ('off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'custom-level'):
         res = client.put(f'/api/agents/{agent_id}', json={'thinking': val})
         assert res.status_code == 200
         agent = json.loads(client.get(f'/api/agents/{agent_id}').data)
