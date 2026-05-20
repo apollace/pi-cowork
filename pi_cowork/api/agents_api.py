@@ -7,7 +7,7 @@ from flask import Blueprint, jsonify, request
 
 from pi_cowork.db import query_db, run_db, row_to_dict
 from pi_cowork.models import get_workflow, get_agent, get_agents
-from pi_cowork.api.pi_models import get_thinking_levels, get_model_ids
+from pi_cowork.api.pi_models import get_model_ids
 from pi_cowork.api_docs import ENDPOINT_REGISTRY, _REGISTRY_MAP
 
 agents_api_bp = Blueprint('agents_api', __name__)
@@ -37,9 +37,10 @@ def api_create_agent():
     if not wf:
         return jsonify({"error": "Workflow not found"}), 404
     if thinking is not None:
-        valid_thinking = get_thinking_levels()
-        if thinking not in valid_thinking:
-            return jsonify({"error": f"thinking must be one of: {', '.join(valid_thinking)}"}), 400
+        if thinking != '' and thinking is not None:
+            pass  # any non-empty string is accepted
+        else:
+            thinking = None
     if model is not None:
         valid_models = get_model_ids()
         if valid_models and model not in valid_models:
@@ -98,12 +99,12 @@ def api_update_agent(agent_id):
             if valid_models and model not in valid_models:
                 return jsonify({"error": f"model must be one of: {', '.join(valid_models)}"}), 400
     if thinking is not None:
-        valid_thinking = get_thinking_levels()
-        if thinking and thinking not in valid_thinking:
-            return jsonify({"error": f"thinking must be one of: {', '.join(valid_thinking)}"}), 400
+        if thinking and thinking != '':
+            pass  # any non-empty string is accepted
+        else:
+            thinking = None
         updates.append("thinking = ?")
-        # Empty string or null clears the override (sets DB value to NULL)
-        args.append(thinking if thinking else None)
+        args.append(thinking)
     # api_endpoints: list of keys → JSON string; null/None → NULL (use defaults)
     if 'api_endpoints' in data:
         api_endpoints = data.get('api_endpoints')

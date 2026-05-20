@@ -67,11 +67,11 @@ def test_put_config_updates(client):
     assert data['system_prompt'] == 'Custom prompt'
 
 
-def test_put_config_rejects_invalid_thinking(client):
+def test_put_config_accepts_arbitrary_thinking(client):
     res = client.put('/api/assistant/config', json={'thinking': 'ultra'})
-    assert res.status_code == 400
-    data = json.loads(res.data)
-    assert 'thinking' in data['error']
+    assert res.status_code == 200
+    data = json.loads(client.get('/api/assistant/config').data)
+    assert data['thinking'] == 'ultra'
 
 
 def test_put_config_rejects_invalid_model(client):

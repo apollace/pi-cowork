@@ -25,7 +25,10 @@
     </label>
     <label class="form-row">
       <span>Thinking</span>
-      <select id="cfg-thinking"><option value="">medium</option></select>
+      <div style="display:flex;gap:0.5rem;align-items:center;flex:1 1 0;min-width:0;">
+        <select id="cfg-thinking"><option value="">medium</option></select>
+        <input type="text" id="cfg-thinking-other" style="display:none;flex:1 1 0;min-width:0;" placeholder="Custom level…" />
+      </div>
     </label>
     <label class="form-row">
       <span>Working directory</span>
@@ -80,30 +83,37 @@
     }
   }
 
-  function getModelThinkingLevels(modelId) {
-    if (!modelId) return null;
-    const models = piModelsData.models || [];
-    const model = models.find(m => m.id === modelId);
-    if (!model) return null;
-    return model.thinking_levels || null;
-  }
-
-  function populateThinkingSelect(selectEl, currentValue, modelThinkingLevels) {
+  function populateThinkingSelect(selectEl, otherInputEl, currentValue) {
     if (!selectEl) return;
-    selectEl.innerHTML = '<option value="">default</option>';
-    const allLevels = piModelsData.thinking_levels || ['off','minimal','low','medium','high','xhigh'];
-    const levels = Array.isArray(modelThinkingLevels) ? modelThinkingLevels : allLevels;
+    selectEl.innerHTML = '<option value="">medium</option>';
+    const levels = piModelsData.thinking_levels || ['off','minimal','low','medium','high','xhigh','max'];
     for (const level of levels) {
       const opt = document.createElement('option');
       opt.value = level;
       opt.textContent = level;
       selectEl.appendChild(opt);
     }
+    const otherOpt = document.createElement('option');
+    otherOpt.value = 'other...';
+    otherOpt.textContent = 'other...';
+    selectEl.appendChild(otherOpt);
     if (currentValue && !levels.includes(currentValue)) {
-      selectEl.value = '';
+      selectEl.value = 'other...';
+      if (otherInputEl) otherInputEl.value = currentValue;
     } else {
       selectEl.value = currentValue || '';
     }
+    if (otherInputEl) {
+      otherInputEl.style.display = selectEl.value === 'other...' ? 'inline-block' : 'none';
+    }
+  }
+
+  function getThinkingValue(selectEl, otherInputEl) {
+    const val = selectEl.value;
+    if (val === 'other...') {
+      return otherInputEl ? otherInputEl.value.trim() : '';
+    }
+    return val;
   }
 
   async function loadConfig() {
@@ -113,7 +123,7 @@
       await loadPiModels();
       const modelSelect = document.getElementById('cfg-model');
       populateModelSelect(modelSelect, config.model || '');
-      populateThinkingSelect(document.getElementById('cfg-thinking'), config.thinking || 'medium', getModelThinkingLevels(modelSelect.value));
+      populateThinkingSelect(document.getElementById('cfg-thinking'), document.getElementById('cfg-thinking-other'), config.thinking || 'medium');
       document.getElementById('cfg-enabled').checked = !!config.enabled;
       document.getElementById('cfg-auto-context').checked = !!config.auto_context;
       document.getElementById('cfg-working-directory').value = config.working_directory || 'workspace';
@@ -123,10 +133,9 @@
     }
   }
 
-  document.getElementById('cfg-model').addEventListener('change', function() {
-    const thinkingLevels = getModelThinkingLevels(this.value);
-    const thinkingSelect = document.getElementById('cfg-thinking');
-    populateThinkingSelect(thinkingSelect, thinkingSelect.value, thinkingLevels);
+  document.getElementById('cfg-thinking').addEventListener('change', function() {
+    const otherInput = document.getElementById('cfg-thinking-other');
+    otherInput.style.display = this.value === 'other...' ? 'inline-block' : 'none';
   });
 
   function showFeedback(text, type) {
@@ -143,7 +152,7 @@
       enabled: document.getElementById('cfg-enabled').checked,
       auto_context: document.getElementById('cfg-auto-context').checked,
       model: document.getElementById('cfg-model').value.trim() || null,
-      thinking: document.getElementById('cfg-thinking').value,
+      thinking: getThinkingValue(document.getElementById('cfg-thinking'), document.getElementById('cfg-thinking-other')),
       working_directory: document.getElementById('cfg-working-directory').value.trim() || 'workspace',
       system_prompt: document.getElementById('cfg-system-prompt').value.trim() || null,
     };
