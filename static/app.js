@@ -18,7 +18,8 @@ async function initBoard() {
   };
   const searchInput = document.getElementById('ticket-search');
   const labelFiltersContainer = document.getElementById('label-filters');
-  const priorityInputs = document.querySelectorAll('.priority-filters input[type="checkbox"]');
+  const priorityToggles = document.querySelectorAll('.priority-toggle');
+  const filterSummary = document.getElementById('filter-summary');
 
   async function loadBoards() {
     const res = await fetch('/api/boards');
@@ -45,6 +46,11 @@ async function initBoard() {
       board.textContent = 'Select a board.';
       return;
     }
+    // Show skeleton loading
+    const skeleton = document.getElementById('board-skeleton');
+    if (skeleton) skeleton.style.display = 'block';
+    board.innerHTML = '';
+    if (skeleton) board.appendChild(skeleton);
     try {
       const boardRes = await fetch(`/api/boards/${currentBoardId}`);
       if (!boardRes.ok) {
@@ -70,8 +76,11 @@ async function initBoard() {
       boardMeta.innerHTML = `<span class="badge muted">${escapeHtml(currentBoardData.workflow_name)}</span>`;
       renderRunningPanel(runningRuns);
     } catch (e) {
-      board.textContent = 'Failed to load board.';
+      if (typeof showToast === 'function') showToast('Failed to load board: ' + e.message, 'error');
+      else alert('Failed to load board: ' + e.message);
       return;
+    } finally {
+      if (skeleton) skeleton.style.display = 'none';
     }
     render();
   }
@@ -151,7 +160,8 @@ async function initBoard() {
     });
     if (!res.ok) {
       const data = await res.json();
-      alert(data.error || 'Failed to move ticket');
+      if (typeof showToast === 'function') showToast(data.error || 'Failed to move ticket', 'error');
+      else alert(data.error || 'Failed to move ticket');
     }
     await refresh();
   }
@@ -218,23 +228,25 @@ async function initBoard() {
     const labelPills = (ticket.labels || []).map(l =>
       `<span class="badge label-pill" style="background:${escapeHtml(l.color)}33;color:${escapeHtml(l.color)};border:1px solid ${escapeHtml(l.color)}55;">${escapeHtml(l.name)}</span>`
     ).join('');
-    const priorityBadge = ticket.priority ? `<span class="badge" style="background:${escapeHtml(ticket.priority) === 'Critical' ? '#dc2626' : escapeHtml(ticket.priority) === 'High' ? '#d97706' : escapeHtml(ticket.priority) === 'Low' ? '#6b7280' : '#2563eb'}22;color:${escapeHtml(ticket.priority) === 'Critical' ? '#dc2626' : escapeHtml(ticket.priority) === 'High' ? '#d97706' : escapeHtml(ticket.priority) === 'Low' ? '#6b7280' : '#2563eb'};border:1px solid ${escapeHtml(ticket.priority) === 'Critical' ? '#dc2626' : escapeHtml(ticket.priority) === 'High' ? '#d97706' : escapeHtml(ticket.priority) === 'Low' ? '#6b7280' : '#2563eb'}44;">🔥 ${escapeHtml(ticket.priority)}</span>` : '';
-    const branchBadge = (currentBoardData && currentBoardData.git_enabled && ticket.branch) ? `<span class="badge" style="background:#4ade8022;color:#166534;border:1px solid #4ade8044;">🌿 ${escapeHtml(ticket.branch)}</span>` : '';
+    const priorityColors = { Critical: '#dc2626', High: '#d97706', Medium: '#2563eb', Low: '#6b7280' };
+    const pColor = priorityColors[ticket.priority] || '#2563eb';
+    const priorityDot = ticket.priority ? `<span class="priority-dot" style="background:${pColor};width:0.6rem;height:0.6rem;border-radius:50%;display:inline-block;flex-shrink:0;" title="${escapeHtml(ticket.priority)}"></span>` : '';
     card.innerHTML = `
       <a class="card-link" href="/ticket/${ticket.id}">
-        <div class="card-id">#${ticket.id}</div>
+        <div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.15rem;">
+          <span class="card-id">#${ticket.id}</span>
+          ${priorityDot}
+        </div>
         <div class="card-title">${escapeHtml(ticket.title)}</div>
         <div class="card-labels" id="card-labels-${ticket.id}">
           ${labelPills}
-          <button type="button" class="btn small ghost" id="card-label-btn-${ticket.id}" onclick="event.preventDefault(); event.stopPropagation(); toggleCardLabels(${ticket.id});">+</button>
+          <button type="button" class="btn small ghost" id="card-label-btn-${ticket.id}" onclick="event.preventDefault(); event.stopPropagation(); toggleCardLabels(${ticket.id});" style="font-size:0.8rem;padding:0.1rem 0.3rem;">+</button>
         </div>
       </a>
       <div class="card-actions">
         <select class="status-select" data-id="${ticket.id}">
           ${statuses.map(s => `<option value="${s.id}" ${s.id === ticket.status_id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
         </select>
-        ${priorityBadge}
-        ${branchBadge}
         ${hasAgent}
         ${queuedBadge}
         ${gateBadge}
@@ -258,6 +270,7 @@ async function initBoard() {
     }
     if (seen.size === 0) {
       labelFiltersContainer.innerHTML = '';
+      renderFilterSummary();
       return;
     }
     labelFiltersContainer.innerHTML = '';
@@ -275,6 +288,7 @@ async function initBoard() {
       });
       labelFiltersContainer.appendChild(label);
     }
+    renderFilterSummary();
   }
 
   function matchesFilters(ticket) {
@@ -350,14 +364,75 @@ async function initBoard() {
     return group;
   }
 
+  function renderFilterSummary() {
+    if (!filterSummary) return;
+    filterSummary.innerHTML = '';
+    const activeFilters = [];
+    if (filterState.searchQuery.trim()) {
+      activeFilters.push({ type: 'search', value: filterState.searchQuery.trim(), label: '"' + filterState.searchQuery.trim() + '"', clearFn: () => { filterState.searchQuery = ''; if (searchInput) searchInput.value = ''; } });
+    }
+    for (const p of filterState.selectedPriorities) {
+      activeFilters.push({ type: 'priority', value: p, label: p, color: { Critical: '#dc2626', High: '#d97706', Medium: '#2563eb', Low: '#6b7280' }[p], clearFn: () => { filterState.selectedPriorities.delete(p); updatePriorityToggles(); } });
+    }
+    for (const l of filterState.selectedLabels) {
+      const label = workflowLabels.find(ll => ll.name === l);
+      const color = label ? label.color : '#6b7280';
+      activeFilters.push({ type: 'label', value: l, label: l, color: color, clearFn: () => { filterState.selectedLabels.delete(l); updateLabelFilters(); } });
+    }
+    if (activeFilters.length === 0) { filterSummary.innerHTML = ''; return; }
+    for (const f of activeFilters) {
+      const pill = document.createElement('button');
+      pill.className = 'filter-pill';
+      const bg = f.color || '#2563eb';
+      pill.style.cssText = `background:${bg}22;color:${bg};border:1px solid ${bg}55;`;
+      pill.innerHTML = `${escapeHtml(f.label)} <span class="filter-pill-remove">✕</span>`;
+      pill.onclick = () => { f.clearFn(); render(); };
+      filterSummary.appendChild(pill);
+    }
+    if (activeFilters.length > 1) {
+      const clearAll = document.createElement('button');
+      clearAll.className = 'filter-clear-all';
+      clearAll.textContent = 'Clear all';
+      clearAll.onclick = () => {
+        filterState.searchQuery = '';
+        filterState.selectedPriorities.clear();
+        filterState.selectedLabels.clear();
+        if (searchInput) searchInput.value = '';
+        updatePriorityToggles();
+        render();
+      };
+      filterSummary.appendChild(clearAll);
+    }
+  }
+
+  function updatePriorityToggles() {
+    priorityToggles.forEach(btn => {
+      const p = btn.dataset.priority;
+      if (filterState.selectedPriorities.has(p)) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+  }
+
   function render() {
     board.innerHTML = '';
     const visibleTickets = tickets.filter(matchesFilters);
     updateLabelFilters();
+    // Update priority toggle visibility based on available priorities
+    const availablePriorities = new Set(tickets.map(t => t.priority).filter(Boolean));
+    priorityToggles.forEach(btn => {
+      const p = btn.dataset.priority;
+      btn.style.display = availablePriorities.has(p) ? 'inline-flex' : 'none';
+      if (filterState.selectedPriorities.has(p)) btn.classList.add('active');
+      else btn.classList.remove('active');
+    });
     for (const status of statuses) {
       if (status.is_terminal && !showTerminal.checked) continue;
       board.appendChild(buildGroup(status, visibleTickets));
     }
+    renderFilterSummary();
   }
 
   showTerminal.addEventListener('change', render);
@@ -369,15 +444,27 @@ async function initBoard() {
     });
   }
 
-  priorityInputs.forEach(input => {
-    input.addEventListener('change', () => {
-      filterState.selectedPriorities.clear();
-      priorityInputs.forEach(cb => {
-        if (cb.checked) filterState.selectedPriorities.add(cb.value);
-      });
+  priorityToggles.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = btn.dataset.priority;
+      if (filterState.selectedPriorities.has(p)) {
+        filterState.selectedPriorities.delete(p);
+        btn.classList.remove('active');
+      } else {
+        filterState.selectedPriorities.add(p);
+        btn.classList.add('active');
+      }
       render();
     });
   });
+
+  // Read search query from URL params
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlSearch = urlParams.get('search');
+  if (urlSearch && searchInput) {
+    searchInput.value = urlSearch;
+    filterState.searchQuery = urlSearch;
+  }
 
   await loadBoards();
 

@@ -3,6 +3,11 @@
 {% block content %}
 <div class="page-header">
   <div>
+    <div class="breadcrumb">
+      <a href="{{ url_for('board') }}">Board</a>
+      <span class="breadcrumb-sep">›</span>
+      <span class="breadcrumb-current">#{{ ticket.id }}</span>
+    </div>
     <h1>#{{ ticket.id }} {{ ticket.title }}</h1>
     <div class="meta" style="margin:0.25rem 0 0;">
       <span class="badge status">{{ ticket.status_name }}</span>
@@ -10,62 +15,116 @@
       {% set priority_colors = {'Low': '#6b7280', 'Medium': '#2563eb', 'High': '#d97706', 'Critical': '#dc2626'} %}
       <span class="badge" style="background:{{ priority_colors.get(ticket.priority, '#2563eb') }}22;color:{{ priority_colors.get(ticket.priority, '#2563eb') }};border:1px solid {{ priority_colors.get(ticket.priority, '#2563eb') }}44;">🔥 {{ ticket.priority }}</span>
       {% endif %}
-      {% if ticket.agent_name %}
-      <span class="badge agent">🤖 {{ ticket.agent_name }}</span>
-      {% endif %}
-      {% if ticket.board_name %}
-      <span class="badge">📁 {{ ticket.board_name }}</span>
-      {% endif %}
-      {% if ticket.branch and ticket.git_enabled %}
-      <span class="badge" style="background:#4ade8022;color:#166534;border:1px solid #4ade8044;">🌿 {{ ticket.branch }}</span>
-      {% endif %}
       <span id="label-pills"></span>
-      <button id="run-agent-btn" class="btn run-agent" style="display:none;">🤖 Run Agent</button>
-      <button id="rerun-agent-btn" class="btn rerun-agent" style="display:none;">🔄 Re-run Agent</button>
     </div>
   </div>
   <div class="page-actions">
     <a class="btn" href="{{ url_for('board') }}">← Board</a>
     <a class="btn primary" href="{{ url_for('edit_ticket', ticket_id=ticket.id) }}">Edit</a>
+    <span id="run-agent-container">
+      <button id="run-agent-btn" class="btn run-agent" style="display:none;">🤖 Run Agent</button>
+      <button id="rerun-agent-btn" class="btn rerun-agent" style="display:none;">🔄 Re-run Agent</button>
+    </span>
   </div>
 </div>
 
-<article class="ticket-detail">
-  <section class="description">
-    <p>{{ ticket.body or '— No description —' }}</p>
-  </section>
-  <section class="labels-section" id="labels-section">
-    <h2>🏷️ Labels</h2>
-    <div id="labels-picker"></div>
-  </section>
-  <section class="gate-reviews-section" id="gate-reviews-section" style="display:none;">
-    <h2>🚧 Quality Gates</h2>
-    <div id="gate-reviews-list"></div>
-  </section>
-  <section class="agent-runs-section" id="agent-runs-section" style="display:none;">
-    <h2>⚙️ Agent Runs</h2>
-    <div id="agent-runs-list"></div>
-    <div id="agent-runs-actions" style="margin-top:0.5rem;"></div>
-  </section>
-  <section class="questions-section" id="questions-section" style="display:none;">
-    <h2>❓ Questions</h2>
-    <div id="questions-list"></div>
-  </section>
-  <section class="comments">
-    <h2>Comments</h2>
-    <ul class="comment-list" id="comment-list"></ul>
-    <form id="comment-form" class="comment-form">
-      <textarea name="body" placeholder="Write a comment…" required rows="4"></textarea>
-      <button type="submit" class="btn primary">Add</button>
-    </form>
-  </section>
-  <section class="recurring-section" id="recurring-section" style="display:none;">
-    <h2>🔄 Recurring Task</h2>
-    <div id="recurring-info"></div>
-  </section>
-</article>
+<div class="ticket-layout">
+  <div class="ticket-main">
+    <section class="section-card">
+      <h2>Description</h2>
+      <div class="description">
+        <div id="ticket-description" class="markdown-content"></div>
+      </div>
+    </section>
+
+    <section class="gate-reviews-section" id="gate-reviews-section" style="display:none;">
+      <h2>🚧 Quality Gates</h2>
+      <div id="gate-reviews-list"></div>
+    </section>
+
+    <section class="agent-runs-section" id="agent-runs-section" style="display:none;">
+      <h2>⚙️ Agent Runs</h2>
+      <div id="agent-runs-list"></div>
+      <div id="agent-runs-actions" style="margin-top:0.5rem;"></div>
+    </section>
+
+    <section class="questions-section" id="questions-section" style="display:none;">
+      <h2>❓ Questions</h2>
+      <div id="questions-list"></div>
+    </section>
+
+    <section class="section-card">
+      <h2>Comments</h2>
+      <ul class="comment-list" id="comment-list"></ul>
+      <form id="comment-form" class="comment-form">
+        <textarea name="body" placeholder="Write a comment…" required rows="4"></textarea>
+        <button type="submit" class="btn primary">Add</button>
+      </form>
+    </section>
+  </div>
+
+  <div class="ticket-sidebar">
+    <div class="sidebar-card">
+      <h3>Metadata</h3>
+      <div class="sidebar-field">
+        <div class="sidebar-field-label">Status</div>
+        <div class="sidebar-field-value" id="sidebar-status">{{ ticket.status_name }}</div>
+      </div>
+      {% if ticket.priority %}
+      <div class="sidebar-field">
+        <div class="sidebar-field-label">Priority</div>
+        <div class="sidebar-field-value">🔥 {{ ticket.priority }}</div>
+      </div>
+      {% endif %}
+      {% if ticket.agent_name %}
+      <div class="sidebar-field">
+        <div class="sidebar-field-label">Agent</div>
+        <div class="sidebar-field-value">🤖 {{ ticket.agent_name }}</div>
+      </div>
+      {% endif %}
+      {% if ticket.board_name %}
+      <div class="sidebar-field">
+        <div class="sidebar-field-label">Board</div>
+        <div class="sidebar-field-value">📁 {{ ticket.board_name }}</div>
+      </div>
+      {% endif %}
+      <div class="sidebar-field">
+        <div class="sidebar-field-label">Created</div>
+        <div class="sidebar-field-value" id="sidebar-created">{{ ticket.created_at[:16] if ticket.created_at else '—' }}</div>
+      </div>
+      <div class="sidebar-field">
+        <div class="sidebar-field-label">Updated</div>
+        <div class="sidebar-field-value" id="sidebar-updated">{{ ticket.updated_at[:16] if ticket.updated_at else '—' }}</div>
+      </div>
+    </div>
+
+    <div class="sidebar-card">
+      <h3>Labels</h3>
+      <div id="labels-picker" style="margin-top:0.25rem;"></div>
+    </div>
+
+    <section class="recurring-card" id="recurring-section" style="display:none;">
+      <h3>🔄 Recurring Task</h3>
+      <div id="recurring-info"></div>
+    </section>
+  </div>
+</div>
 
 <script>
+  // ── Render description as markdown ──
+  (function() {
+    var descEl = document.getElementById('ticket-description');
+    if (!descEl) return;
+    var rawBody = {{ ticket.body | tojson }};
+    if (!rawBody || rawBody.trim() === '') {
+      descEl.innerHTML = '<p style="color:var(--text-muted);font-style:italic;">No description</p>';
+    } else if (typeof renderMarkdown === 'function') {
+      descEl.innerHTML = renderMarkdown(rawBody);
+    } else {
+      descEl.textContent = rawBody;
+    }
+  })();
+
   async function loadGateReviews() {
     const res = await fetch('/api/gate_reviews?ticket_id={{ ticket.id }}');
     const reviews = await res.json();
@@ -133,6 +192,8 @@
     const t = await res.json();
     const badge = document.querySelector('.page-header .badge.status');
     if (badge) badge.textContent = t.status_name;
+    const sidebarStatus = document.getElementById('sidebar-status');
+    if (sidebarStatus) sidebarStatus.textContent = t.status_name;
     const agentBadge = document.querySelector('.page-header .badge.agent');
     if (agentBadge && t.agent_name) agentBadge.innerHTML = '🤖 ' + escapeHtml(t.agent_name);
     else if (agentBadge && !t.agent_name) agentBadge.remove();
@@ -145,12 +206,14 @@
       body: JSON.stringify({status: 'approved'}),
     });
     if (res.ok) {
+      if (typeof showToast === 'function') showToast('Gate approved', 'success');
       loadGateReviews();
       loadComments();
       refreshTicketStatus();
     } else {
       const data = await res.json();
-      alert(data.error || 'Failed to approve');
+      if (typeof showToast === 'function') showToast(data.error || 'Failed to approve', 'error');
+      else alert(data.error || 'Failed to approve');
     }
   }
 
@@ -158,7 +221,8 @@
     const input = document.getElementById(`reject-comment-${reviewId}`);
     const comment = (input.value || '').trim();
     if (!comment) {
-      alert('Rejection requires a comment.');
+      if (typeof showToast === 'function') showToast('Rejection requires a comment.', 'warning');
+      else alert('Rejection requires a comment.');
       input.focus();
       return;
     }
@@ -168,12 +232,14 @@
       body: JSON.stringify({status: 'rejected', comment}),
     });
     if (res.ok) {
+      if (typeof showToast === 'function') showToast('Gate rejected', 'success');
       loadGateReviews();
       loadComments();
       refreshTicketStatus();
     } else {
       const data = await res.json();
-      alert(data.error || 'Failed to reject');
+      if (typeof showToast === 'function') showToast(data.error || 'Failed to reject', 'error');
+      else alert(data.error || 'Failed to reject');
     }
   }
 
@@ -241,7 +307,8 @@
           const customInput = document.getElementById(`custom-${qid}`);
           const customVal = customInput ? customInput.value.trim() : '';
           if (!customVal) {
-            alert('Please enter a custom answer for the "Other" option.');
+            if (typeof showToast === 'function') showToast('Please enter a custom answer for the "Other" option.', 'warning');
+            else alert('Please enter a custom answer for the "Other" option.');
             if (customInput) customInput.focus();
             return;
           }
@@ -260,7 +327,8 @@
       }
     }
     if (answers.length === 0) {
-      alert('Please answer at least one question.');
+      if (typeof showToast === 'function') showToast('Please answer at least one question.', 'warning');
+      else alert('Please answer at least one question.');
       return;
     }
     const res = await fetch('/api/tickets/{{ ticket.id }}/answers', {
@@ -269,11 +337,13 @@
       body: JSON.stringify({ answers }),
     });
     if (res.ok) {
+      if (typeof showToast === 'function') showToast('Answers submitted', 'success');
       loadQuestions();
       loadComments();
     } else {
       const data = await res.json();
-      alert(data.error || 'Failed to submit answers');
+      if (typeof showToast === 'function') showToast(data.error || 'Failed to submit answers', 'error');
+      else alert(data.error || 'Failed to submit answers');
     }
   }
 
@@ -288,11 +358,17 @@
     }
     for (const c of rows) {
       const li = document.createElement('li');
+      let bodyHtml = '';
+      if (typeof renderMarkdown === 'function') {
+        bodyHtml = renderMarkdown(c.body);
+      } else {
+        bodyHtml = '<p>' + escapeHtml(c.body).replace(/\n/g, '</p><p>') + '</p>';
+      }
       li.innerHTML = `
         <div class="comment-header">
           <time>${new Date(c.created_at).toLocaleString()}</time>
         </div>
-        <p>${escapeHtml(c.body)}</p>
+        <div class="markdown-content">${bodyHtml}</div>
       `;
       list.appendChild(li);
     }
@@ -308,10 +384,12 @@
     });
     if (res.ok) {
       e.target.reset();
+      if (typeof showToast === 'function') showToast('Comment added', 'success');
       loadComments();
     } else {
       const data = await res.json();
-      alert(data.error || 'Failed to add comment');
+      if (typeof showToast === 'function') showToast(data.error || 'Failed to add comment', 'error');
+      else alert(data.error || 'Failed to add comment');
     }
   });
 
@@ -365,7 +443,6 @@
       const hasPreviousRun = agentRunCount > 0;
 
       if (hasPreviousRun && !isTerminal && hasAgent && runningCount === 0) {
-        // Show re-run button when there's a previous run (completed or failed)
         btn.style.display = 'none';
         rerunBtn.style.display = 'inline-flex';
         rerunBtn.disabled = false;
@@ -375,13 +452,11 @@
           rerunBtn.title = 'Re-run the assigned agent on this ticket';
         }
       } else if (!hasPreviousRun && !isTerminal && hasAgent && runningCount === 0) {
-        // Show run button for first-time run
         btn.style.display = 'inline-flex';
         rerunBtn.style.display = 'none';
         btn.disabled = false;
         btn.title = 'Run the assigned agent on this ticket';
       } else if (!isTerminal && hasAgent && runningCount > 0) {
-        // Agent already running — show re-run button disabled
         btn.style.display = 'none';
         rerunBtn.style.display = 'inline-flex';
         rerunBtn.disabled = true;
@@ -461,8 +536,7 @@
       list.appendChild(card);
     }
 
-    // Show re-run button in the section actions if last run is not running
-    const lastRun = runs[0]; // runs are sorted DESC
+    const lastRun = runs[0];
     if (lastRun && lastRun.status !== 'running') {
       actions.innerHTML = '';
     } else {
@@ -496,15 +570,18 @@
     try {
       const res = await fetch('/api/agent_runs/' + runId + '/kill', { method: 'POST' });
       if (res.ok) {
+        if (typeof showToast === 'function') showToast('Agent run killed', 'success');
         loadAgentRuns();
         initRunAgentButton();
         loadComments();
       } else {
         const data = await res.json();
-        alert(data.error || 'Failed to kill agent');
+        if (typeof showToast === 'function') showToast(data.error || 'Failed to kill agent', 'error');
+        else alert(data.error || 'Failed to kill agent');
       }
     } catch(e) {
-      alert('Network error: ' + e.message);
+      if (typeof showToast === 'function') showToast('Network error: ' + e.message, 'error');
+      else alert('Network error: ' + e.message);
     }
   }
 
@@ -518,15 +595,17 @@
       const res = await fetch('/api/tickets/{{ ticket.id }}/spawn', { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
-        // Incremental update — reload dynamic sections without full page refresh
+        if (typeof showToast === 'function') showToast('Agent spawned', 'success');
         await Promise.all([loadAgentRuns(), initRunAgentButton(), loadComments()]);
       } else {
-        alert(data.error || 'Failed to spawn agent');
+        if (typeof showToast === 'function') showToast(data.error || 'Failed to spawn agent', 'error');
+        else alert(data.error || 'Failed to spawn agent');
         btn.disabled = false;
         btn.textContent = restoreText;
       }
     } catch(e) {
-      alert('Network error: ' + e.message);
+      if (typeof showToast === 'function') showToast('Network error: ' + e.message, 'error');
+      else alert('Network error: ' + e.message);
       btn.disabled = false;
       btn.textContent = restoreText;
     }
@@ -560,11 +639,11 @@
       }
       section.style.display = 'block';
       info.innerHTML = parents.map(p => `
-        <div class="recurring-card">
+        <div style="margin-top:0.25rem;">
           <strong>${escapeHtml(p.title)}</strong>
           <span class="badge muted">${escapeHtml(p.human_readable || p.cron_expression)}</span>
-          ${p.enabled ? '<span class="badge active">Active</span>' : '<span class="badge muted">Disabled</span>'}
-          <div class="muted" style="margin-top:0.25rem;">Creates tickets in <strong>${escapeHtml(p.status_name)}</strong></div>
+          ${p.enabled ? '<span class="badge success">Active</span>' : '<span class="badge muted">Disabled</span>'}
+          <div style="font-size:0.85rem;color:var(--text-muted);margin-top:0.15rem;">Creates tickets in <strong>${escapeHtml(p.status_name)}</strong></div>
         </div>
       `).join('');
     } catch (e) {

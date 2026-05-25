@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>{% block title %}pi-CoWork{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
   <div class="app">
@@ -18,6 +19,9 @@
           <span class="bell-icon">🔔</span>
           <span class="notification-count" id="sidebar-count" style="display:none;">0</span>
         </div>
+      </div>
+      <div class="sidebar-search">
+        <input type="text" id="global-search" placeholder="Search tickets…" autocomplete="off" />
       </div>
       <nav class="sidebar-nav">
         <div class="nav-section">
@@ -97,6 +101,69 @@
       div.textContent = str;
       return div.innerHTML;
     }
+
+    // ── Toast Notification System ──
+    window.showToast = function(message, type, duration) {
+      type = type || 'info';
+      duration = duration || 4000;
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const toast = document.createElement('div');
+      toast.className = 'toast toast-' + type;
+      const icons = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
+      toast.innerHTML = '<span>' + (icons[type] || 'ℹ') + '</span><span style="flex:1">' + escapeHtml(message) + '</span>' +
+        '<button class="toast-close" aria-label="Close">✕</button>';
+      toast.querySelector('.toast-close').onclick = function() { removeToast(toast); };
+      toast.addEventListener('click', function(e) {
+        if (!e.target.classList.contains('toast-close')) removeToast(toast);
+      });
+      container.appendChild(toast);
+      if (duration > 0) {
+        setTimeout(function() { removeToast(toast); }, duration);
+      }
+      return toast;
+    };
+
+    function removeToast(toast) {
+      if (!toast || !toast.parentNode) return;
+      toast.classList.add('removing');
+      setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 200);
+    }
+
+    // ── Markdown Rendering ──
+    window.renderMarkdown = function(text) {
+      if (!text) return '';
+      try {
+        if (typeof marked !== 'undefined' && marked.parse) {
+          marked.setOptions({ breaks: true, gfm: true });
+          return marked.parse(text);
+        }
+      } catch (e) { /* fallback */ }
+      // Fallback: simple pre-wrap
+      return '<p>' + escapeHtml(text).replace(/\n/g, '</p><p>') + '</p>';
+    };
+
+    // ── Global Search ──
+    (function() {
+      var searchInput = document.getElementById('global-search');
+      if (!searchInput) return;
+      searchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          var q = searchInput.value.trim();
+          if (q) {
+            var boardId = localStorage.getItem('activeBoard');
+            var href = '/board';
+            if (boardId) href = '/board?search=' + encodeURIComponent(q);
+            else href = '/board?search=' + encodeURIComponent(q);
+            window.location.href = href;
+          }
+        }
+      });
+      // Pre-fill search from URL if on board page
+      var params = new URLSearchParams(window.location.search);
+      var searchParam = params.get('search');
+      if (searchParam) searchInput.value = searchParam;
+    })();
 
     const PALETTE_24 = [
       '#ef4444','#f97316','#f59e0b','#eab308','#84cc16','#22c55e',
@@ -617,6 +684,8 @@
       <button id="assistant-send">Send</button>
     </div>
   </div>
+  <div class="toast-container" id="toast-container"></div>
+
   <script src="{{ url_for('static', filename='assistant.js') }}"></script>
 </body>
 </html>

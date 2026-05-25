@@ -99,17 +99,40 @@
 <div class="board-controls">
   <div class="filter-bar">
     <input type="text" id="ticket-search" placeholder="Search tickets..." autocomplete="off">
-    <div class="filter-group priority-filters">
-      <label><input type="checkbox" value="Critical"> Critical</label>
-      <label><input type="checkbox" value="High"> High</label>
-      <label><input type="checkbox" value="Medium"> Medium</label>
-      <label><input type="checkbox" value="Low"> Low</label>
+    <div class="priority-toggles" id="priority-toggles">
+      <button type="button" class="priority-toggle" data-priority="Critical" style="display:none"><span class="priority-dot" style="background:#dc2626"></span> Critical</button>
+      <button type="button" class="priority-toggle" data-priority="High" style="display:none"><span class="priority-dot" style="background:#d97706"></span> High</button>
+      <button type="button" class="priority-toggle" data-priority="Medium" style="display:none"><span class="priority-dot" style="background:#2563eb"></span> Medium</button>
+      <button type="button" class="priority-toggle" data-priority="Low" style="display:none"><span class="priority-dot" style="background:#6b7280"></span> Low</button>
     </div>
     <div class="filter-group label-filters" id="label-filters"></div>
   </div>
+  <div class="filter-summary" id="filter-summary"></div>
   <label><input type="checkbox" id="show-terminal"> Show terminal statuses</label>
 </div>
-<div class="board" id="board"></div>
+<div class="board" id="board">
+  <div id="board-skeleton">
+    <div class="group">
+      <div class="group-header" style="padding:0.75rem 1rem;background:var(--bg)" >
+        <div class="skeleton skeleton-text" style="width:30%"></div>
+      </div>
+      <div style="padding:0.75rem">
+        <div class="skeleton skeleton-card skeleton"></div>
+        <div class="skeleton skeleton-card skeleton"></div>
+        <div class="skeleton skeleton-card skeleton"></div>
+      </div>
+    </div>
+    <div class="group" style="margin-top:1rem">
+      <div class="group-header" style="padding:0.75rem 1rem;background:var(--bg)">
+        <div class="skeleton skeleton-text" style="width:25%"></div>
+      </div>
+      <div style="padding:0.75rem">
+        <div class="skeleton skeleton-card skeleton" style="width:70%"></div>
+        <div class="skeleton skeleton-card skeleton" style="width:50%"></div>
+      </div>
+    </div>
+  </div>
+</div>
 </div>
 
 <div class="tab-content" id="tab-recurring" style="display:none;">
@@ -121,33 +144,10 @@
   </div>
 </div>
 
-<!-- Board Assistant -->
-<div class="board-assistant-bubble" id="board-assistant-bubble" title="Board Assistant">🎯</div>
-<div class="board-assistant-panel" id="board-assistant-panel">
-  <div class="board-assistant-header">
-    <strong>Board Assistant</strong>
-    <div class="assistant-actions">
-      <button id="board-assistant-compact" title="Compact">Compact</button>
-      <button id="board-assistant-reset" title="Reset">Reset</button>
-      <button id="board-assistant-close" title="Close">Close</button>
-    </div>
-  </div>
-  <div class="board-assistant-messages" id="board-assistant-messages">
-    <div class="assistant-empty">No messages yet</div>
-  </div>
-  <div class="saved-prompts-bar" id="board-assistant-saved-prompts">
-    <span class="muted" style="font-size:0.8rem;">No saved prompts</span>
-  </div>
-  <div class="board-assistant-footer">
-    <input type="text" id="board-assistant-input" placeholder="Ask the board assistant…" autocomplete="off" />
-    <button id="board-assistant-send">Send</button>
-  </div>
-</div>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 <script src="{{ url_for('static', filename='recurring.js') }}"></script>
-<script src="{{ url_for('static', filename='board_assistant.js') }}"></script>
 <script>
   // Board manager panel
   let boardStats = {};
@@ -246,14 +246,15 @@
       initBoard();
     } else {
       const data = await res.json();
-      alert(data.error || 'Failed to create board');
+      if (typeof showToast === 'function') showToast(data.error || 'Failed to create board', 'error');
+      else alert(data.error || 'Failed to create board');
     }
   });
 
   async function showEditBoard(id) {
     const res = await fetch(`/api/boards/${id}`);
     const board = await res.json();
-    if (!res.ok) { alert('Board not found'); return; }
+    if (!res.ok) { if (typeof showToast === 'function') showToast('Board not found', 'error'); else alert('Board not found'); return; }
     const wfRes = await fetch('/api/workflows');
     const workflows = await wfRes.json();
     const form = document.getElementById('edit-board-form');
@@ -296,7 +297,8 @@
       initBoard();
     } else {
       const data = await res.json();
-      alert(data.error || 'Failed to update board');
+      if (typeof showToast === 'function') showToast(data.error || 'Failed to update board', 'error');
+      else alert(data.error || 'Failed to update board');
     }
   });
 
@@ -312,7 +314,8 @@
       initBoard();
     } else {
       const data = await res.json();
-      alert(data.error || 'Failed to delete');
+      if (typeof showToast === 'function') showToast(data.error || 'Failed to delete', 'error');
+      else alert(data.error || 'Failed to delete');
     }
   }
 

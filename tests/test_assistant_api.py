@@ -67,11 +67,11 @@ def test_put_config_updates(client):
     assert data['system_prompt'] == 'Custom prompt'
 
 
-def test_put_config_accepts_arbitrary_thinking(client):
+def test_put_config_rejects_invalid_thinking(client):
     res = client.put('/api/assistant/config', json={'thinking': 'ultra'})
-    assert res.status_code == 200
-    data = json.loads(client.get('/api/assistant/config').data)
-    assert data['thinking'] == 'ultra'
+    assert res.status_code == 400
+    data = json.loads(res.data)
+    assert 'thinking' in data['error']
 
 
 def test_put_config_rejects_invalid_model(client):
@@ -720,7 +720,11 @@ BASE_HTML_PATH = 'templates/base.html'
 BOARD_HTML_PATH = 'templates/board.html'
 STYLE_CSS_PATH = 'static/style.css'
 ASSISTANT_JS_PATH = 'static/assistant.js'
-BOARD_ASSISTANT_JS_PATH = 'static/board_assistant.js'
+BOARD_ASSISTANT_JS_PATH = 'static/board_assistant.js'  # Removed — kept for path reference
+
+
+# Board assistant was consolidated into the global assistant.
+# The following tests are skipped as the board assistant has been removed.
 
 
 def read(path):
@@ -766,16 +770,19 @@ class TestSavedPromptsGlobalAssistantUI:
 
 
 class TestSavedPromptsBoardAssistantUI:
-    def test_board_html_has_saved_prompts_bar(self):
-        html = read(BOARD_HTML_PATH)
-        assert 'board-assistant-saved-prompts' in html, 'Expected board-assistant-saved-prompts div in board.html'
-        assert 'saved-prompts-bar' in html, 'Expected saved-prompts-bar class in board.html'
+    # Board assistant was consolidated into the global assistant
+    # These UI elements are no longer in board.html
+    pass
 
-    def test_board_assistant_js_has_saved_prompts_logic(self):
-        js = read(BOARD_ASSISTANT_JS_PATH)
-        assert 'loadSavedPrompts' in js, 'Expected loadSavedPrompts in board_assistant.js'
-        assert 'renderSavedPrompts' in js, 'Expected renderSavedPrompts in board_assistant.js'
-        assert 'saved-prompt-btn' in js, 'Expected saved-prompt-btn class in board_assistant.js'
+    # def test_board_html_has_saved_prompts_bar(self):
+    #     html = read(BOARD_HTML_PATH)
+    #     assert 'board-assistant-saved-prompts' in html
+
+    # def test_board_assistant_js_has_saved_prompts_logic(self):
+    #     js = read(BOARD_ASSISTANT_JS_PATH)
+    #     assert 'loadSavedPrompts' in js
+    #     assert 'renderSavedPrompts' in js
+    #     assert 'saved-prompt-btn' in js
 
 
 class TestSavedPromptsCSS:

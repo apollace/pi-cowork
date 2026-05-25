@@ -6,7 +6,7 @@ from flask import Blueprint, jsonify, request
 
 from pi_cowork.db import query_db, run_db, row_to_dict
 from pi_cowork.models import get_workflow, get_status, get_statuses
-from pi_cowork.api.pi_models import get_model_ids
+from pi_cowork.api.pi_models import get_thinking_levels, get_model_ids
 from pi_cowork.system_logs import add_log
 
 statuses_bp = Blueprint('statuses', __name__)
@@ -40,10 +40,9 @@ def api_create_status():
     if not wf:
         return jsonify({"error": "Workflow not found"}), 404
     if thinking is not None:
-        if thinking != '' and thinking is not None:
-            pass  # any non-empty string is accepted
-        else:
-            thinking = None
+        valid_thinking = get_thinking_levels()
+        if thinking not in valid_thinking:
+            return jsonify({"error": f"thinking must be one of: {', '.join(valid_thinking)}"}), 400
     if model is not None:
         valid_models = get_model_ids()
         if valid_models and model not in valid_models:
@@ -102,13 +101,12 @@ def api_update_status(status_id):
         updates.append("model = ?")
         args.append(model if model else None)
     if 'thinking' in data:
+        valid_thinking = get_thinking_levels()
         thinking = data['thinking']
-        if thinking and thinking != '':
-            pass  # any non-empty string is accepted
-        else:
-            thinking = None
+        if thinking and thinking not in valid_thinking:
+            return jsonify({"error": f"thinking must be one of: {', '.join(valid_thinking)}"}), 400
         updates.append("thinking = ?")
-        args.append(thinking)
+        args.append(thinking if thinking else None)
     if not updates:
         return jsonify({"error": "No fields to update"}), 400
     args.append(status_id)
