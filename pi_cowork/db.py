@@ -9,13 +9,19 @@ from pi_cowork import config
 
 
 def get_db():
-    """Return a per-request SQLite connection (stored on Flask's ``g``)."""
+    """Return a per-request SQLite connection (stored on Flask's ``g``).
+
+    Uses WAL journal mode so that writes do not block concurrent readers,
+    which is the main source of latency when agents write audit logs while
+    the board is loading.
+    """
     db = getattr(g, '_database', None)
     if db is None:
         path = current_app.config.get('DATABASE', config.DATABASE)
         db = g._database = sqlite3.connect(path)
         db.row_factory = sqlite3.Row
         db.execute('PRAGMA foreign_keys = ON')
+        db.execute('PRAGMA journal_mode = WAL')
     return db
 
 
@@ -223,6 +229,25 @@ def _migrate(db):
          'ALTER TABLE workflows ADD COLUMN git_enabled BOOLEAN NOT NULL DEFAULT 0'),
         ('add_tickets_branch',
          'ALTER TABLE tickets ADD COLUMN branch TEXT'),
+        # Ticket #83 — Performance indexes for board loading
+        ('idx_tickets_board_id',
+            'CREATE INDEX IF NOT EXISTS idx_tickets_board_id ON tickets(board_id)'),
+        ('idx_comments_ticket_id',
+            'CREATE INDEX IF NOT EXISTS idx_comments_ticket_id ON comments(ticket_id)'),
+        ('idx_agent_runs_ticket_id_status',
+            'CREATE INDEX IF NOT EXISTS idx_agent_runs_ticket_id_status ON agent_runs(ticket_id, status)'),
+        ('idx_agent_queue_ticket_id',
+            'CREATE INDEX IF NOT EXISTS idx_agent_queue_ticket_id ON agent_queue(ticket_id)'),
+        ('idx_gate_reviews_ticket_id',
+            'CREATE INDEX IF NOT EXISTS idx_gate_reviews_ticket_id ON gate_reviews(ticket_id)'),
+        ('idx_questions_ticket_id',
+            'CREATE INDEX IF NOT EXISTS idx_questions_ticket_id ON questions(ticket_id)'),
+        ('idx_ticket_labels_ticket_id',
+            'CREATE INDEX IF NOT EXISTS idx_ticket_labels_ticket_id ON ticket_labels(ticket_id)'),
+        ('idx_recurring_instances_ticket_id',
+            'CREATE INDEX IF NOT EXISTS idx_recurring_instances_ticket_id ON recurring_instances(ticket_id)'),
+        ('idx_labels_workflow_id',
+            'CREATE INDEX IF NOT EXISTS idx_labels_workflow_id ON labels(workflow_id)'),
     ]
     for name, sql in migrations:
         already_applied = db.execute(
