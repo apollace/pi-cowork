@@ -22,11 +22,13 @@ def register_pages(app):
     def ticket_detail(ticket_id):
         from flask import render_template
         ticket = query_db("""
-            SELECT t.*, s.name AS status_name, a.name AS agent_name, b.name AS board_name, b.workflow_id
+            SELECT t.*, s.name AS status_name, a.name AS agent_name, b.name AS board_name, b.workflow_id,
+                   w.git_enabled
             FROM tickets t
             JOIN statuses s ON t.status_id = s.id
             LEFT JOIN agents a ON s.agent_id = a.id
             JOIN boards b ON t.board_id = b.id
+            JOIN workflows w ON b.workflow_id = w.id
             WHERE t.id = ?
         """, (ticket_id,), one=True)
         if not ticket:

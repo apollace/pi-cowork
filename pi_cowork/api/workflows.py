@@ -23,8 +23,9 @@ def api_create_workflow():
     description = (data.get('description') or '').strip() or None
     if not name:
         return jsonify({"error": "name is required"}), 400
+    git_enabled = bool(data.get('git_enabled', False))
     try:
-        cur = run_db("INSERT INTO workflows (name, description) VALUES (?, ?)", (name, description))
+        cur = run_db("INSERT INTO workflows (name, description, git_enabled) VALUES (?, ?, ?)", (name, description, int(git_enabled)))
         add_log('INFO', 'db_change', f'INSERT workflows/{cur.lastrowid}', details={'operation': 'INSERT', 'table': 'workflows', 'record_id': cur.lastrowid})
         return jsonify({"id": cur.lastrowid}), 201
     except sqlite3.IntegrityError:
@@ -53,6 +54,10 @@ def api_update_workflow(workflow_id):
     if 'description' in data:
         updates.append("description = ?")
         args.append((data['description'] or '').strip() or None)
+    if 'git_enabled' in data:
+        git_enabled = bool(data['git_enabled'])
+        updates.append("git_enabled = ?")
+        args.append(int(git_enabled))
     if not updates:
         return jsonify({"error": "No fields to update"}), 400
     args.append(workflow_id)

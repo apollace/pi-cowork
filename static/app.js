@@ -219,6 +219,7 @@ async function initBoard() {
       `<span class="badge label-pill" style="background:${escapeHtml(l.color)}33;color:${escapeHtml(l.color)};border:1px solid ${escapeHtml(l.color)}55;">${escapeHtml(l.name)}</span>`
     ).join('');
     const priorityBadge = ticket.priority ? `<span class="badge" style="background:${escapeHtml(ticket.priority) === 'Critical' ? '#dc2626' : escapeHtml(ticket.priority) === 'High' ? '#d97706' : escapeHtml(ticket.priority) === 'Low' ? '#6b7280' : '#2563eb'}22;color:${escapeHtml(ticket.priority) === 'Critical' ? '#dc2626' : escapeHtml(ticket.priority) === 'High' ? '#d97706' : escapeHtml(ticket.priority) === 'Low' ? '#6b7280' : '#2563eb'};border:1px solid ${escapeHtml(ticket.priority) === 'Critical' ? '#dc2626' : escapeHtml(ticket.priority) === 'High' ? '#d97706' : escapeHtml(ticket.priority) === 'Low' ? '#6b7280' : '#2563eb'}44;">🔥 ${escapeHtml(ticket.priority)}</span>` : '';
+    const branchBadge = (currentBoardData && currentBoardData.git_enabled && ticket.branch) ? `<span class="badge" style="background:#4ade8022;color:#166534;border:1px solid #4ade8044;">🌿 ${escapeHtml(ticket.branch)}</span>` : '';
     card.innerHTML = `
       <a class="card-link" href="/ticket/${ticket.id}">
         <div class="card-id">#${ticket.id}</div>
@@ -233,6 +234,7 @@ async function initBoard() {
           ${statuses.map(s => `<option value="${s.id}" ${s.id === ticket.status_id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
         </select>
         ${priorityBadge}
+        ${branchBadge}
         ${hasAgent}
         ${queuedBadge}
         ${gateBadge}

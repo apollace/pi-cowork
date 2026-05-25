@@ -16,6 +16,9 @@
       {% if ticket.board_name %}
       <span class="badge">📁 {{ ticket.board_name }}</span>
       {% endif %}
+      {% if ticket.branch and ticket.git_enabled %}
+      <span class="badge" style="background:#4ade8022;color:#166534;border:1px solid #4ade8044;">🌿 {{ ticket.branch }}</span>
+      {% endif %}
       <span id="label-pills"></span>
       <button id="run-agent-btn" class="btn run-agent" style="display:none;">🤖 Run Agent</button>
       <button id="rerun-agent-btn" class="btn rerun-agent" style="display:none;">🔄 Re-run Agent</button>

@@ -27,6 +27,7 @@ A minimal CoWork web app with AI agent integration. Supports multiple boards and
 pi-cowork/
 ├── app.py                 # Flask app, routes, DB init, agent spawning
 ├── pi_cowork/api/pi_models.py  # pi CLI model discovery with caching
+├── pi_cowork/git_helpers.py    # Git branch management for ticket workspaces
 ├── schema.sql             # DB schema + seed data
 ├── requirements.txt       # Flask, pytest
 ├── pi-cowork.db           # SQLite database (created on first run)
@@ -44,9 +45,11 @@ pi-cowork/
 
 │   ├── workflows.html     # Workflows + agents/statuses/transitions/quality gates
 │   └── backup.html        # Import / export workflows
-└── tests/                 # pytest suite (116 tests)
+└── tests/                 # pytest suite (740 tests)
     ├── conftest.py
-    ├── test_tickets_api.py
+    ├── test_git_helpers.py     # git_helpers module (make_branch_name, ensure_ticket_branch, etc.)
+    ├── test_tickets_api.py     # tickets API (CRUD, git branch visibility)
+    ├── test_workflows_boards.py # workflows + boards API (git_enabled CRUD)
     ├── test_agents_api.py
     ├── test_statuses_api.py
     ├── test_transitions_api.py
@@ -55,7 +58,6 @@ pi-cowork/
     ├── test_agent_spawn.py
     ├── test_import_export.py
     ├── test_quality_gates.py
-    ├── test_workflows_boards.py
     ├── test_agent_completion.py
     └── test_pi_models.py
 ```
@@ -365,6 +367,11 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 | `/api/tickets/<id>/agent_runs` | GET | List agent runs for a ticket |
 | `/api/agent_runs/<id>/log` | GET | Fetch raw log file |
 
+**Workflow fields:**
+- `name` (string, required, unique)
+- `description` (text) — workflow description
+- `git_enabled` (boolean, default false) — when true, agents auto-manage git branches for tickets on boards using this workflow
+
 **Board fields:**
 - `name` (string, required, unique)
 - `workflow_id` (integer, required)
@@ -376,6 +383,7 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 - `board_id` (integer, required)
 - `status_id` (integer) — current status; defaults to the workflow's default status
 - `priority` (TEXT) — values: `Low`, `Medium`, `High`, `Critical`; defaults to `Medium`
+- `branch` (TEXT) — git branch name; auto-managed when git_enabled is true for the workflow; excluded from API responses when git_enabled is false
 - Ticket list sort order: **priority DESC** (Critical → High → Medium → Low), **then created_at DESC**
 
 **Agent fields:**
@@ -661,3 +669,48 @@ Board card `toggleCardLabels()` uses a global `_activePopover` / `_activePopover
 ## Known Constraints & Recurring Pitfalls
 
 - **Flaky agent-kill test** — `tests/test_running_agents.py::test_kill_agent_run_sigkill_escalation` can fail intermittently with `assert data['exit_code'] == -9` because the mocked process may return `-15` (SIGTERM) instead of `-9` (SIGKILL) depending on timing. If this test fails in isolation and your changes do not touch agent killing logic, it is safe to treat it as a pre-existing flaky test.
+
+## Git Integration (Ticket #78)
+
+### Overview
+
+Each workflow has a `git_enabled` boolean column (default `0`/false). When enabled for a workflow, Pi-CoWork manages git branches for tickets on boards using that workflow:
+
+1. **Before agent spawn**, `ensure_ticket_branch()` is called to create/checkout a ticket branch
+2. **Branch naming**: `ticket-<id>-<kebab-case-slug>` (slug truncated to 60 chars)
+3. **Default branch** auto-detected from `git symbolic-ref refs/remotes/origin/HEAD`, falling back to `origin/main` then `origin/master`
+4. **When git disabled**: the `branch` field is entirely hidden from API responses and UI
+5. **When git enabled**: the `branch` field is visible and can be manually updated via PUT ticket (but is typically auto-managed)
+
+### Database Schema
+
+- **`workflows.git_enabled`** — `BOOLEAN NOT NULL DEFAULT 0`. When true, git operations are attempted for tickets on boards using this workflow.
+- **`tickets.branch`** — `TEXT` (nullable). Stores the git branch name for the ticket. Only populated when the workflow has git_enabled=true.
+
+### `git_helpers.py` Module API
+
+- `is_git_repo(path)` — check if a directory contains a `.git` folder
+- `get_current_branch(cwd)` — returns the current branch name or None
+- `make_branch_name(ticket_id, title)` — generates `ticket-<id>-<kebab-case-slug>`
+- `branch_exists(working_directory, branch_name)` — checks local + remote for a branch
+- `ensure_ticket_branch(working_directory, ticket_id, ticket_title, existing_branch=None)` — main entry point: creates/checks out/rebases the ticket branch, returns branch name or None on failure
+
+### Agent Prompt Injection
+
+When `git_enabled` is True and a branch is checked out, the agent's context message includes:
+```
+🌿 Git: You are on branch 'ticket-78-git-option-for-workflow' (already checked out). Do not switch branches. When finished, run: git add -A && git commit -m '<descriptive message>' && git push -u origin ticket-78-git-option-for-workflow
+```
+When `git_enabled` is False, no git context is injected and no branch operations are performed.
+
+### API Changes
+
+- **GET ticket list / GET single ticket**: `branch` field is included only when the workflow's `git_enabled` is true; excluded entirely otherwise. The `git_enabled` field itself is not included in ticket responses (it's a workflow property).
+- **POST create ticket**: `branch` field in request body is ignored — branch is auto-managed.
+- **PUT update ticket**: `branch` field is writable only when `git_enabled` is true for the ticket's workflow. Returns 400 if set when git is disabled.
+- **GET/POST/PUT workflows**: All include `git_enabled` field.
+- **GET boards**: Boards include `git_enabled` from their linked workflow.
+
+### Guard: Protected Branch
+
+If `ensure_ticket_branch()` fails (returns None) and the current directory is on `main` or `master`, agent spawn is blocked entirely to prevent accidental commits/pushes to the default branch. A comment `⚠️ Agent spawn blocked: could not set up a ticket branch...` is added to the ticket.

@@ -22,6 +22,8 @@ from pi_cowork.models import (
 )
 from pi_cowork.events import bus, AGENT_SPAWNED, AGENT_COMPLETED, AGENT_FAILED
 from pi_cowork.api_docs import build_api_docs, DEFAULT_ENDPOINT_KEYS
+from pi_cowork.git_helpers import ensure_ticket_branch, get_current_branch, is_git_repo
+from pi_cowork.models import get_workflow
 
 logger = logging.getLogger(__name__)
 
@@ -339,6 +341,35 @@ def spawn_agent(ticket, status, agent, old_status_id=None):
     workflow_id = ticket.get('workflow_id')
     board = get_board(board_id) if board_id else None
     board_dir = board['working_directory'] if board else 'workspace'
+
+    # Git branch setup: only when workflow has git_enabled=True
+    git_info = ""
+    branch = None
+    workflow = get_workflow(workflow_id) if workflow_id else None
+    git_enabled = bool(workflow and workflow.get('git_enabled'))
+    if git_enabled:
+        try:
+            branch = ensure_ticket_branch(board_dir, ticket_id, ticket['title'], existing_branch=ticket.get('branch'))
+            if branch:
+                git_info = (
+                    f"\n🌿 Git: You are on branch '{branch}' (already checked out). "
+                    f"Do not switch branches. When finished, run: "
+                    f"git add -A && git commit -m '<descriptive message>' && git push -u origin {branch}"
+                )
+        except Exception as e:
+            logger.warning("Git branch setup failed for ticket %d: %s", ticket_id, e)
+
+    # Guard: if branch setup failed and we're on a protected default branch,
+    # abort spawn rather than risking an accidental commit/push to master/main.
+    if git_enabled and branch is None and is_git_repo(board_dir):
+        cur_branch = get_current_branch(board_dir)
+        if cur_branch in ('master', 'main'):
+            add_comment(
+                ticket_id,
+                f"⚠️ Agent spawn blocked: could not set up a ticket branch and current branch is '{cur_branch}' (protected). Please check the repository state."
+            )
+            return False
+
     session_dir = os.path.join(board_dir, '.pi-sessions', str(agent['id']), f'ticket-{ticket_id}')
     log_dir = os.path.join(board_dir, '.pi-logs', f'ticket-{ticket_id}')
 
@@ -397,10 +428,17 @@ def spawn_agent(ticket, status, agent, old_status_id=None):
         board_id=board_id, workflow_id=workflow_id
     )
 
+    commit_clause = ""
+    if branch:
+        commit_clause = (
+            f"first commit and push your changes "
+            f"(`git add -A && git commit -m '<descriptive message>' && git push -u origin {branch}`), then "
+        )
+
     if transitions_line:
-        done_instruction = "When done: first add a comment to the ticket summarizing what you did, then update the ticket status to exactly one of the statuses listed above (or leave it where it is if you asked questions via the questions endpoint)."
+        done_instruction = f"When done: {commit_clause}add a comment to the ticket summarizing what you did, then update the ticket status to exactly one of the statuses listed above (or leave it where it is if you asked questions via the questions endpoint)."
     else:
-        done_instruction = "When done: add a comment to the ticket summarizing what you did, then you're finished."
+        done_instruction = f"When done: {commit_clause}add a comment to the ticket summarizing what you did, then you're finished."
 
     if is_warm:
         new_comment_lines = []
@@ -427,7 +465,7 @@ def spawn_agent(ticket, status, agent, old_status_id=None):
 
         context_msg = f"""[Update] Ticket #{ticket_id}: {ticket['title']}
 {board_ctx}
-{change_line}
+{change_line}{git_info}
 
 New comments since last update:
 {new_comments_block}
@@ -448,10 +486,14 @@ API:
             if old_status:
                 change_note = f"\nNote: This ticket was moved from \"{old_status['name']}\" to \"{status['name']}\" before you were spawned.\n"
         context_msg = f"""Ticket #{ticket_id}: {ticket['title']}
-{board_ctx}{change_note}\nDescription:
-{ticket['body'] or '(no description)'}\nComments:
-{all_comments_block}\nAPI:
-{api_docs}\nThis is a new prompt, forget the goals you had from previous prompts.
+{board_ctx}{change_note}{git_info}
+Description:
+{ticket['body'] or '(no description)'}
+Comments:
+{all_comments_block}
+API:
+{api_docs}
+This is a new prompt, forget the goals you had from previous prompts.
 Your goal: {goal_line}
 {transitions_line}
 {done_instruction}"""
