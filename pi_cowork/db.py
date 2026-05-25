@@ -209,6 +209,12 @@ def _migrate(db):
         ('add_statuses_thinking_column',
          'ALTER TABLE statuses ADD COLUMN thinking TEXT'),
         # Ticket #72 — Saved prompts for assistant
+        # Ticket #74 — Per-ticket git branch tracking
+        ('add_tickets_branch',
+         'ALTER TABLE tickets ADD COLUMN branch TEXT'),
+        # Ticket #78 — Git option for a workflow
+        ('add_workflows_git_enabled',
+         'ALTER TABLE workflows ADD COLUMN git_enabled BOOLEAN NOT NULL DEFAULT 0'),
         ('create_assistant_saved_prompts', """
             CREATE TABLE IF NOT EXISTS assistant_saved_prompts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

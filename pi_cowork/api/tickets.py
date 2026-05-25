@@ -31,11 +31,13 @@ def api_tickets():
         return jsonify({"error": "board_id is required"}), 400
 
     rows = query_db("""
-        SELECT t.*, s.name AS status_name, a.name AS agent_name, b.name AS board_name, b.workflow_id
+        SELECT t.*, s.name AS status_name, a.name AS agent_name, b.name AS board_name, b.workflow_id,
+               w.git_enabled
         FROM tickets t
         JOIN statuses s ON t.status_id = s.id
         LEFT JOIN agents a ON s.agent_id = a.id
         JOIN boards b ON t.board_id = b.id
+        JOIN workflows w ON b.workflow_id = w.id
         WHERE t.board_id = ?
         ORDER BY
           CASE t.priority
@@ -51,6 +53,10 @@ def api_tickets():
     tickets = []
     for r in rows:
         d = row_to_dict(r)
+        # Hide branch field when git is not enabled for this workflow
+        git_enabled = d.pop('git_enabled', 0)
+        if not git_enabled:
+            d.pop('branch', None)
         d['comments'] = get_comments(d['id'])
         d['labels'] = get_ticket_labels(d['id'])
         tickets.append(d)
@@ -88,16 +94,22 @@ def api_tickets():
 @tickets_bp.route('/api/tickets/<int:ticket_id>', methods=['GET'])
 def api_ticket(ticket_id):
     row = query_db("""
-        SELECT t.*, s.name AS status_name, s.is_terminal AS is_terminal, s.agent_id AS status_agent_id, a.name AS agent_name, b.name AS board_name, b.workflow_id
+        SELECT t.*, s.name AS status_name, s.is_terminal AS is_terminal, s.agent_id AS status_agent_id, a.name AS agent_name, b.name AS board_name, b.workflow_id,
+               w.git_enabled
         FROM tickets t
         JOIN statuses s ON t.status_id = s.id
         LEFT JOIN agents a ON s.agent_id = a.id
         JOIN boards b ON t.board_id = b.id
+        JOIN workflows w ON b.workflow_id = w.id
         WHERE t.id = ?
     """, (ticket_id,), one=True)
     if not row:
         return jsonify({"error": "Ticket not found"}), 404
     d = row_to_dict(row)
+    # Hide branch field when git is not enabled for this workflow
+    git_enabled = d.pop('git_enabled', 0)
+    if not git_enabled:
+        d.pop('branch', None)
     d['comments'] = get_comments(d['id'])
     d['labels'] = get_ticket_labels(ticket_id)
 
@@ -244,6 +256,17 @@ def api_update_ticket(ticket_id):
             return jsonify({"error": f"priority must be one of {valid_priorities}"}), 400
         updates.append("priority = ?")
         args.append(priority)
+
+    # Branch field: auto-managed by git integration; only writable when git_enabled
+    if 'branch' in data:
+        # Check if git is enabled for this workflow
+        wf = query_db("SELECT git_enabled FROM workflows WHERE id = ?", (ticket['workflow_id'],), one=True)
+        git_enabled = bool(wf['git_enabled']) if wf else False
+        if not git_enabled:
+            return jsonify({"error": "Cannot set branch: git is not enabled for this workflow"}), 400
+        # Allow updating branch when git is enabled
+        updates.append("branch = ?")
+        args.append(data['branch'])
 
     new_status_id = status_id if status_id is not None else ticket['status_id']
     old_status_id = ticket['status_id']

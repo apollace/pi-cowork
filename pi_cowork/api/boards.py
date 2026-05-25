@@ -15,7 +15,7 @@ boards_bp = Blueprint('boards', __name__)
 @boards_bp.route('/api/boards', methods=['GET'])
 def api_boards():
     rows = query_db("""
-        SELECT b.*, w.name AS workflow_name
+        SELECT b.*, w.name AS workflow_name, w.git_enabled
         FROM boards b
         JOIN workflows w ON b.workflow_id = w.id
         ORDER BY b.name

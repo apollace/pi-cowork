@@ -229,3 +229,115 @@ def test_comments_order_with_identical_timestamps(client, default_board):
     assert len(comments) == 2
     assert comments[0]['body'] == 'first'
     assert comments[1]['body'] == 'second'
+
+
+# ── Git-enabled tests ──
+
+def test_branch_hidden_when_git_disabled(client, default_workflow, default_board):
+    """Branch field should not appear in ticket list when git_enabled is off."""
+    # Default workflow should have git_enabled = 0
+    wf = json.loads(client.get(f'/api/workflows/{default_workflow["id"]}').data)
+    assert wf.get('git_enabled') in (0, False, None)
+
+    res = client.post('/api/tickets', json={
+        'title': 'No git ticket',
+        'board_id': default_board['id'],
+    })
+    assert res.status_code == 201
+    tid = json.loads(res.data)['id']
+
+    # Directly update the ticket's branch (DB-level bypass, simulating prior data)
+    from pi_cowork.db import run_db
+    with client.application.app_context():
+        run_db("UPDATE tickets SET branch = ? WHERE id = ?", ('ticket-1-test', tid))
+
+    # List tickets — branch should be excluded
+    res = client.get(f'/api/tickets?board_id={default_board["id"]}')
+    tickets = json.loads(res.data)
+    ticket = next(t for t in tickets if t['id'] == tid)
+    assert 'branch' not in ticket
+
+    # Single ticket — branch should be excluded
+    res = client.get(f'/api/tickets/{tid}')
+    ticket = json.loads(res.data)
+    assert 'branch' not in ticket
+
+
+def test_branch_visible_when_git_enabled(client, default_workflow, default_board):
+    """Branch field should appear in ticket when git_enabled is on."""
+    # Enable git on workflow
+    res = client.put(f'/api/workflows/{default_workflow["id"]}', json={'git_enabled': True})
+    assert res.status_code == 200
+
+    res = client.post('/api/tickets', json={
+        'title': 'Git ticket',
+        'board_id': default_board['id'],
+    })
+    assert res.status_code == 201
+    tid = json.loads(res.data)['id']
+
+    # Set branch directly
+    from pi_cowork.db import run_db
+    with client.application.app_context():
+        run_db("UPDATE tickets SET branch = ? WHERE id = ?", ('ticket-99-git-ticket', tid))
+
+    # List tickets — branch should be present
+    res = client.get(f'/api/tickets?board_id={default_board["id"]}')
+    tickets = json.loads(res.data)
+    ticket = next(t for t in tickets if t['id'] == tid)
+    assert ticket.get('branch') == 'ticket-99-git-ticket'
+
+    # Single ticket — branch should be present
+    res = client.get(f'/api/tickets/{tid}')
+    ticket = json.loads(res.data)
+    assert ticket.get('branch') == 'ticket-99-git-ticket'
+
+
+def test_branch_update_blocked_when_git_disabled(client, default_workflow, default_board):
+    """PUT with branch field should return 400 when git not enabled."""
+    res = client.post('/api/tickets', json={
+        'title': 'Blocked',
+        'board_id': default_board['id'],
+    })
+    assert res.status_code == 201
+    tid = json.loads(res.data)['id']
+
+    res = client.put(f'/api/tickets/{tid}', json={'branch': 'ticket-1-test'})
+    assert res.status_code == 400
+    assert b'git' in res.data.lower()
+
+
+def test_branch_update_allowed_when_git_enabled(client, default_workflow, default_board):
+    """PUT with branch field should succeed when git is enabled."""
+    # Enable git on workflow
+    client.put(f'/api/workflows/{default_workflow["id"]}', json={'git_enabled': True})
+
+    res = client.post('/api/tickets', json={
+        'title': 'Allowed',
+        'board_id': default_board['id'],
+    })
+    assert res.status_code == 201
+    tid = json.loads(res.data)['id']
+
+    res = client.put(f'/api/tickets/{tid}', json={'branch': 'ticket-1-allowed'})
+    assert res.status_code == 200
+
+    # Verify branch was set
+    ticket = json.loads(client.get(f'/api/tickets/{tid}').data)
+    assert ticket['branch'] == 'ticket-1-allowed'
+
+
+def test_create_ticket_ignores_branch_field(client, default_board):
+    """POST ticket should ignore branch field — branch is auto-managed."""
+    res = client.post('/api/tickets', json={
+        'title': 'Ignored branch',
+        'board_id': default_board['id'],
+        'branch': 'should-be-ignored',
+    })
+    assert res.status_code == 201
+    # branch should not be set
+    tid = json.loads(res.data)['id']
+    from pi_cowork.db import query_db
+    with client.application.app_context():
+        row = query_db('SELECT branch FROM tickets WHERE id = ?', (tid,), one=True)
+    assert row['branch'] is None
