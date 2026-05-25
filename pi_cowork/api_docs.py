@@ -19,10 +19,9 @@ ENDPOINT_REGISTRY = [
         "category": "Tickets",
         "method": "PUT",
         "path_template": "/api/tickets/{ticket_id}",
-        "label": "update ticket (fields: status_id, title, body, priority, branch)",
+        "label": "update ticket (fields: status_id, title, body, priority)",
         "doc_lines": [
-            "- PUT {base_url}/api/tickets/{ticket_id} → update ticket (fields: status_id, title, body, priority, branch)",
-            "  branch is only writable when git_enabled is true for the workflow",
+            "- PUT {base_url}/api/tickets/{ticket_id} → update ticket (fields: status_id, title, body, priority)",
         ],
     },
     {
@@ -30,9 +29,9 @@ ENDPOINT_REGISTRY = [
         "category": "Tickets",
         "method": "GET",
         "path_template": "/api/tickets/{ticket_id}",
-        "label": "get ticket details (includes priority; branch only if git_enabled)",
+        "label": "get ticket details (includes priority)",
         "doc_lines": [
-            "- GET {base_url}/api/tickets/{ticket_id} → get ticket details (includes priority; branch only if git_enabled)",
+            "- GET {base_url}/api/tickets/{ticket_id} → get ticket details (includes priority)",
         ],
     },
     {

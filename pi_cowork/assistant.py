@@ -11,7 +11,7 @@ from flask import Blueprint, jsonify, request
 
 from pi_cowork import config
 from pi_cowork.db import query_db, run_db, row_to_dict
-from pi_cowork.api.pi_models import get_model_ids
+from pi_cowork.api.pi_models import get_thinking_levels, get_model_ids
 from pi_cowork.api_docs import build_assistant_api_docs, _REGISTRY_MAP
 
 logger = logging.getLogger(__name__)
@@ -351,7 +351,8 @@ def api_assistant_config_put():
     # Store '' as the 'no override' sentinel (DB has NOT NULL constraint)
     if thinking is None or thinking == '':
         thinking = ''  # sentinel: no override
-    # any non-empty string is accepted
+    elif thinking not in get_thinking_levels():
+        return jsonify({"error": "thinking must be one of: off, minimal, low, medium, high, xhigh, or empty to clear"}), 400
 
     enabled = data.get('enabled')
     if enabled is not None:

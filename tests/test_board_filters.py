@@ -6,7 +6,7 @@ def test_board_page_has_filter_controls(client):
     assert res.status_code == 200
     html = res.data.decode('utf-8')
     assert 'ticket-search' in html
-    assert 'priority-filters' in html
+    assert 'priority-toggles' in html  # Replaced priority-filters with toggle buttons
     assert 'label-filters' in html
     assert 'Search tickets' in html
 

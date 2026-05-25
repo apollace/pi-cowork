@@ -27,7 +27,6 @@ A minimal CoWork web app with AI agent integration. Supports multiple boards and
 pi-cowork/
 ├── app.py                 # Flask app, routes, DB init, agent spawning
 ├── pi_cowork/api/pi_models.py  # pi CLI model discovery with caching
-├── pi_cowork/git_helpers.py    # Git branch management for ticket workspaces
 ├── schema.sql             # DB schema + seed data
 ├── requirements.txt       # Flask, pytest
 ├── pi-cowork.db           # SQLite database (created on first run)
@@ -45,11 +44,9 @@ pi-cowork/
 
 │   ├── workflows.html     # Workflows + agents/statuses/transitions/quality gates
 │   └── backup.html        # Import / export workflows
-└── tests/                 # pytest suite (740 tests)
+└── tests/                 # pytest suite (116 tests)
     ├── conftest.py
-    ├── test_git_helpers.py     # git_helpers module (make_branch_name, ensure_ticket_branch, etc.)
-    ├── test_tickets_api.py     # tickets API (CRUD, git branch visibility)
-    ├── test_workflows_boards.py # workflows + boards API (git_enabled CRUD)
+    ├── test_tickets_api.py
     ├── test_agents_api.py
     ├── test_statuses_api.py
     ├── test_transitions_api.py
@@ -58,6 +55,7 @@ pi-cowork/
     ├── test_agent_spawn.py
     ├── test_import_export.py
     ├── test_quality_gates.py
+    ├── test_workflows_boards.py
     ├── test_agent_completion.py
     └── test_pi_models.py
 ```
@@ -367,11 +365,6 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 | `/api/tickets/<id>/agent_runs` | GET | List agent runs for a ticket |
 | `/api/agent_runs/<id>/log` | GET | Fetch raw log file |
 
-**Workflow fields:**
-- `name` (string, required, unique)
-- `description` (text) — workflow description
-- `git_enabled` (boolean, default false) — when true, agents auto-manage git branches for tickets on boards using this workflow
-
 **Board fields:**
 - `name` (string, required, unique)
 - `workflow_id` (integer, required)
@@ -383,14 +376,13 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 - `board_id` (integer, required)
 - `status_id` (integer) — current status; defaults to the workflow's default status
 - `priority` (TEXT) — values: `Low`, `Medium`, `High`, `Critical`; defaults to `Medium`
-- `branch` (TEXT) — git branch name; auto-managed when git_enabled is true for the workflow; excluded from API responses when git_enabled is false
 - Ticket list sort order: **priority DESC** (Critical → High → Medium → Low), **then created_at DESC**
 
 **Agent fields:**
 - `name` (string, required, unique per workflow)
 - `description` (string) — used as `--system-prompt` for `pi`
 - `model` (string, nullable) — optional `--model` override for `pi`; `NULL` means use pi default
-- `thinking` (string, nullable) — optional `--thinking` level for `pi`; any non-empty string is accepted (recommended levels: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`); empty string or `NULL` clears the override and uses the `pi` CLI built-in default
+- `thinking` (string, nullable) — optional `--thinking` level for `pi`; one of: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`; `NULL` means use pi default
 - `api_endpoints` (array of strings or null) — list of endpoint keys from `ENDPOINT_REGISTRY` to include in agent prompt; `NULL` uses defaults (`ticket_put`, `ticket_comments_post`, `ticket_questions_post`)
 - `workflow_id` (integer) — required
 
@@ -573,7 +565,7 @@ Recurring tasks automatically create tickets on a cron-like schedule, managed th
 - **Agent completion** — watcher thread per spawn calls `proc.wait()` for immediate, accurate detection with exit codes. Exit code 0 → `completed`, nonzero → `failed` + auto-comment. `cleanup_runs()` is a safety net for orphaned runs after Flask restarts, using `_is_our_process(pid)` (reads `/proc/<pid>/cmdline`) instead of `os.kill` to guard against PID recycling. `pid=NULL` → `failed` (process never started). No more `os.kill(pid, 0)`.
 - **Lean prompt architecture** — system prompt contains only agent identity + two behavioral directives. All state-specific info (goal, transitions, status context) lives in the context message at the tail end, exploiting LLM recency bias. No duplicated mandate or rules blocks.
 - **Per-agent model and thinking** — each agent can optionally override `model` and `thinking` for the `pi` CLI. These are stored as nullable columns on the `agents` table. If not set, the `pi` CLI uses its own defaults (no `--model` or `--thinking` flags are passed). There are no global `PI_MODEL`/`PI_THINKING` environment variables; agent-level settings or `pi` CLI defaults suffice. The assistant config has its own separate `model`/`thinking` columns (with `thinking NOT NULL DEFAULT 'medium'`), which when set to empty string means "use pi default" (no `--thinking` flag).
-- **Models and thinking levels** — `pi_cowork/api/pi_models.py` runs `pi --list-models` to discover available models, parses the tabular output, and caches results for 5 minutes (`_CACHE_TTL_SECONDS = 300`). The `/api/pi-models` response includes `thinking` (boolean) and `images` (boolean) per model, plus a top-level `thinking_levels` array. There is **no per-model thinking level resolution** — the backend uses a fixed default list (`'off'`, `'minimal'`, `'low'`, `'medium'`, `'high'`, `'xhigh'`, `'max'`) and the backend accepts **any non-empty string** for thinking on agents, statuses, and the assistant (empty string/null clears the override). **Model values are validated** via `get_model_ids()`: if `pi --list-models` returns models, create/update endpoints reject unknown model ids with 400; if the CLI is unavailable (empty list), any non-empty string is accepted for backward compatibility. The UI renders a fixed dropdown of default levels plus an `other...` option that reveals a free-text input for custom values. The `model.thinking` boolean is used to disable the thinking select when a model doesn't support thinking.
+- **Models and thinking levels sourced from `pi --list-models` and pi internals** — `pi_cowork/api/pi_models.py` runs `pi --list-models` to discover available models, parses the tabular output, and caches results for 5 minutes (`_CACHE_TTL_SECONDS = 300`). Thinking level validation across agents, statuses, and the assistant all call `get_thinking_levels()`, which falls back to the hardcoded tuple (`'off'`, `'minimal'`, `'low'`, `'medium'`, `'high'`, `'xhigh'`) if the CLI is unavailable. **Per-model exact thinking levels** are resolved by running a Node.js subprocess that imports `ModelRegistry` and `getSupportedThinkingLevels` from the installed `@earendil-works/pi-coding-agent` / `@earendil-works/pi-ai` modules. This handles both built-in models and custom models from `~/.pi/agent/models.json`, including per-model `thinkingLevelMap` overrides. If the Node.js helper fails (e.g. Node.js missing or modules not found), each model falls back to the boolean `thinking` field from `pi --list-models` (`thinking=true` → all levels, `thinking=false` → `off` only). **Model values are also validated** via `get_model_ids()`: if `pi --list-models` returns models, create/update endpoints reject unknown model ids with 400; if the CLI is unavailable (empty list), any non-empty string is accepted for backward compatibility. The `/api/pi-models` endpoint exposes model lists with a per-model `thinking_levels` array so the frontend can render `<select>` dropdowns that show only the exact levels each model supports. The UI preserves unknown existing model values by adding them as "(unavailable)" options rather than discarding them. The `/api/pi-models` response includes `thinking`, `images`, and `thinking_levels` fields on each model object. The frontend dynamically filters the thinking dropdown based on the selected model's `thinking_levels`: when a model is selected, only its supported levels are shown; when no model is selected, all global levels are shown. Invalid current values are reset to default. This `populateThinkingSelect` + `getModelThinkingLevels` pattern is replicated across `workflows.html`, `assistant_settings.html`, and `settings.html`.
 - **Per-status model and thinking overrides** — each status can optionally override `model` and `thinking` (nullable columns on the `statuses` table). When spawning an agent for a ticket in that status, the effective values are resolved with precedence: status override (highest) → agent override → `pi` CLI built-in defaults (lowest). This allows a workflow to tune model/thinking per stage (e.g., use a cheaper model for "Clarifications" and a stronger one for "Code Review") regardless of which agent is assigned.
 - **Per-agent API endpoints** — agents previously received a hardcoded set of 3 API endpoints (PUT ticket, POST comment, POST questions) in their prompts. Now each agent can specify which API endpoints to expose via the `api_endpoints` column (JSON array of endpoint keys from `ENDPOINT_REGISTRY` in `pi_cowork/api_docs.py`, or `NULL` for the default 3: `ticket_put`, `ticket_comments_post`, `ticket_questions_post`). The `build_api_docs()` function resolves endpoint keys to formatted prompt lines, handling `has_gates` conditional logic and `base_url`/`ticket_id`/`board_id`/`workflow_id` template substitution. Backward compatible: agents with `NULL` `api_endpoints` get the original 3 endpoints. The UI uses `GET /api/endpoint-registry` to render checkboxes grouped by category in the workflow page's agent form.
 - **Board context in prompts** — agents receive board name and board_id so they know which board they're operating on. No workflow_id is included (not needed for API calls).
@@ -582,8 +574,7 @@ Recurring tasks automatically create tickets on a cron-like schedule, managed th
 - **Session reuse** — agents reuse sessions per (agent, ticket) pair to cache tokens. Sessions stored under `{working_dir}/.pi-sessions/<agent-id>/`.
 - **Quality gates** — configurable per status transition (from, to pair). Multiple gates are ANDed (all must pass). CLI gates run automatically; manual gates require human approval. Agent spawning is blocked while any gate review is pending. Rejection of manual gates re-triggers the agent with feedback. CLI gate failure does NOT auto-re-trigger (prevents infinite loops). Orphaned gate reviews are cleaned up when the ticket moves to an unrelated status.
 - **Assistant API endpoints** — the assistant also supports per-endpoint API doc selection via the `assistant_config.api_endpoints` column. Unlike agents (which default to 3 endpoints), the assistant defaults to ALL registry endpoints (`build_assistant_api_docs`). The settings UI loads the same `/api/endpoint-registry` endpoint and defaults all checkboxes to selected; saving with all selected sends `null` to use the broad default.
-- **Board Agent Assistant** — each board has its own isolated assistant session (`{board.working_directory}/.pi-sessions/assistant-board-{board_id}`) distinct from the global assistant (`assistant-global`). The same global config (model, thinking, system prompt, API endpoints) is reused for all boards; no per-board overrides. API endpoints accept an optional `board_id` parameter and are backward-compatible (no `board_id` = global session). Per-board `threading.Lock` instances prevent race conditions within a single board while allowing concurrent chats across boards.
-- **Saved prompts** — global reusable prompt snippets stored in `assistant_saved_prompts` (columns: `id`, `name` UNIQUE, `prompt_text`, `sort_order`, `created_at`). Configured in Settings UI under the Assistant category. Rendered as pill buttons above the chat input in both global (`base.html` + `assistant.js`) and board (`board.html` + `board_assistant.js`) assistant panels. Clicking a pill injects `prompt_text` into the input field (not auto-sent). API: `GET/POST /api/assistant/saved-prompts`, `PUT/DELETE /api/assistant/saved-prompts/<id>`.
+- **Board Context in Assistant** — the global ✨ assistant accepts an optional `board_id` parameter in its API (`/api/assistant/chat`, `/api/assistant/history`, `/api/assistant/compact`, `/api/assistant/reset`). When `board_id` is provided, it uses an isolated session per board (session dir: `{board.working_directory}/.pi-sessions/assistant-board-{board_id}`). The `board_assistant.js` and its dedicated panel/bubble UI have been removed from `board.html` — instead, the global assistant (in `base.html` + `assistant.js`) serves all pages. API endpoints remain backward-compatible (no `board_id` = global session). **Saved prompts** — global reusable prompt snippets stored in `assistant_saved_prompts` (columns: `id`, `name` UNIQUE, `prompt_text`, `sort_order`, `created_at`). Configured in Settings UI under the Assistant category. Rendered as pill buttons above the chat input in the global assistant panel (`base.html` + `assistant.js`). Clicking a pill injects `prompt_text` into the input field (not auto-sent). API: `GET/POST /api/assistant/saved-prompts`, `PUT/DELETE /api/assistant/saved-prompts/<id>`.
 - **Slow API request logging** — `pi_cowork/system_logs.py` has a `before_request` hook (`record_request_start_time`) that stores `time.monotonic()` on `flask.g`, and an `after_request` hook (`log_http_request`) that checks elapsed time against `SLOW_REQUEST_THRESHOLD` (default 1.0s). Requests exceeding the threshold produce a WARNING-level system log with message prefix `SLOW API:`. This applies to **all** HTTP methods (including GET), not just audited methods (POST/PUT/DELETE). A slow POST generates both the INFO audit log and the WARNING slow log. Skipped paths (`/api/system_logs`, `/api/notifications`, `/static/`) are excluded from both slow detection and audit logging.
 
 ## Real-time UI Updates (SSE)
@@ -658,6 +649,49 @@ Label pills (`.badge.label-pill`) use opacity `33` for backgrounds (e.g., `${col
 
 Board card `toggleCardLabels()` uses a global `_activePopover` / `_activePopoverTicketId` tracker so only one popover is open at a time. Opening a new popover closes the previous one. The popover's `onChange` callback rebuilds the card's label pills inline (replacing the `+` button too).
 
+## UI Conventions (Ticket #79)
+
+The UI underwent a broad set of improvements. Key conventions:
+
+### Toast Notifications
+- `window.showToast(message, type, duration)` replaces all `alert()` calls in the UI
+- Types: `'success'`, `'error'`, `'warning'`, `'info'`. Default: `'info'`, duration: 4000ms
+- Toast container is in `base.html` with class `toast-container`
+- CSS classes: `.toast`, `.toast-success`, `.toast-error`, `.toast-warning`, `.toast-info`
+
+### Markdown Rendering
+- `marked.js` loaded from CDN in `base.html`
+- `window.renderMarkdown(text)` renders markdown content to HTML
+- Used in ticket descriptions (`ticket_detail.html`) and comments
+- CSS class `.markdown-content` styles rendered markdown (code blocks, blockquotes, tables, etc.)
+
+### Two-Column Ticket Detail Layout
+- `.ticket-layout` uses CSS Grid: `1fr 280px`
+- Main content area (`.ticket-main`) contains description, gates, agent runs, questions, comments
+- Sidebar (`.ticket-sidebar`) is sticky and contains metadata, labels, recurring info
+- Responsive: collapses to single column on mobile (≤768px)
+
+### Breadcrumb Navigation
+- Ticket detail and form pages include a `.breadcrumb` nav above the page title
+- Format: `Board › #ID` or `Board › #ID › Edit`
+- CSS classes: `.breadcrumb`, `.breadcrumb-sep`, `.breadcrumb-current`
+
+### Board Page Improvements
+- **Priority Filter**: Toggle buttons (`.priority-toggle`) replace checkboxes. Visible only when tickets with that priority exist.
+- **Filter Summary**: Active filters shown as dismissible pills (`.filter-pill`) with a "Clear all" button (`.filter-clear-all`)
+- **Loading Skeleton**: `.board-skeleton` with `.skeleton` elements shown while board data loads
+- **Card cleanup**: Priority shown as colored dot instead of full badge; label `+` button made smaller
+
+### Global Search
+- Sidebar has a search input (`.sidebar-search`) that navigates to `/board?search=...` on Enter
+- Board page reads URL `search` param and pre-fills the filter
+
+### Assistant Consolidation
+- The dedicated board assistant (🎯 bubble + `board_assistant.js`) has been removed from `board.html`
+- The global ✨ assistant (in `base.html` + `assistant.js`) serves all pages
+- The backend `/api/assistant/chat?board_id=...` API still accepts `board_id`, so board-context conversations continue to work
+- `board_assistant.js` file still exists for backward compatibility but is no longer loaded
+
 ## What to Avoid
 
 - Adding heavy frontend frameworks — keep it vanilla.
@@ -669,48 +703,3 @@ Board card `toggleCardLabels()` uses a global `_activePopover` / `_activePopover
 ## Known Constraints & Recurring Pitfalls
 
 - **Flaky agent-kill test** — `tests/test_running_agents.py::test_kill_agent_run_sigkill_escalation` can fail intermittently with `assert data['exit_code'] == -9` because the mocked process may return `-15` (SIGTERM) instead of `-9` (SIGKILL) depending on timing. If this test fails in isolation and your changes do not touch agent killing logic, it is safe to treat it as a pre-existing flaky test.
-
-## Git Integration (Ticket #78)
-
-### Overview
-
-Each workflow has a `git_enabled` boolean column (default `0`/false). When enabled for a workflow, Pi-CoWork manages git branches for tickets on boards using that workflow:
-
-1. **Before agent spawn**, `ensure_ticket_branch()` is called to create/checkout a ticket branch
-2. **Branch naming**: `ticket-<id>-<kebab-case-slug>` (slug truncated to 60 chars)
-3. **Default branch** auto-detected from `git symbolic-ref refs/remotes/origin/HEAD`, falling back to `origin/main` then `origin/master`
-4. **When git disabled**: the `branch` field is entirely hidden from API responses and UI
-5. **When git enabled**: the `branch` field is visible and can be manually updated via PUT ticket (but is typically auto-managed)
-
-### Database Schema
-
-- **`workflows.git_enabled`** — `BOOLEAN NOT NULL DEFAULT 0`. When true, git operations are attempted for tickets on boards using this workflow.
-- **`tickets.branch`** — `TEXT` (nullable). Stores the git branch name for the ticket. Only populated when the workflow has git_enabled=true.
-
-### `git_helpers.py` Module API
-
-- `is_git_repo(path)` — check if a directory contains a `.git` folder
-- `get_current_branch(cwd)` — returns the current branch name or None
-- `make_branch_name(ticket_id, title)` — generates `ticket-<id>-<kebab-case-slug>`
-- `branch_exists(working_directory, branch_name)` — checks local + remote for a branch
-- `ensure_ticket_branch(working_directory, ticket_id, ticket_title, existing_branch=None)` — main entry point: creates/checks out/rebases the ticket branch, returns branch name or None on failure
-
-### Agent Prompt Injection
-
-When `git_enabled` is True and a branch is checked out, the agent's context message includes:
-```
-🌿 Git: You are on branch 'ticket-78-git-option-for-workflow' (already checked out). Do not switch branches. When finished, run: git add -A && git commit -m '<descriptive message>' && git push -u origin ticket-78-git-option-for-workflow
-```
-When `git_enabled` is False, no git context is injected and no branch operations are performed.
-
-### API Changes
-
-- **GET ticket list / GET single ticket**: `branch` field is included only when the workflow's `git_enabled` is true; excluded entirely otherwise. The `git_enabled` field itself is not included in ticket responses (it's a workflow property).
-- **POST create ticket**: `branch` field in request body is ignored — branch is auto-managed.
-- **PUT update ticket**: `branch` field is writable only when `git_enabled` is true for the ticket's workflow. Returns 400 if set when git is disabled.
-- **GET/POST/PUT workflows**: All include `git_enabled` field.
-- **GET boards**: Boards include `git_enabled` from their linked workflow.
-
-### Guard: Protected Branch
-
-If `ensure_ticket_branch()` fails (returns None) and the current directory is on `main` or `master`, agent spawn is blocked entirely to prevent accidental commits/pushes to the default branch. A comment `⚠️ Agent spawn blocked: could not set up a ticket branch...` is added to the ticket.

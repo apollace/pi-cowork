@@ -29,16 +29,64 @@ def test_parse_pi_list_models_parses_tabular_output():
     assert data['models'][0]['id'] == 'openai/gpt-4o'
     assert data['models'][0]['thinking'] is True
     assert data['models'][0]['images'] is True
-    assert 'thinking_levels' not in data['models'][0]
+    assert data['models'][0]['thinking_levels'] == list(pi_models_module.DEFAULT_THINKING_LEVELS)
     assert data['models'][1]['id'] == 'anthropic/claude-3'
     assert data['models'][1]['thinking'] is False
     assert data['models'][1]['images'] is True
-    assert 'thinking_levels' not in data['models'][1]
+    assert data['models'][1]['thinking_levels'] == ['off']
     assert data['models'][2]['id'] == 'openai/gpt-3.5'
     assert data['models'][2]['thinking'] is False
     assert data['models'][2]['images'] is False
-    assert 'thinking_levels' not in data['models'][2]
+    assert data['models'][2]['thinking_levels'] == ['off']
     assert data['thinking_levels'] == list(pi_models_module.DEFAULT_THINKING_LEVELS)
+
+
+def test_parse_pi_list_models_enriches_with_nodejs_map():
+    _clear_cache()
+    mock_output = (
+        "Provider  Name        Context  Max Out  Thinking  Images\n"
+        "openai    gpt-4o      128k     4096     yes       yes\n"
+        "ollama    deepseek    1.0M     16.4K    yes       no\n"
+    )
+    fake_map = {
+        'openai/gpt-4o': ['off', 'minimal', 'low', 'medium', 'high'],
+        'ollama/deepseek': ['off', 'minimal', 'low', 'medium', 'high'],
+    }
+    with patch('pi_cowork.api.pi_models.subprocess.run') as mock_run:
+        mock_run.return_value = MagicMock(stdout=mock_output, stderr='', returncode=0)
+        with patch(
+            'pi_cowork.api.pi_models._fetch_thinking_levels_map',
+            return_value=fake_map,
+        ):
+            data = pi_models_module._parse_pi_list_models()
+
+    assert len(data['models']) == 2
+    assert data['models'][0]['thinking_levels'] == ['off', 'minimal', 'low', 'medium', 'high']
+    assert data['models'][1]['thinking_levels'] == ['off', 'minimal', 'low', 'medium', 'high']
+
+
+def test_parse_pi_list_models_enriches_missing_model_fallback():
+    """Models not present in the Node.js map fall back to boolean logic."""
+    _clear_cache()
+    mock_output = (
+        "Provider  Name        Context  Max Out  Thinking  Images\n"
+        "openai    gpt-4o      128k     4096     yes       yes\n"
+        "anthropic  claude-3    200k     8192     no        yes\n"
+    )
+    fake_map = {
+        'openai/gpt-4o': ['off', 'minimal', 'low', 'medium', 'high'],
+        # claude-3 missing -> should fall back
+    }
+    with patch('pi_cowork.api.pi_models.subprocess.run') as mock_run:
+        mock_run.return_value = MagicMock(stdout=mock_output, stderr='', returncode=0)
+        with patch(
+            'pi_cowork.api.pi_models._fetch_thinking_levels_map',
+            return_value=fake_map,
+        ):
+            data = pi_models_module._parse_pi_list_models()
+
+    assert data['models'][0]['thinking_levels'] == ['off', 'minimal', 'low', 'medium', 'high']
+    assert data['models'][1]['thinking_levels'] == ['off']
 
 
 def test_parse_pi_list_models_ignores_malformed_lines():
@@ -85,6 +133,73 @@ def test_parse_pi_list_models_uses_stderr_when_stdout_empty():
         data = pi_models_module._parse_pi_list_models()
     assert len(data['models']) == 1
     assert data['models'][0]['id'] == 'openai/gpt-4o'
+
+
+# ---------------------------------------------------------------------------
+# _fetch_thinking_levels_map
+# ---------------------------------------------------------------------------
+
+def test_fetch_thinking_levels_map_returns_json():
+    _clear_cache()
+    fake_nodejs_output = json.dumps({
+        'openai/gpt-4o': ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'],
+        'ollama/custom': ['off', 'minimal'],
+    })
+
+    def _fake_isfile(path):
+        return True
+
+    with patch(
+        'pi_cowork.api.pi_models._get_pi_nodejs_paths',
+        return_value={
+            'models_js': '/fake/models.js',
+            'model_registry_js': '/fake/model-registry.js',
+            'auth_storage_js': '/fake/auth-storage.js',
+            'config_js': '/fake/config.js',
+        },
+    ):
+        with patch('pi_cowork.api.pi_models.os.path.isfile', side_effect=_fake_isfile):
+            with patch('pi_cowork.api.pi_models.subprocess.run') as mock_run:
+                mock_run.return_value = MagicMock(
+                    stdout=fake_nodejs_output,
+                    stderr='',
+                    returncode=0,
+                )
+                result = pi_models_module._fetch_thinking_levels_map()
+
+    assert result == {
+        'openai/gpt-4o': ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'],
+        'ollama/custom': ['off', 'minimal'],
+    }
+
+
+def test_fetch_thinking_levels_map_returns_empty_on_node_failure():
+    _clear_cache()
+    with patch(
+        'pi_cowork.api.pi_models._get_pi_nodejs_paths',
+        return_value={
+            'models_js': '/fake/models.js',
+            'model_registry_js': '/fake/model-registry.js',
+            'auth_storage_js': '/fake/auth-storage.js',
+            'config_js': '/fake/config.js',
+        },
+    ):
+        with patch('pi_cowork.api.pi_models.subprocess.run') as mock_run:
+            mock_run.return_value = MagicMock(
+                stdout='',
+                stderr='some error',
+                returncode=1,
+            )
+            result = pi_models_module._fetch_thinking_levels_map()
+
+    assert result == {}
+
+
+def test_fetch_thinking_levels_map_returns_empty_when_paths_missing():
+    _clear_cache()
+    with patch('pi_cowork.api.pi_models._get_pi_nodejs_paths', return_value=None):
+        result = pi_models_module._fetch_thinking_levels_map()
+    assert result == {}
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +276,7 @@ def test_api_pi_models_endpoint(client):
     assert data['models'][0]['id'] == 'openai/gpt-4o'
     assert data['models'][0]['thinking'] is True
     assert data['models'][0]['images'] is True
-    assert 'thinking_levels' not in data['models'][0]
+    assert data['models'][0]['thinking_levels'] == list(pi_models_module.DEFAULT_THINKING_LEVELS)
     assert data['thinking_levels'] == list(pi_models_module.DEFAULT_THINKING_LEVELS)
 
 
@@ -181,7 +296,9 @@ def test_api_pi_models_fallback_when_pi_missing(client):
 
 def test_get_thinking_levels_returns_tuple():
     _clear_cache()
-    levels = pi_models_module.get_thinking_levels()
+    with patch('pi_cowork.api.pi_models.subprocess.run') as mock_run:
+        mock_run.return_value = MagicMock(stdout='', stderr='', returncode=0)
+        levels = pi_models_module.get_thinking_levels()
     assert isinstance(levels, tuple)
     assert set(levels) == set(pi_models_module.DEFAULT_THINKING_LEVELS)
 
