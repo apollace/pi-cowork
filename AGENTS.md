@@ -680,7 +680,7 @@ The UI underwent a broad set of improvements. Key conventions:
 - **Priority Filter**: Toggle buttons (`.priority-toggle`) replace checkboxes. Visible only when tickets with that priority exist.
 - **Filter Summary**: Active filters shown as dismissible pills (`.filter-pill`) with a "Clear all" button (`.filter-clear-all`)
 - **Loading Skeleton**: `.board-skeleton` with `.skeleton` elements shown while board data loads
-- **Card cleanup**: Priority shown as colored dot instead of full badge; label `+` button made smaller
+- **Card redesign (Ticket #80)**: Cards use three-zone layout, priority accent borders, and read-only status pills (see UI Design Guidelines below)
 
 ### Global Search
 - Sidebar has a search input (`.sidebar-search`) that navigates to `/board?search=...` on Enter
@@ -691,6 +691,46 @@ The UI underwent a broad set of improvements. Key conventions:
 - The global ✨ assistant (in `base.html` + `assistant.js`) serves all pages
 - The backend `/api/assistant/chat?board_id=...` API still accepts `board_id`, so board-context conversations continue to work
 - `board_assistant.js` file still exists for backward compatibility but is no longer loaded
+
+## UI Design Guidelines (Ticket #80)
+
+Board cards were redesigned from a flat layout with inline `<select>` to a three-zone layout with priority accents and read-only status.
+
+### Card Layout
+- **Three-zone structure**: `.card-header` (ID + priority pill + status pill) → `.card-body` (title + labels) → `.card-footer` (badges)
+- All zones wrapped inside `.card-link` (entire card is clickable)
+- Card padding removed; zones use their own padding with gaps
+- `.card-footer` uses `border-top: 1px solid var(--border-secondary)` for visual separation
+
+### Priority System
+- **Accent border**: Card root gets `card-priority-*` class (e.g., `.card-priority-Critical`) → `border-left: 3px solid <color>` on `.card`
+- **Label pill**: `.card-priority-label.p-*` shows priority as a colored pill in the header (e.g., `.card-priority-label.p-Critical`)
+- Priority colors: Critical `#dc2626`, High `#d97706`, Medium `#2563eb`, Low `#6b7280`
+- CSS classes and JS `priorityColors` map use identical color values
+
+### CSS Variables
+- `--border-secondary: #f1f5f9` — subtle separator for card footer top border
+
+### Badges and Chips
+- Status shown as `.card-status-pill` (read-only, no `<select>`) — users move tickets via detail page or drag
+- Agent/queued/gate/question/recurring badges live in `.card-footer`
+- `.card-label-add` — circular dashed `+` button to add labels (replaces `btn small ghost`)
+
+### Animations
+- `card-entrance` keyframe animation replaces old `card-in` (adds subtle `translateY(4px)` fade-in)
+- Hover: only `border-color` and `box-shadow` transitions; no `transform: translateY(-1px)`
+
+### Typography and Spacing
+- `.card-header`: flex row, space-between alignment, compact padding
+- `.card-body`: title + labels, standard text sizing
+- `.card-footer`: compact top padding, `--border-secondary` separator
+
+### What Was Removed
+- `.status-select` (inline dropdown) and `.card-actions` — status is now read-only on cards
+- `.card-meta` — replaced by zone-specific classes
+- `translateY(-1px)` hover transform on `.card`
+- Inline `priorityDot` with inline styles → replaced by `.card-priority-label.p-*` pill
+- `moveTicket()` listener removed from cards; function retained for detail page use
 
 ## What to Avoid
 
