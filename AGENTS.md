@@ -694,11 +694,10 @@ The UI underwent a broad set of improvements. Key conventions:
 
 ## UI Design Guidelines (Ticket #80)
 
-Board cards were redesigned from a flat layout with inline `<select>` to a three-zone layout with priority accents and read-only status.
+Board cards were redesigned from a flat layout to a three-zone layout with priority accents and a styled inline status select.
 
 ### Card Layout
-- **Three-zone structure**: `.card-header` (ID + priority pill + status pill) → `.card-body` (title + labels) → `.card-footer` (badges)
-- All zones wrapped inside `.card-link` (entire card is clickable)
+- **Three-zone structure**: `.card-header` (ID + priority pill) → `.card-body` (title + labels, inside `.card-link`) → `.card-footer` (status select + badges, outside `.card-link` to avoid navigation conflict)
 - Card padding removed; zones use their own padding with gaps
 - `.card-footer` uses `border-top: 1px solid var(--border-secondary)` for visual separation
 
@@ -712,7 +711,7 @@ Board cards were redesigned from a flat layout with inline `<select>` to a three
 - `--border-secondary: #f1f5f9` — subtle separator for card footer top border
 
 ### Badges and Chips
-- Status shown as `.card-status-pill` (read-only, no `<select>`) — users move tickets via detail page or drag
+- Status shown as styled `.card-status-select` (appearance:none + custom SVG chevron, pill-shaped) — wired to `moveTicket()` via change event with `stopPropagation` so it doesn't trigger card link navigation
 - Agent/queued/gate/question/recurring badges live in `.card-footer`
 - `.card-label-add` — circular dashed `+` button to add labels (replaces `btn small ghost`)
 
@@ -726,11 +725,11 @@ Board cards were redesigned from a flat layout with inline `<select>` to a three
 - `.card-footer`: compact top padding, `--border-secondary` separator
 
 ### What Was Removed
-- `.status-select` (inline dropdown) and `.card-actions` — status is now read-only on cards
+- `.card-status-pill` (read-only text pill) — replaced by `.card-status-select` styled inline dropdown
+- `.card-actions` — status is now an inline select in `.card-footer`
 - `.card-meta` — replaced by zone-specific classes
 - `translateY(-1px)` hover transform on `.card`
 - Inline `priorityDot` with inline styles → replaced by `.card-priority-label.p-*` pill
-- `moveTicket()` listener removed from cards; function retained for detail page use
 
 ## What to Avoid
 

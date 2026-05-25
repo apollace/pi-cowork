@@ -1,5 +1,5 @@
 """Tests for Ticket #80 card redesign — three-zone layout, priority accents,
-read-only status pill, label add button, CSS variables, animation.
+styled inline status select, label add button, CSS variables, animation.
 
 Covers:
   - CSS classes and variables
@@ -68,8 +68,15 @@ class TestCSSClasses:
     def test_card_priority_label_p_critical(self, css):
         assert ".card-priority-label.p-Critical" in css
 
-    def test_card_status_pill_class(self, css):
-        assert ".card-status-pill" in css
+    def test_card_status_select_class(self, css):
+        """Card status should use styled inline select, not a read-only pill."""
+        assert ".card-status-select" in css
+
+    def test_card_status_select_styled(self, css):
+        """Card status select should have appearance:none for custom styling."""
+        assert "appearance: none" in css
+        assert "-webkit-appearance: none" in css
+        assert "-moz-appearance: none" in css
 
     def test_card_label_add_class(self, css):
         assert ".card-label-add" in css
@@ -80,7 +87,7 @@ class TestCSSClasses:
     def test_card_entrance_animation(self, css):
         assert "@keyframes card-entrance" in css
 
-    def test_no_status_select(self, css):
+    def test_no_old_status_select(self, css):
         """The old .status-select rule should be gone."""
         assert ".status-select" not in css
 
@@ -131,40 +138,38 @@ class TestJSOutput:
         """Should render priority label pill in header."""
         assert "card-priority-label" in js
 
-    def test_buildCard_status_pill(self, js):
-        """Should render read-only status pill instead of select."""
-        assert "card-status-pill" in js
+    def test_buildCard_status_select(self, js):
+        """Should render styled inline select for status, not a read-only pill."""
+        assert "card-status-select" in js
+
+    def test_buildCard_status_select_element(self, js):
+        """Should render a <select> element with all status options."""
+        start = js.find('function buildCard')
+        end = js.find('function updateLabelFilters')
+        buildcard_region = js[start:end]
+        assert '<select' in buildcard_region
+        assert 'card-status-select' in buildcard_region
+
+    def test_buildCard_status_select_wired_to_moveTicket(self, js):
+        """The status select change event should call moveTicket()."""
+        assert "moveTicket" in js
+        assert "card-status-select" in js
+        # The select should be outside card-link to avoid navigation conflict
+        start = js.find('function buildCard')
+        end = js.find('function updateLabelFilters')
+        buildcard_region = js[start:end]
+        assert "stopPropagation" in buildcard_region or "moveTicket" in buildcard_region
 
     def test_buildCard_label_add_button(self, js):
         """Label add button should use .card-label-add class."""
         assert "card-label-add" in js
 
-    def test_no_status_select_in_buildCard(self, js):
-        """No <select class='status-select'> should exist."""
-        pattern = re.compile(
-            r'<select[^>]*class=[\'"][^"\']*status-select[^"\']*["\']',
-            re.IGNORECASE,
-        )
-        buildcard_match = re.search(
-            r'function buildCard\(ticket\)\s*\{(.+?)\n  \}',
-            js, re.DOTALL,
-        )
-        if buildcard_match:
-            body = buildcard_match.group(1)
-            assert not pattern.search(body), (
-                "buildCard should not contain status-select <select>"
-            )
-
     def test_no_priority_dot_inline(self, js):
         """Inline priority-dot style should be gone from buildCard."""
         assert "priorityDot" not in js
 
-    def test_no_moveTicket_listener_on_cards(self, js):
-        """No change listener on .status-select in buildCard."""
-        assert "card.querySelector('.status-select')" not in js
-
     def test_moveTicket_function_retained(self, js):
-        """moveTicket function should still exist for detail page use."""
+        """moveTicket function should still exist."""
         assert "async function moveTicket" in js or "function moveTicket" in js
 
 
@@ -191,6 +196,10 @@ class TestAgentsMD:
 
     def test_card_entrance_animation_documented(self, agents):
         assert "card-entrance" in agents
+
+    def test_status_select_documented(self, agents):
+        """AGENTS.md should document the styled inline select for status changes."""
+        assert "card-status-select" in agents
 
 
 # ── Integration render test ───────────────────────────────────────────────
@@ -230,12 +239,15 @@ class TestIntegration:
         assert "card-body" in body
         assert "card-footer" in body
 
-    def test_card_link_wraps_all_zones(self, js):
-        """The <a class='card-link'> should wrap header, body, and footer."""
-        buildcard_match = re.search(
-            r'function buildCard\(ticket\)\s*\{(.+?)\n  \}', js, re.DOTALL,
-        )
-        assert buildcard_match is not None
-        body = buildcard_match.group(1)
-        assert 'class="card-link"' in body
-        assert "card-footer" in body
+    def test_card_link_does_not_wrap_footer(self, js):
+        """The <a class='card-link'> should NOT wrap the footer/status select."""
+        start = js.find('function buildCard')
+        end = js.find('function updateLabelFilters')
+        buildcard_region = js[start:end]
+        # card-link closing tag should appear before card-footer
+        assert '</a>' in buildcard_region
+        assert 'card-footer' in buildcard_region
+        # footer should come after the card-link close
+        link_close_pos = buildcard_region.rfind('</a>')
+        footer_pos = buildcard_region.find('card-footer')
+        assert footer_pos > link_close_pos, "card-footer should be outside card-link"
