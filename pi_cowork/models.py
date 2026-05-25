@@ -32,6 +32,69 @@ def add_comment(ticket_id, body):
     return cur.lastrowid
 
 
+def get_comment_counts(ticket_ids):
+    """Get comment counts for multiple tickets in a single query.
+
+    Returns a dict mapping ticket_id -> count.
+    """
+    if not ticket_ids:
+        return {}
+    placeholders = ','.join('?' * len(ticket_ids))
+    rows = query_db(
+        f"SELECT ticket_id, COUNT(*) AS c FROM comments WHERE ticket_id IN ({placeholders}) GROUP BY ticket_id",
+        tuple(ticket_ids)
+    )
+    return {r['ticket_id']: r['c'] for r in rows}
+
+
+def get_ticket_labels_batch(ticket_ids):
+    """Get labels for multiple tickets in a single query.
+
+    Returns a dict mapping ticket_id -> list of label dicts.
+    """
+    if not ticket_ids:
+        return {}
+    placeholders = ','.join('?' * len(ticket_ids))
+    rows = query_db(
+        f"""SELECT tl.ticket_id, l.id, l.name, l.color
+            FROM ticket_labels tl
+            JOIN labels l ON tl.label_id = l.id
+            WHERE tl.ticket_id IN ({placeholders})
+            ORDER BY l.name""",
+        tuple(ticket_ids)
+    )
+    result = {}
+    for r in rows:
+        result.setdefault(r['ticket_id'], []).append({
+            'id': r['id'], 'name': r['name'], 'color': r['color']
+        })
+    return result
+
+
+def get_recurring_parents_batch(ticket_ids):
+    """Get recurring parent tasks for multiple tickets in a single query.
+
+    Returns a dict mapping ticket_id -> list of recurring task dicts.
+    """
+    if not ticket_ids:
+        return {}
+    placeholders = ','.join('?' * len(ticket_ids))
+    rows = query_db(
+        f"""SELECT ri.ticket_id, rt.*, s.name AS status_name
+            FROM recurring_instances ri
+            JOIN recurring_tasks rt ON rt.id = ri.recurring_task_id
+            JOIN statuses s ON rt.status_id = s.id
+            WHERE ri.ticket_id IN ({placeholders})""",
+        tuple(ticket_ids)
+    )
+    result = {}
+    for r in rows:
+        d = row_to_dict(r)
+        tid = d.pop('ticket_id')
+        result.setdefault(tid, []).append(d)
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Questions
 # ---------------------------------------------------------------------------

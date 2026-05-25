@@ -13,6 +13,7 @@ from pi_cowork.models import (
     get_comments, get_quality_gates, get_status, get_ticket_labels,
     get_transitions_from, has_pending_gate_reviews, run_cli_gate,
     set_ticket_labels, get_recurring_parents,
+    get_comment_counts, get_ticket_labels_batch, get_recurring_parents_batch,
 )
 from pi_cowork.agents import try_spawn_or_queue, cleanup_runs, spawn_agent
 from pi_cowork.models import get_agents, get_agent
@@ -57,43 +58,57 @@ def api_tickets():
           t.created_at DESC
         LIMIT ? OFFSET ?
     """, (board_id, limit, offset))
+
+    if not rows:
+        return jsonify([])
+
     tickets = []
+    ticket_ids = []
     for r in rows:
         d = row_to_dict(r)
         # Hide branch when git is disabled for this workflow
         if not workflow_git_enabled:
             d.pop('branch', None)
         d.pop('git_enabled', None)
-        d['comments'] = get_comments(d['id'])
-        d['labels'] = get_ticket_labels(d['id'])
         tickets.append(d)
+        ticket_ids.append(d['id'])
 
+    # --- Batch queries instead of N+1 ---
+    comment_counts = get_comment_counts(ticket_ids)
+    labels_map = get_ticket_labels_batch(ticket_ids)
+    parents_map = get_recurring_parents_batch(ticket_ids)
+
+    # Scoped queue lookups: only unstarted entries for this board's tickets
+    placeholders = ','.join('?' * len(ticket_ids))
     queue_rows = query_db(
-        "SELECT ticket_id, reason FROM agent_queue WHERE started_at IS NULL"
+        f"SELECT ticket_id, reason FROM agent_queue WHERE started_at IS NULL AND ticket_id IN ({placeholders})",
+        tuple(ticket_ids)
     )
     queue_map = {row['ticket_id']: row['reason'] for row in queue_rows}
 
+    # Scoped gate_pending lookups: only pending reviews for this board's tickets
     gate_pending_rows = query_db(
-        "SELECT DISTINCT ticket_id FROM gate_reviews WHERE status = 'pending'"
+        f"SELECT DISTINCT ticket_id FROM gate_reviews WHERE status = 'pending' AND ticket_id IN ({placeholders})",
+        tuple(ticket_ids)
     )
     gate_pending_set = {row['ticket_id'] for row in gate_pending_rows}
 
-    question_counts = {}
-    if tickets:
-        tids = [t['id'] for t in tickets]
-        placeholders = ','.join('?' * len(tids))
-        qrows = query_db(
-            f"SELECT ticket_id, COUNT(*) AS c FROM questions WHERE ticket_id IN ({placeholders}) GROUP BY ticket_id",
-            tuple(tids)
-        )
-        question_counts = {r['ticket_id']: r['c'] for r in qrows}
+    # Scoped question counts for this board's tickets
+    qrows = query_db(
+        f"SELECT ticket_id, COUNT(*) AS c FROM questions WHERE ticket_id IN ({placeholders}) GROUP BY ticket_id",
+        tuple(ticket_ids)
+    )
+    question_counts = {r['ticket_id']: r['c'] for r in qrows}
 
     for t in tickets:
+        # Board view: comment count only (lightweight payload)
+        t['comment_count'] = comment_counts.get(t['id'], 0)
+        t['labels'] = labels_map.get(t['id'], [])
         t['queued'] = t['id'] in queue_map
         t['queue_reason'] = queue_map.get(t['id'])
         t['gate_pending'] = t['id'] in gate_pending_set
         t['question_count'] = question_counts.get(t['id'], 0)
-        t['recurring_parents'] = get_recurring_parents(t['id'])
+        t['recurring_parents'] = parents_map.get(t['id'], [])
 
     return jsonify(tickets)
 

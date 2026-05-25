@@ -379,6 +379,13 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 - `branch` (TEXT, nullable) — git branch name; only visible/writable when workflow has `git_enabled=True`
 - Ticket list sort order: **priority DESC** (Critical → High → Medium → Low), **then created_at DESC**
 
+**Board listing response** (`GET /api/tickets?board_id=<id>`) uses a lightweight payload:
+- Returns `comment_count` (integer) instead of `comments` (array) — reduces serialized data for board views
+- Also includes: `labels` (array), `queued` (bool), `queue_reason` (string or null), `gate_pending` (bool), `question_count` (int), `recurring_parents` (array)
+- All bulk data is fetched via batch queries, not N+1 per-ticket lookups
+
+**Ticket detail response** (`GET /api/tickets/<id>`) returns full `comments` array plus `running_agents`, `agent_run_count`, `last_agent_run` etc.
+
 **Agent fields:**
 - `name` (string, required, unique per workflow)
 - `description` (string) — used as `--system-prompt` for `pi`
@@ -567,9 +574,9 @@ Each workflow has a `git_enabled` boolean flag (default `False`). When enabled:
 - **Quality gate delete** cascades to its gate reviews.
 - **Workflow delete blocked** if any boards use it.
 - **Comments append-only** — no edit/delete UI or API. System comments track agent lifecycle.
-- **Board loads dynamically** via JS fetching `/api/tickets?board_id=`.
+- **Board loads dynamically** via JS fetching `/api/tickets?board_id=`. The board listing API uses batch queries and returns `comment_count` (integer) instead of full comment arrays to reduce payload size and DB round-trips. The ticket detail endpoint (`/api/tickets/\<id\>`) still returns full `comments` arrays.
 - **Detail pages server-rendered** for simplicity.
-- **SQLite FK enforcement** enabled via `PRAGMA foreign_keys = ON`.
+- **SQLite FK enforcement** enabled via `PRAGMA foreign_keys = ON`. **WAL mode** enabled via `PRAGMA journal_mode = WAL` so writes never block readers.
 - **No auth, no users** — out of scope.
 - **Process termination from daemon threads** — `sys.exit(0)` only terminates the calling thread when invoked from a non-main thread (daemon or otherwise). The `SystemExit` exception is caught by the threading machinery and the main process keeps running. To terminate the entire Flask process from a background thread, use `os.kill(os.getpid(), signal.SIGTERM)` instead. This is how the update/restart mechanism in `_shutdown()` works.
 - **`get_config()` requires an active Flask app context to read DB settings** — calling it outside `app.app_context()` (e.g., in `if __name__ == '__main__'` blocks, background threads, or CLI scripts) silently falls back to env/default because the `get_setting` → `query_db` → `get_db()` chain raises when `current_app` / `flask.g` are missing. Always wrap startup config reads in `with app.app_context():`.
@@ -764,3 +771,7 @@ Key principles: clarity over cleverness, consistency (reuse design tokens), prog
 ## Known Constraints & Recurring Pitfalls
 
 - **Patch `time.sleep` in kill-handler tests** — `pi_cowork/api/agent_runs.py` uses `time.sleep(0.5)` in the SIGKILL escalation polling loop. Tests that exercise the kill endpoint must patch `pi_cowork.api.agent_runs.time.sleep` to avoid real sleeps (5s total for the escalation path). Without this patch, tests are slow and flaky under CI load.
+- **Board listing API uses `comment_count` not `comments`** — `GET /api/tickets?board_id=` returns `comment_count` (integer) instead of `comments` (full array) to reduce payload size. The detail endpoint `GET /api/tickets/<id>` still returns the full `comments` array. Do not reintroduce per-ticket comment fetching in the board listing.
+- **SQLite runs in WAL mode** — `get_db()` sets `PRAGMA journal_mode = WAL` so that writes (audit logging, agent events) do not block concurrent reads (board loading). Do not change this back to DELETE mode.
+- **Batch queries for board listing** — The board listing endpoint uses bulk `WHERE ticket_id IN (...)` queries instead of per-ticket N+1 lookups. Batch functions: `get_comment_counts()`, `get_ticket_labels_batch()`, `get_recurring_parents_batch()`. Queue, gate, and question queries are also scoped to the board's ticket IDs rather than global. Do not reintroduce N+1 patterns.
+- **Performance indexes** — The following indexes exist and must not be dropped: `idx_tickets_board_id`, `idx_comments_ticket_id`, `idx_agent_runs_ticket_id_status`, `idx_agent_queue_ticket_id`, `idx_gate_reviews_ticket_id`, `idx_questions_ticket_id`, `idx_ticket_labels_ticket_id`, `idx_recurring_instances_ticket_id`, `idx_labels_workflow_id`.
