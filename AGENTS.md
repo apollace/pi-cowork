@@ -746,8 +746,15 @@ Board cards were redesigned from a flat layout to a three-zone layout with prior
 - `translateY(-1px)` hover transform on `.card`
 - Inline `priorityDot` with inline styles → replaced by `.card-priority-label.p-*` pill
 
+## UX Design Guidelines (Ticket #81)
+
+Comprehensive UI guidelines covering design tokens, component rules, and interaction patterns. See **`skills/ux-design.md`** for the full details.
+
+Key principles: clarity over cleverness, consistency (reuse design tokens), progressive disclosure, mobile-first responsive (640px/768px breakpoints), accessibility fundamentals (focus rings, keyboard nav, contrast ≥ 4.5:1), vanilla-only (no frameworks, no build step).
+
 ## What to Avoid
 
+- Writing documentation tests for `AGENTS.md` or skill files — they are reference docs, not testable specs. Use tests for code behaviour, not prose content.
 - Adding heavy frontend frameworks — keep it vanilla.
 - Adding complex UIs or auth without explicit user request.
 - Breaking existing test coverage — run tests before committing.
