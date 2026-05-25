@@ -221,11 +221,13 @@ async function initBoard() {
     const priorityClass = ticket.priority ? ` card-priority-${ticket.priority}` : '';
     card.className = `card${priorityClass}`;
     const priorityColors = { Critical: '#dc2626', High: '#d97706', Medium: '#2563eb', Low: '#6b7280' };
-    const statusName = (statuses.find(s => s.id === ticket.status_id) || {}).name || '';
+    const statusOptions = statuses.map(s =>
+      `<option value="${s.id}"${s.id === ticket.status_id ? ' selected' : ''}>${escapeHtml(s.name)}</option>`
+    ).join('');
     const priorityLabel = ticket.priority
       ? `<span class="card-priority-label p-${ticket.priority}">● ${escapeHtml(ticket.priority)}</span>`
       : '';
-    const statusPill = `<span class="card-status-pill">${escapeHtml(statusName)}</span>`;
+    const statusSelect = `<select class="card-status-select" data-id="${ticket.id}">${statusOptions}</select>`;
     const hasAgent = ticket.agent_name ? `<span class="badge agent">🤖 ${escapeHtml(ticket.agent_name)}</span>` : '';
     const queuedBadge = ticket.queued ? `<span class="badge queued" title="${escapeHtml(ticket.queue_reason || '')} limit">⏳ Queued</span>` : '';
     const gateBadge = ticket.gate_pending ? `<span class="badge gate">🚧 Gate</span>` : '';
@@ -242,7 +244,6 @@ async function initBoard() {
             <span class="card-id">#${ticket.id}</span>
             ${priorityLabel}
           </div>
-          ${statusPill}
         </div>
         <div class="card-body">
           <div class="card-title">${escapeHtml(ticket.title)}</div>
@@ -251,15 +252,27 @@ async function initBoard() {
             <button type="button" class="card-label-add" id="card-label-btn-${ticket.id}" onclick="event.preventDefault(); event.stopPropagation(); toggleCardLabels(${ticket.id});">+</button>
           </div>
         </div>
-        <div class="card-footer">
-          ${hasAgent}
-          ${queuedBadge}
-          ${gateBadge}
-          ${questionBadge}
-          ${recurringBadge}
-        </div>
       </a>
+      <div class="card-footer">
+        ${statusSelect}
+        ${hasAgent}
+        ${queuedBadge}
+        ${gateBadge}
+        ${questionBadge}
+        ${recurringBadge}
+      </div>
     `;
+
+    // Attach change listener for the status select
+    const statusSelectEl = card.querySelector('.card-status-select');
+    if (statusSelectEl) {
+      statusSelectEl.addEventListener('change', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        moveTicket(ticket.id, parseInt(e.target.value));
+      });
+    }
+
     return card;
   }
 
