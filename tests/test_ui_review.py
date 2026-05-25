@@ -233,7 +233,7 @@ def test_css_has_animation_styles():
     with open('static/style.css') as f:
         css = f.read()
     assert '@keyframes fade-in' in css
-    assert '@keyframes card-in' in css
+    assert '@keyframes card-entrance' in css
 
 
 def test_board_url_search_param(client):

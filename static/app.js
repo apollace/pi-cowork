@@ -208,7 +208,7 @@ async function initBoard() {
         const pillsHtml = updatedLabels.map(l =>
           `<span class="badge label-pill" style="background:${escapeHtml(l.color)}33;color:${escapeHtml(l.color)};border:1px solid ${escapeHtml(l.color)}55;">${escapeHtml(l.name)}</span>`
         ).join('');
-        labelsDiv.innerHTML = pillsHtml + `<button type="button" class="btn small ghost" id="card-label-btn-${ticketId}" onclick="event.preventDefault(); event.stopPropagation(); toggleCardLabels(${ticketId});">+</button>`;
+        labelsDiv.innerHTML = pillsHtml + `<button type="button" class="card-label-add" id="card-label-btn-${ticketId}" onclick="event.preventDefault(); event.stopPropagation(); toggleCardLabels(${ticketId});">+</button>`;
       }
     });
     await picker.init();
@@ -218,7 +218,14 @@ async function initBoard() {
 
   function buildCard(ticket) {
     const card = document.createElement('div');
-    card.className = 'card';
+    const priorityClass = ticket.priority ? ` card-priority-${ticket.priority}` : '';
+    card.className = `card${priorityClass}`;
+    const priorityColors = { Critical: '#dc2626', High: '#d97706', Medium: '#2563eb', Low: '#6b7280' };
+    const statusName = (statuses.find(s => s.id === ticket.status_id) || {}).name || '';
+    const priorityLabel = ticket.priority
+      ? `<span class="card-priority-label p-${ticket.priority}">● ${escapeHtml(ticket.priority)}</span>`
+      : '';
+    const statusPill = `<span class="card-status-pill">${escapeHtml(statusName)}</span>`;
     const hasAgent = ticket.agent_name ? `<span class="badge agent">🤖 ${escapeHtml(ticket.agent_name)}</span>` : '';
     const queuedBadge = ticket.queued ? `<span class="badge queued" title="${escapeHtml(ticket.queue_reason || '')} limit">⏳ Queued</span>` : '';
     const gateBadge = ticket.gate_pending ? `<span class="badge gate">🚧 Gate</span>` : '';
@@ -228,35 +235,31 @@ async function initBoard() {
     const labelPills = (ticket.labels || []).map(l =>
       `<span class="badge label-pill" style="background:${escapeHtml(l.color)}33;color:${escapeHtml(l.color)};border:1px solid ${escapeHtml(l.color)}55;">${escapeHtml(l.name)}</span>`
     ).join('');
-    const priorityColors = { Critical: '#dc2626', High: '#d97706', Medium: '#2563eb', Low: '#6b7280' };
-    const pColor = priorityColors[ticket.priority] || '#2563eb';
-    const priorityDot = ticket.priority ? `<span class="priority-dot" style="background:${pColor};width:0.6rem;height:0.6rem;border-radius:50%;display:inline-block;flex-shrink:0;" title="${escapeHtml(ticket.priority)}"></span>` : '';
     card.innerHTML = `
       <a class="card-link" href="/ticket/${ticket.id}">
-        <div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.15rem;">
-          <span class="card-id">#${ticket.id}</span>
-          ${priorityDot}
+        <div class="card-header">
+          <div style="display:flex;align-items:center;gap:0.4rem;">
+            <span class="card-id">#${ticket.id}</span>
+            ${priorityLabel}
+          </div>
+          ${statusPill}
         </div>
-        <div class="card-title">${escapeHtml(ticket.title)}</div>
-        <div class="card-labels" id="card-labels-${ticket.id}">
-          ${labelPills}
-          <button type="button" class="btn small ghost" id="card-label-btn-${ticket.id}" onclick="event.preventDefault(); event.stopPropagation(); toggleCardLabels(${ticket.id});" style="font-size:0.8rem;padding:0.1rem 0.3rem;">+</button>
+        <div class="card-body">
+          <div class="card-title">${escapeHtml(ticket.title)}</div>
+          <div class="card-labels" id="card-labels-${ticket.id}">
+            ${labelPills}
+            <button type="button" class="card-label-add" id="card-label-btn-${ticket.id}" onclick="event.preventDefault(); event.stopPropagation(); toggleCardLabels(${ticket.id});">+</button>
+          </div>
+        </div>
+        <div class="card-footer">
+          ${hasAgent}
+          ${queuedBadge}
+          ${gateBadge}
+          ${questionBadge}
+          ${recurringBadge}
         </div>
       </a>
-      <div class="card-actions">
-        <select class="status-select" data-id="${ticket.id}">
-          ${statuses.map(s => `<option value="${s.id}" ${s.id === ticket.status_id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
-        </select>
-        ${hasAgent}
-        ${queuedBadge}
-        ${gateBadge}
-        ${questionBadge}
-        ${recurringBadge}
-      </div>
     `;
-    card.querySelector('.status-select').addEventListener('change', (e) => {
-      moveTicket(ticket.id, parseInt(e.target.value));
-    });
     return card;
   }
 
