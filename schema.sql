@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS workflows (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
     description TEXT,
+    git_enabled BOOLEAN NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -60,6 +61,7 @@ CREATE TABLE IF NOT EXISTS tickets (
     status_id INTEGER NOT NULL REFERENCES statuses(id),
     board_id INTEGER NOT NULL REFERENCES boards(id),
     priority TEXT DEFAULT 'Medium',
+    branch TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     agent_last_spawned_at DATETIME

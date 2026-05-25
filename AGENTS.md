@@ -376,6 +376,7 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 - `board_id` (integer, required)
 - `status_id` (integer) — current status; defaults to the workflow's default status
 - `priority` (TEXT) — values: `Low`, `Medium`, `High`, `Critical`; defaults to `Medium`
+- `branch` (TEXT, nullable) — git branch name; only visible/writable when workflow has `git_enabled=True`
 - Ticket list sort order: **priority DESC** (Critical → High → Medium → Low), **then created_at DESC**
 
 **Agent fields:**
@@ -542,6 +543,20 @@ Recurring tasks automatically create tickets on a cron-like schedule, managed th
 
 ### Dependency
 - `croniter` (added to `requirements.txt`)
+
+## Git Integration
+
+Each workflow has a `git_enabled` boolean flag (default `False`). When enabled:
+
+- **Branch management**: On agent spawn, `ensure_ticket_branch()` (in `pi_cowork/git_helpers.py`) creates or reuses a per-ticket branch named `ticket-<id>-<slug>`, checks it out, rebases onto `origin/main`, and persists the branch name in `tickets.branch`.
+- **Agent context**: The agent context message includes `Git: working on branch <name> in <dir>.` with a protected-branch guard reminder.
+- **API visibility**: `branch` is included in ticket API responses **only when** the workflow has `git_enabled=True`. When disabled, `branch` is omitted from responses.
+- **API write guard**: `PUT /api/tickets/<id>` with `branch` field returns 400 if the workflow does not have `git_enabled`.
+- **Board responses**: `GET /api/boards/<id>` and `GET /api/boards/` include a `git_enabled` boolean from the linked workflow.
+- **Workflow CRUD**: `POST /api/workflows` and `PUT /api/workflows/<id>` accept `git_enabled` (boolean, default `False`).
+- **UI**: Workflow cards show a ⭐ Git indicator. The ticket detail sidebar shows the branch when git is enabled and the branch exists. Board cards show a branch badge pill.
+- **Migrations**: `add_workflows_git_enabled` and `add_tickets_branch` are idempotent ALTER TABLE migrations that add `git_enabled BOOLEAN DEFAULT 0` to workflows and `branch TEXT` to tickets.
+- **`pi_cowork/git_helpers.py`** still exists and is fully functional; the integration glue in `agents.py`, `api/tickets.py`, `api/workflows.py`, `api/boards.py`, `models.py`, and `pages.py` was what was lost in the revert and has been re-added.
 
 ## Key Decisions
 

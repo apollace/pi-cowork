@@ -88,6 +88,12 @@
         <div class="sidebar-field-value">📁 {{ ticket.board_name }}</div>
       </div>
       {% endif %}
+      {% if ticket.git_enabled and ticket.branch %}
+      <div class="sidebar-field">
+        <div class="sidebar-field-label">Branch</div>
+        <div class="sidebar-field-value">📁 {{ ticket.branch }}</div>
+      </div>
+      {% endif %}
       <div class="sidebar-field">
         <div class="sidebar-field-label">Created</div>
         <div class="sidebar-field-value" id="sidebar-created">{{ ticket.created_at[:16] if ticket.created_at else '—' }}</div>

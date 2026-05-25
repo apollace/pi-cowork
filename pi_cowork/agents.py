@@ -23,6 +23,11 @@ from pi_cowork.models import (
 from pi_cowork.events import bus, AGENT_SPAWNED, AGENT_COMPLETED, AGENT_FAILED
 from pi_cowork.api_docs import build_api_docs, DEFAULT_ENDPOINT_KEYS
 
+try:
+    from pi_cowork.git_helpers import ensure_ticket_branch
+except ImportError:
+    ensure_ticket_branch = None
+
 logger = logging.getLogger(__name__)
 
 _spawn_lock = threading.Lock()
@@ -242,7 +247,7 @@ def drain_queue():
         # workflow_name, workflow_id) so the spawned agent has the same context
         # as every other spawn path.
         ticket = query_db("""
-            SELECT t.*, b.name AS board_name, w.name AS workflow_name, b.workflow_id
+            SELECT t.*, b.name AS board_name, w.name AS workflow_name, b.workflow_id, w.git_enabled
             FROM tickets t
             JOIN boards b ON t.board_id = b.id
             JOIN workflows w ON b.workflow_id = w.id
@@ -342,6 +347,27 @@ def spawn_agent(ticket, status, agent, old_status_id=None):
     session_dir = os.path.join(board_dir, '.pi-sessions', str(agent['id']), f'ticket-{ticket_id}')
     log_dir = os.path.join(board_dir, '.pi-logs', f'ticket-{ticket_id}')
 
+    # ── Git integration ──
+    # Look up git_enabled from the workflow and set up a branch if enabled.
+    git_enabled = False
+    git_info = ""  # injected into agent context when git is enabled
+    if ensure_ticket_branch is not None:
+        wf_row = query_db("SELECT git_enabled FROM workflows WHERE id = ?", (workflow_id,), one=True)
+        if wf_row and wf_row['git_enabled']:
+            git_enabled = True
+            branch = ensure_ticket_branch(board_dir, ticket_id, ticket['title'], existing_branch=ticket.get('branch'))
+            if branch:
+                git_info = f"\nGit: working on branch {branch} in {board_dir}."
+                # Protected branch guard — warn the agent
+                git_info += "\nDo NOT push to or modify the default branch (main/master). Commit only on your feature branch."
+            else:
+                git_info = "\nGit: enabled but no branch could be created (not a git repo or no remote)."
+    # Refresh ticket to pick up any branch update from ensure_ticket_branch
+    if git_enabled:
+        refreshed = query_db("SELECT * FROM tickets WHERE id = ?", (ticket_id,), one=True)
+        if refreshed:
+            ticket = row_to_dict(refreshed)
+
     Path(session_dir).mkdir(parents=True, exist_ok=True)
     Path(log_dir).mkdir(parents=True, exist_ok=True)
 
@@ -426,7 +452,7 @@ def spawn_agent(ticket, status, agent, old_status_id=None):
             goal_instruction = f"Continue your goal: {goal_line}"
 
         context_msg = f"""[Update] Ticket #{ticket_id}: {ticket['title']}
-{board_ctx}
+{board_ctx}{git_info}
 {change_line}
 
 New comments since last update:
@@ -448,7 +474,7 @@ API:
             if old_status:
                 change_note = f"\nNote: This ticket was moved from \"{old_status['name']}\" to \"{status['name']}\" before you were spawned.\n"
         context_msg = f"""Ticket #{ticket_id}: {ticket['title']}
-{board_ctx}{change_note}\nDescription:
+{board_ctx}{git_info}{change_note}\nDescription:
 {ticket['body'] or '(no description)'}\nComments:
 {all_comments_block}\nAPI:
 {api_docs}\nThis is a new prompt, forget the goals you had from previous prompts.

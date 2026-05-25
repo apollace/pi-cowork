@@ -30,12 +30,21 @@ def api_tickets():
     if board_id is None:
         return jsonify({"error": "board_id is required"}), 400
 
+    # Look up git_enabled for this board's workflow
+    board_row = query_db("SELECT workflow_id FROM boards WHERE id = ?", (board_id,), one=True)
+    workflow_git_enabled = False
+    if board_row:
+        wf_row = query_db("SELECT git_enabled FROM workflows WHERE id = ?", (board_row['workflow_id'],), one=True)
+        if wf_row:
+            workflow_git_enabled = bool(wf_row['git_enabled'])
+
     rows = query_db("""
-        SELECT t.*, s.name AS status_name, a.name AS agent_name, b.name AS board_name, b.workflow_id
+        SELECT t.*, s.name AS status_name, a.name AS agent_name, b.name AS board_name, b.workflow_id, w.git_enabled
         FROM tickets t
         JOIN statuses s ON t.status_id = s.id
         LEFT JOIN agents a ON s.agent_id = a.id
         JOIN boards b ON t.board_id = b.id
+        JOIN workflows w ON b.workflow_id = w.id
         WHERE t.board_id = ?
         ORDER BY
           CASE t.priority
@@ -51,6 +60,10 @@ def api_tickets():
     tickets = []
     for r in rows:
         d = row_to_dict(r)
+        # Hide branch when git is disabled for this workflow
+        if not workflow_git_enabled:
+            d.pop('branch', None)
+        d.pop('git_enabled', None)
         d['comments'] = get_comments(d['id'])
         d['labels'] = get_ticket_labels(d['id'])
         tickets.append(d)
@@ -88,16 +101,21 @@ def api_tickets():
 @tickets_bp.route('/api/tickets/<int:ticket_id>', methods=['GET'])
 def api_ticket(ticket_id):
     row = query_db("""
-        SELECT t.*, s.name AS status_name, s.is_terminal AS is_terminal, s.agent_id AS status_agent_id, a.name AS agent_name, b.name AS board_name, b.workflow_id
+        SELECT t.*, s.name AS status_name, s.is_terminal AS is_terminal, s.agent_id AS status_agent_id, a.name AS agent_name, b.name AS board_name, b.workflow_id, w.git_enabled
         FROM tickets t
         JOIN statuses s ON t.status_id = s.id
         LEFT JOIN agents a ON s.agent_id = a.id
         JOIN boards b ON t.board_id = b.id
+        JOIN workflows w ON b.workflow_id = w.id
         WHERE t.id = ?
     """, (ticket_id,), one=True)
     if not row:
         return jsonify({"error": "Ticket not found"}), 404
     d = row_to_dict(row)
+    # Hide branch when git is disabled for this workflow
+    if not d.get('git_enabled'):
+        d.pop('branch', None)
+    d.pop('git_enabled', None)
     d['comments'] = get_comments(d['id'])
     d['labels'] = get_ticket_labels(ticket_id)
 
@@ -204,7 +222,7 @@ def api_create_ticket():
 @tickets_bp.route('/api/tickets/<int:ticket_id>', methods=['PUT'])
 def api_update_ticket(ticket_id):
     ticket = query_db("""
-        SELECT t.*, b.workflow_id, b.name AS board_name, w.name AS workflow_name, b.working_directory
+        SELECT t.*, b.workflow_id, b.name AS board_name, w.name AS workflow_name, b.working_directory, w.git_enabled
         FROM tickets t
         JOIN boards b ON t.board_id = b.id
         JOIN workflows w ON b.workflow_id = w.id
@@ -217,6 +235,10 @@ def api_update_ticket(ticket_id):
     title = data.get('title')
     body = data.get('body')
     status_id = data.get('status_id')
+
+    # Guard: block branch updates when git is not enabled for this workflow
+    if 'branch' in data and not ticket['git_enabled']:
+        return jsonify({"error": "Cannot set branch: git is not enabled for this workflow"}), 400
 
     # Handle label replacement if provided
     labels_provided = False
@@ -244,6 +266,11 @@ def api_update_ticket(ticket_id):
             return jsonify({"error": f"priority must be one of {valid_priorities}"}), 400
         updates.append("priority = ?")
         args.append(priority)
+
+    # Branch can only be set when git is enabled (guard is above)
+    if 'branch' in data and ticket['git_enabled']:
+        updates.append("branch = ?")
+        args.append((data['branch'] or '').strip() or None)
 
     new_status_id = status_id if status_id is not None else ticket['status_id']
     old_status_id = ticket['status_id']

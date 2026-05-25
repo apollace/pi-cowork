@@ -16,6 +16,7 @@
     <h2>New Workflow</h2>
     <form id="create-wf-form" class="form-card">
       <label>Name *<input type="text" name="name" required></label>
+      <label>Git Enabled<input type="checkbox" name="git_enabled" id="create-wf-git-enabled"></label>
       <label>Description<textarea name="description" rows="3"></textarea></label>
       <div class="form-actions">
         <button type="submit" class="btn primary">Create</button>
@@ -32,6 +33,7 @@
     <form id="edit-wf-form" class="form-card">
       <input type="hidden" name="id">
       <label>Name *<input type="text" name="name" required></label>
+      <label>Git Enabled<input type="checkbox" name="git_enabled" id="edit-wf-git-enabled"></label>
       <label>Description<textarea name="description" rows="3"></textarea></label>
       <div class="form-actions">
         <button type="submit" class="btn primary">Save</button>
@@ -252,7 +254,7 @@ async function loadWorkflows() {
         <div class="workflow-header-left">
           <span class="workflow-chevron">${isExpanded ? '▼' : '▶'}</span>
           <div>
-            <div class="workflow-name">${escapeHtml(w.name)}</div>
+            <div class="workflow-name">${escapeHtml(w.name)}${w.git_enabled ? ' \u2b50 Git' : ''}</div>
             <div class="workflow-desc">${escapeHtml(w.description || 'No description')}</div>
           </div>
         </div>
@@ -447,7 +449,7 @@ document.getElementById('create-wf-form').addEventListener('submit', async (e) =
   const res = await fetch('/api/workflows', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ name: fd.get('name'), description: fd.get('description') }),
+    body: JSON.stringify({ name: fd.get('name'), description: fd.get('description'), git_enabled: document.getElementById('create-wf-git-enabled').checked }),
   });
   if (res.ok) {
     const data = await res.json();
@@ -465,6 +467,7 @@ function showEditWorkflow(id) {
   form.elements.id.value = wf.id;
   form.elements.name.value = wf.name;
   form.elements.description.value = wf.description || '';
+  document.getElementById('edit-wf-git-enabled').checked = !!wf.git_enabled;
   openModal('edit-wf-modal');
 }
 function hideEditWorkflow() { closeModal('edit-wf-modal'); }
@@ -473,10 +476,14 @@ document.getElementById('edit-wf-form').addEventListener('submit', async (e) => 
   e.preventDefault();
   const fd = new FormData(e.target);
   const id = fd.get('id');
+  const body = { name: fd.get('name'), description: fd.get('description') };
+  if (document.getElementById('edit-wf-git-enabled')) {
+    body.git_enabled = document.getElementById('edit-wf-git-enabled').checked;
+  }
   const res = await fetch(`/api/workflows/${id}`, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ name: fd.get('name'), description: fd.get('description') }),
+    body: JSON.stringify(body),
   });
   if (res.ok) { hideEditWorkflow(); loadWorkflows(); }
   else { const d = await res.json(); alert(d.error || 'Failed'); }
