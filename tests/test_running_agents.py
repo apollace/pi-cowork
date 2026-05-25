@@ -243,8 +243,9 @@ def test_kill_agent_run_success(client, default_workflow, default_board):
 
     killpg_mock = MagicMock()
     # _is_our_process returns False after kill (process is dead)
-    with patch('app.os.killpg', killpg_mock) as killpg, \
-         patch('pi_cowork.agents._is_our_process', side_effect=[True, False]):  # alive at kill time, dead after
+    with patch('app.os.killpg', killpg_mock), \
+         patch('pi_cowork.agents._is_our_process', side_effect=[True, False]), \
+         patch('pi_cowork.api.agent_runs.time.sleep'):  # eliminate real sleeps
         res = client.post(f'/api/agent_runs/{run_id}/kill')
 
     assert res.status_code == 200
@@ -276,18 +277,13 @@ def test_kill_agent_run_sigkill_escalation(client, default_workflow, default_boa
     run_id = run['id']
     ticket_id = run['ticket_id']
 
-    killpg_sigterm_mock = MagicMock()
-    killpg_sigkill_mock = MagicMock()
+    killpg_mock = MagicMock()
 
-    def killpg_side_effect(pid, sig):
-        if sig == app_module.signal.SIGTERM:
-            killpg_sigterm_mock(pid, sig)
-        elif sig == app_module.signal.SIGKILL:
-            killpg_sigkill_mock(pid, sig)
-
-    # _is_our_process always returns True (stubborn process), then finally False after SIGKILL
-    with patch('app.os.killpg', side_effect=killpg_side_effect) as killpg, \
-         patch('pi_cowork.agents._is_our_process', side_effect=[True, True, True, True, True, True, True, True, True, True, True, False]):
+    # _is_our_process returns True for all 11 calls (1 initial + 10 loop polls) —
+    # process survives SIGTERM, triggering SIGKILL escalation
+    with patch('app.os.killpg', killpg_mock), \
+         patch('pi_cowork.agents._is_our_process', side_effect=[True]*11), \
+         patch('pi_cowork.api.agent_runs.time.sleep'):  # eliminate real 5s sleep
         res = client.post(f'/api/agent_runs/{run_id}/kill')
 
     assert res.status_code == 200
@@ -302,9 +298,10 @@ def test_kill_agent_run_sigkill_escalation(client, default_workflow, default_boa
     kill_comments = [c for c in comments if 'SIGKILL' in c['body'] and 'escalated' in c['body'].lower()]
     assert len(kill_comments) >= 1
 
-    # Verify SIGTERM was sent (at least once) and SIGKILL was sent
-    killpg_sigterm_mock.assert_called_once_with(12346, app_module.signal.SIGTERM)
-    killpg_sigkill_mock.assert_called_once_with(12346, app_module.signal.SIGKILL)
+    # Verify SIGTERM then SIGKILL were sent (exactly 2 calls)
+    assert killpg_mock.call_count == 2
+    killpg_mock.assert_any_call(12346, app_module.signal.SIGTERM)
+    killpg_mock.assert_any_call(12346, app_module.signal.SIGKILL)
 
 
 def test_kill_agent_run_pid_already_dead(client, default_workflow, default_board):

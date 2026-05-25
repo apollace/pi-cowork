@@ -702,4 +702,4 @@ The UI underwent a broad set of improvements. Key conventions:
 
 ## Known Constraints & Recurring Pitfalls
 
-- **Flaky agent-kill test** — `tests/test_running_agents.py::test_kill_agent_run_sigkill_escalation` can fail intermittently with `assert data['exit_code'] == -9` because the mocked process may return `-15` (SIGTERM) instead of `-9` (SIGKILL) depending on timing. If this test fails in isolation and your changes do not touch agent killing logic, it is safe to treat it as a pre-existing flaky test.
+- **Patch `time.sleep` in kill-handler tests** — `pi_cowork/api/agent_runs.py` uses `time.sleep(0.5)` in the SIGKILL escalation polling loop. Tests that exercise the kill endpoint must patch `pi_cowork.api.agent_runs.time.sleep` to avoid real sleeps (5s total for the escalation path). Without this patch, tests are slow and flaky under CI load.
