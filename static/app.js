@@ -234,6 +234,8 @@ async function initBoard() {
     const questionBadge = ticket.question_count ? `<span class="badge question">❓ ${ticket.question_count}</span>` : '';
     const recurringBadge = (ticket.recurring_parents && ticket.recurring_parents.length > 0)
       ? `<span class="badge recurring" title="Created by recurring task: ${escapeHtml(ticket.recurring_parents[0].title)}">🔄 Recurring</span>` : '';
+    const branchBadge = ticket.branch
+      ? `<span class="badge branch" title="Git branch">📁 ${escapeHtml(ticket.branch)}</span>` : '';
     const labelPills = (ticket.labels || []).map(l =>
       `<span class="badge label-pill" style="background:${escapeHtml(l.color)}33;color:${escapeHtml(l.color)};border:1px solid ${escapeHtml(l.color)}55;">${escapeHtml(l.name)}</span>`
     ).join('');
@@ -260,6 +262,7 @@ async function initBoard() {
         ${gateBadge}
         ${questionBadge}
         ${recurringBadge}
+        ${branchBadge}
       </div>
     `;
 

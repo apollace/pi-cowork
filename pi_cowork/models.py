@@ -98,7 +98,7 @@ def get_board(board_id):
 
 def get_board_with_workflow(board_id):
     row = query_db("""
-        SELECT b.*, w.name AS workflow_name
+        SELECT b.*, w.name AS workflow_name, w.git_enabled AS workflow_git_enabled
         FROM boards b
         JOIN workflows w ON b.workflow_id = w.id
         WHERE b.id = ?

@@ -15,12 +15,17 @@ boards_bp = Blueprint('boards', __name__)
 @boards_bp.route('/api/boards', methods=['GET'])
 def api_boards():
     rows = query_db("""
-        SELECT b.*, w.name AS workflow_name
+        SELECT b.*, w.name AS workflow_name, w.git_enabled AS workflow_git_enabled
         FROM boards b
         JOIN workflows w ON b.workflow_id = w.id
         ORDER BY b.name
     """)
-    return jsonify([row_to_dict(r) for r in rows])
+    result = []
+    for r in rows:
+        d = row_to_dict(r)
+        d['git_enabled'] = bool(d.pop('workflow_git_enabled', 0))
+        result.append(d)
+    return jsonify(result)
 
 
 @boards_bp.route('/api/boards', methods=['POST'])
@@ -68,6 +73,8 @@ def api_get_board(board_id):
     board = get_board_with_workflow(board_id)
     if not board:
         return jsonify({"error": "Board not found"}), 404
+    # Expose git_enabled from the workflow
+    board['git_enabled'] = bool(board.pop('workflow_git_enabled', 0))
     return jsonify(board)
 
 

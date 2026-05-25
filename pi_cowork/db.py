@@ -218,6 +218,11 @@ def _migrate(db):
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """),
+        # Ticket #82 — Git integration columns
+        ('add_workflows_git_enabled',
+         'ALTER TABLE workflows ADD COLUMN git_enabled BOOLEAN NOT NULL DEFAULT 0'),
+        ('add_tickets_branch',
+         'ALTER TABLE tickets ADD COLUMN branch TEXT'),
     ]
     for name, sql in migrations:
         already_applied = db.execute(
