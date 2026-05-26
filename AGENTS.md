@@ -700,7 +700,16 @@ The UI underwent a broad set of improvements. Key conventions:
 - CSS classes: `.breadcrumb`, `.breadcrumb-sep`, `.breadcrumb-current`
 
 ### Board Page Improvements
-- **Priority Filter**: Toggle buttons (`.priority-toggle`) replace checkboxes. Visible only when tickets with that priority exist.
+- **Filter Dropdown (Ticket #87)**: Priority toggles, label checkboxes, and the terminal-status checkbox are collapsed into a dropdown popover triggered by a **Filters** button. Architecture:
+  - `.filter-dropdown-wrapper` — relative-positioned container
+  - `.filter-dropdown-trigger` — the "Filters" button that toggles the panel
+  - `.filter-badge` (`id="filter-badge"`) — active-filter count badge on the trigger (hidden when 0)
+  - `.filter-dropdown-panel` — absolute-positioned popover containing sections:
+    - `.filter-dropdown-section` with `.filter-dropdown-section-title` — Priority / Labels / Display
+    - `.priority-toggle` buttons live inside the Priority section
+    - `.filter-dropdown-checkbox` — class on the "Show terminal statuses" label (moved from standalone)
+  - Panel opens/closes via JS (`app.js`): toggle on click, close on click-outside or Escape key
+  - CSS classes: `.filter-dropdown-wrapper`, `.filter-dropdown-trigger`, `.filter-dropdown-panel`, `.filter-dropdown-section`, `.filter-dropdown-section-title`, `.filter-dropdown-checkbox`, `.filter-badge`
 - **Filter Summary**: Active filters shown as dismissible pills (`.filter-pill`) with a "Clear all" button (`.filter-clear-all`)
 - **Loading Skeleton**: `.board-skeleton` with `.skeleton` elements shown while board data loads
 - **Card redesign (Ticket #80)**: Cards use three-zone layout, priority accent borders, and read-only status pills (see UI Design Guidelines below)

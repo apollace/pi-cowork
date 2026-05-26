@@ -353,10 +353,10 @@ body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-   box-shadow: var(--shadow-lg);
-   z-index: 60;
+  box-shadow: var(--shadow-lg);
+  z-index: 60;
   padding: 0;
-   overflow: hidden;
+  overflow: hidden;
   animation: dropdown-in .15s ease;
 }
 
