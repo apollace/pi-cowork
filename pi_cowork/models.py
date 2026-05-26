@@ -96,6 +96,54 @@ def get_recurring_parents_batch(ticket_ids):
 
 
 # ---------------------------------------------------------------------------
+# Ticket Status Overrides
+# ---------------------------------------------------------------------------
+
+def get_ticket_status_overrides(ticket_id):
+    """Get all status overrides for a ticket."""
+    rows = query_db(
+        """SELECT tso.*, s.name AS status_name
+           FROM ticket_status_overrides tso
+           JOIN statuses s ON tso.status_id = s.id
+           WHERE tso.ticket_id = ?
+           ORDER BY s.sort_order""",
+        (ticket_id,)
+    )
+    return [row_to_dict(r) for r in rows]
+
+
+def get_ticket_status_override(ticket_id, status_id):
+    """Get a single ticket-status override, or None."""
+    row = query_db(
+        "SELECT * FROM ticket_status_overrides WHERE ticket_id = ? AND status_id = ?",
+        (ticket_id, status_id),
+        one=True
+    )
+    return row_to_dict(row) if row else None
+
+
+def set_ticket_status_override(ticket_id, status_id, model=None, thinking=None):
+    """Upsert a ticket-status override. Returns the override dict."""
+    run_db(
+        """INSERT INTO ticket_status_overrides (ticket_id, status_id, model, thinking)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(ticket_id, status_id) DO UPDATE SET
+             model = excluded.model,
+             thinking = excluded.thinking""",
+        (ticket_id, status_id, model, thinking)
+    )
+    return get_ticket_status_override(ticket_id, status_id)
+
+
+def delete_ticket_status_override(ticket_id, status_id):
+    """Delete a ticket-status override."""
+    run_db(
+        "DELETE FROM ticket_status_overrides WHERE ticket_id = ? AND status_id = ?",
+        (ticket_id, status_id)
+    )
+
+
+# ---------------------------------------------------------------------------
 # Questions
 # ---------------------------------------------------------------------------
 

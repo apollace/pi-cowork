@@ -109,6 +109,11 @@
       <div id="labels-picker" style="margin-top:0.25rem;"></div>
     </div>
 
+    <div class="sidebar-card" id="model-effort-card">
+      <h3>Model & Effort</h3>
+      <div id="model-effort-content" style="margin-top:0.25rem;"></div>
+    </div>
+
     <section class="recurring-card" id="recurring-section" style="display:none;">
       <h3>🔄 Recurring Task</h3>
       <div id="recurring-info"></div>
@@ -432,6 +437,161 @@
     await window._detailLabelPicker.init();
   }
 
+  // ── Model & Effort Override UI ──
+  let _modelEffortData = { statuses: [], overrides: [], piModels: null, expanded: false };
+
+  async function loadModelEffortData() {
+    const [statusesRes, overridesRes, piModelsRes] = await Promise.all([
+      fetch('/api/statuses?workflow_id={{ ticket.workflow_id }}'),
+      fetch('/api/tickets/{{ ticket.id }}/status_overrides'),
+      fetch('/api/pi-models'),
+    ]);
+    _modelEffortData.statuses = statusesRes.ok ? (await statusesRes.json()) : [];
+    _modelEffortData.overrides = overridesRes.ok ? (await overridesRes.json()) : [];
+    _modelEffortData.piModels = piModelsRes.ok ? (await piModelsRes.json()) : null;
+  }
+
+  function renderModelEffortCard() {
+    const container = document.getElementById('model-effort-content');
+    if (!container) return;
+
+    const statusesWithAgents = _modelEffortData.statuses.filter(s => s.agent_id);
+    if (statusesWithAgents.length === 0) {
+      container.innerHTML = '<span style="color:var(--text-muted);font-size:0.85rem;">No statuses with agents</span>';
+      return;
+    }
+
+    const overrideMap = {};
+    for (const o of _modelEffortData.overrides) {
+      overrideMap[o.status_id] = o;
+    }
+
+    const models = (_modelEffortData.piModels && _modelEffortData.piModels.models) || [];
+    const allThinkingLevels = (_modelEffortData.piModels && _modelEffortData.piModels.thinking_levels) || ['off','minimal','low','medium','high','xhigh'];
+
+    if (!_modelEffortData.expanded) {
+      // Show summary - count active overrides
+      const activeCount = _modelEffortData.overrides.filter(o => (o.model && o.model.trim()) || (o.thinking && o.thinking.trim())).length;
+      let summary = activeCount > 0
+        ? `<span style="color:var(--primary);font-size:0.85rem;"><button class="btn small ghost" id="model-effort-expand">${activeCount} override${activeCount > 1 ? 's' : ''} active ▼</button></span>`
+        : `<span style="color:var(--text-muted);font-size:0.85rem;"><button class="btn small ghost" id="model-effort-expand">No overrides ▼</button></span>`;
+      container.innerHTML = summary;
+      document.getElementById('model-effort-expand')?.addEventListener('click', () => {
+        _modelEffortData.expanded = true;
+        renderModelEffortCard();
+      });
+      return;
+    }
+
+    // Expanded view
+    let html = '';
+    for (const st of statusesWithAgents) {
+      const o = overrideMap[st.id] || {};
+      const hasOverride = (o.model && o.model.trim()) || (o.thinking && o.thinking.trim());
+
+      // Determine cascaded model display
+      let modelDisplay = '—';
+      let modelStyle = 'color:var(--text-muted);';
+      if (o.model && o.model.trim()) {
+        modelDisplay = '📦 ' + escapeHtml(o.model.trim());
+        modelStyle = 'color:#2563eb;';
+      } else if (st.model && st.model.trim()) {
+        modelDisplay = '📦 ' + escapeHtml(st.model.trim());
+        modelStyle = 'color:var(--text-secondary);';
+      } else if (st.agent_name) {
+        // Check agent-level
+        const agent = _modelEffortData.statuses.find(s => s.id === st.id);
+        // We'll just show '—' for now since agents aren't fetched here; the enriched GET response has model_source
+        modelDisplay = '—';
+        modelStyle = 'color:var(--text-muted);';
+      }
+
+      // Determine cascaded thinking display
+      let thinkingDisplay = '—';
+      let thinkingStyle = 'color:var(--text-muted);';
+      if (o.thinking && o.thinking.trim()) {
+        thinkingDisplay = '⚡ ' + escapeHtml(o.thinking.trim());
+        thinkingStyle = 'color:#2563eb;';
+      } else if (st.thinking && st.thinking.trim()) {
+        thinkingDisplay = '⚡ ' + escapeHtml(st.thinking.trim());
+        thinkingStyle = 'color:var(--text-secondary);';
+      }
+
+      const clearBtn = hasOverride
+        ? `<button class="btn small ghost model-effort-clear" data-status-id="${st.id}" title="Clear ticket override">✕</button>`
+        : '';
+
+      html += `
+        <div class="model-effort-row" data-status-id="${st.id}">
+          <div class="model-effort-status-name">${escapeHtml(st.name)}</div>
+          <div class="model-effort-fields" style="display:flex;gap:0.35rem;align-items:center;flex-wrap:wrap;">
+            <div class="model-effort-field">
+              <select class="edit-input model-effort-model-select" data-status-id="${st.id}" style="font-size:0.8rem;padding:0.25rem 0.4rem;min-width:120px;">
+                <option value="" ${!o.model ? 'selected' : ''}>default</option>
+                ${models.map(m => `<option value="${escapeHtml(m.id)}" ${o.model === m.id ? 'selected' : ''}>${escapeHtml(m.id)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="model-effort-field">
+              <select class="edit-input model-effort-thinking-select" data-status-id="${st.id}" style="font-size:0.8rem;padding:0.25rem 0.4rem;min-width:80px;">
+                <option value="" ${!o.thinking ? 'selected' : ''}>default</option>
+                ${allThinkingLevels.map(t => `<option value="${escapeHtml(t)}" ${o.thinking === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+              </select>
+            </div>
+            ${clearBtn}
+          </div>
+        </div>
+      `;
+    }
+
+    html += `<div style="margin-top:0.5rem;display:flex;gap:0.35rem;"><button class="btn small primary" id="model-effort-save">Save</button><button class="btn small ghost" id="model-effort-collapse">Collapse</button></div>`;
+    container.innerHTML = html;
+
+    // Attach event listeners
+    document.getElementById('model-effort-save')?.addEventListener('click', saveModelEffortOverrides);
+    document.getElementById('model-effort-collapse')?.addEventListener('click', () => {
+      _modelEffortData.expanded = false;
+      renderModelEffortCard();
+    });
+
+    document.querySelectorAll('.model-effort-clear').forEach(btn => {
+      btn.addEventListener('click', async function() {
+        const statusId = parseInt(this.dataset.statusId);
+        await fetch(`/api/tickets/{{ ticket.id }}/status_overrides/${statusId}`, { method: 'DELETE' });
+        await loadModelEffortData();
+        renderModelEffortCard();
+        if (typeof showToast === 'function') showToast('Override cleared', 'success');
+      });
+    });
+  }
+
+  async function saveModelEffortOverrides() {
+    const rows = document.querySelectorAll('.model-effort-row');
+    const saves = [];
+    for (const row of rows) {
+      const statusId = parseInt(row.dataset.statusId);
+      const modelSelect = row.querySelector('.model-effort-model-select');
+      const thinkingSelect = row.querySelector('.model-effort-thinking-select');
+      const model = modelSelect ? modelSelect.value : '';
+      const thinking = thinkingSelect ? thinkingSelect.value : '';
+      saves.push(
+        fetch(`/api/tickets/{{ ticket.id }}/status_overrides`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ status_id: statusId, model: model || null, thinking: thinking || null }),
+        })
+      );
+    }
+    await Promise.all(saves);
+    await loadModelEffortData();
+    renderModelEffortCard();
+    if (typeof showToast === 'function') showToast('Overrides saved', 'success');
+  }
+
+  async function initModelEffort() {
+    await loadModelEffortData();
+    renderModelEffortCard();
+  }
+
   // ── Run Agent / Re-run Agent Button Logic ──
   async function initRunAgentButton() {
     const btn = document.getElementById('run-agent-btn');
@@ -632,6 +792,7 @@
   loadAgentRuns();
   initRunAgentButton();
   loadRecurringInfo();
+  initModelEffort();
 
   async function loadRecurringInfo() {
     const section = document.getElementById('recurring-section');

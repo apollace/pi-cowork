@@ -251,6 +251,16 @@ def _migrate(db):
         # Ticket #85 — Database backup retention setting
         ('seed_db_backup_max_count',
          "INSERT OR IGNORE INTO settings (key, value) VALUES ('db_backup_max_count', '10')"),
+        # Ticket #89 — Ticket-level model & thinking overrides
+        ('create_ticket_status_overrides', """
+            CREATE TABLE IF NOT EXISTS ticket_status_overrides (
+                ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+                status_id INTEGER NOT NULL REFERENCES statuses(id) ON DELETE CASCADE,
+                model TEXT,
+                thinking TEXT,
+                PRIMARY KEY (ticket_id, status_id)
+            )
+        """),
     ]
     for name, sql in migrations:
         already_applied = db.execute(

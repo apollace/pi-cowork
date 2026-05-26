@@ -208,6 +208,15 @@ CREATE TABLE IF NOT EXISTS recurring_instances (
     triggered_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Ticket status overrides: per-ticket model/thinking overrides for specific statuses
+CREATE TABLE IF NOT EXISTS ticket_status_overrides (
+    ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    status_id INTEGER NOT NULL REFERENCES statuses(id) ON DELETE CASCADE,
+    model TEXT,
+    thinking TEXT,
+    PRIMARY KEY (ticket_id, status_id)
+);
+
 -- Saved prompts: pre-configured one-click prompts for the assistant
 CREATE TABLE IF NOT EXISTS assistant_saved_prompts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
