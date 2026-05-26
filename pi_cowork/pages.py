@@ -52,11 +52,6 @@ def register_pages(app):
         from flask import render_template
         return render_template('workflows.html')
 
-    @app.route('/backup')
-    def backup_page():
-        from flask import render_template
-        return render_template('backup.html')
-
     @app.route('/assistant/settings')
     def assistant_settings_page():
         from flask import redirect, url_for

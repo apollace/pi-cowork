@@ -42,9 +42,8 @@ pi-cowork/
 │   ├── ticket_form.html   # Create / edit ticket
 │   ├── ticket_detail.html # Ticket view + comments + gate reviews + agent badge
 
-│   ├── workflows.html     # Workflows + agents/statuses/transitions/quality gates
-│   └── backup.html        # Import / export workflows
-└── tests/                 # pytest suite (116 tests)
+│   ├── workflows.html     # Workflows + agents/statuses/transitions/quality gates + import workflow
+└── tests/                 # pytest suite (850+ tests)
     ├── conftest.py
     ├── test_tickets_api.py
     ├── test_agents_api.py
