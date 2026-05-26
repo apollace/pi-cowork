@@ -709,7 +709,12 @@ The UI underwent a broad set of improvements. Key conventions:
     - `.priority-toggle` buttons live inside the Priority section
     - `.filter-dropdown-checkbox` — class on the "Show terminal statuses" label (moved from standalone)
   - Panel opens/closes via JS (`app.js`): toggle on click, close on click-outside or Escape key
-  - CSS classes: `.filter-dropdown-wrapper`, `.filter-dropdown-trigger`, `.filter-dropdown-panel`, `.filter-dropdown-section`, `.filter-dropdown-section-title`, `.filter-dropdown-checkbox`, `.filter-badge`
+  - **Viewport-aware positioning** (`positionFilterDropdown()`): panel repositions to stay within the viewport:
+    - `.dropdown-right` class — aligns to right edge of trigger when panel would overflow the right edge
+    - `.dropdown-above` class — positions above the trigger when panel would overflow the bottom edge
+    - `maxHeight` constraint — when panel doesn't fit above or below, constrains height with `overflow-y: auto`
+    - Repositions on `resize` and `scroll` events while open
+  - CSS classes: `.filter-dropdown-wrapper`, `.filter-dropdown-trigger`, `.filter-dropdown-panel`, `.filter-dropdown-section`, `.filter-dropdown-section-title`, `.filter-dropdown-checkbox`, `.filter-badge`, `.dropdown-right`, `.dropdown-above`, `.scrollable`
 - **Filter Summary**: Active filters shown as dismissible pills (`.filter-pill`) with a "Clear all" button (`.filter-clear-all`)
 - **Loading Skeleton**: `.board-skeleton` with `.skeleton` elements shown while board data loads
 - **Card redesign (Ticket #80)**: Cards use three-zone layout, priority accent borders, and read-only status pills (see UI Design Guidelines below)

@@ -24,8 +24,45 @@ async function initBoard() {
   const filterDropdownPanel = document.getElementById('filter-dropdown-panel');
   const filterBadge = document.getElementById('filter-badge');
 
-  // Filter dropdown toggle
+  // Filter dropdown toggle with viewport-aware positioning
   let _dropdownOpen = false;
+  function positionFilterDropdown() {
+    // Reset to default positioning first so we can measure natural size
+    filterDropdownPanel.style.left = '';
+    filterDropdownPanel.style.right = '';
+    filterDropdownPanel.style.top = '';
+    filterDropdownPanel.style.bottom = '';
+    filterDropdownPanel.style.maxHeight = '';
+    filterDropdownPanel.classList.remove('dropdown-right', 'dropdown-above');
+
+    const triggerRect = filterDropdownBtn.getBoundingClientRect();
+    const panelRect = filterDropdownPanel.getBoundingClientRect();
+    const viewportW = window.innerWidth;
+    const viewportH = window.innerHeight;
+    const gap = 6; // px gap between trigger and panel
+
+    // Horizontal: if panel overflows right, align to right edge of trigger
+    if (triggerRect.left + panelRect.width > viewportW - 8) {
+      filterDropdownPanel.classList.add('dropdown-right');
+    }
+    // Vertical: if panel overflows bottom, position above the trigger
+    if (triggerRect.bottom + gap + panelRect.height > viewportH - 8) {
+      filterDropdownPanel.classList.add('dropdown-above');
+      // Re-check: if above also overflows, constrain max-height
+      const aboveSpace = triggerRect.top - gap - 8;
+      if (aboveSpace < panelRect.height) {
+        filterDropdownPanel.style.maxHeight = Math.max(aboveSpace, 120) + 'px';
+        filterDropdownPanel.style.overflowY = 'auto';
+      }
+    } else {
+      // Below: check if still too tall even when below trigger
+      const belowSpace = viewportH - triggerRect.bottom - gap - 8;
+      if (belowSpace < panelRect.height) {
+        filterDropdownPanel.style.maxHeight = Math.max(belowSpace, 120) + 'px';
+        filterDropdownPanel.style.overflowY = 'auto';
+      }
+    }
+  }
   function toggleFilterDropdown(forceClose) {
     if (forceClose || _dropdownOpen) {
       filterDropdownPanel.style.display = 'none';
@@ -34,6 +71,7 @@ async function initBoard() {
     } else {
       filterDropdownPanel.style.display = 'block';
       filterDropdownBtn.classList.add('active');
+      positionFilterDropdown();
       _dropdownOpen = true;
     }
   }
@@ -54,6 +92,12 @@ async function initBoard() {
       toggleFilterDropdown(true);
     }
   });
+  // Reposition dropdown on viewport resize/scroll while open
+  function _repositionIfOpen() {
+    if (_dropdownOpen) positionFilterDropdown();
+  }
+  window.addEventListener('resize', _repositionIfOpen);
+  window.addEventListener('scroll', _repositionIfOpen, true);
   // Close dropdown on Escape
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && _dropdownOpen) {
