@@ -706,8 +706,8 @@ The UI underwent a broad set of improvements. Key conventions:
 - **Card redesign (Ticket #80)**: Cards use three-zone layout, priority accent borders, and read-only status pills (see UI Design Guidelines below)
 
 ### Global Search
-- Sidebar has a search input (`.sidebar-search`) that navigates to `/board?search=...` on Enter
-- Board page reads URL `search` param and pre-fills the filter
+- Sidebar search input (`.sidebar-search`) was removed (#86)
+- Board page still supports URL `search` param deep-linking (`/board?search=...`) and pre-fills the ticket filter
 
 ### Assistant Consolidation
 - The dedicated board assistant (🎯 bubble + `board_assistant.js`) has been removed from `board.html`
