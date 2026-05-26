@@ -360,6 +360,23 @@ body {
   animation: dropdown-in .15s ease;
 }
 
+/* Right-aligned: when panel would overflow right edge of viewport */
+.filter-dropdown-panel.dropdown-right {
+  left: auto;
+  right: 0;
+}
+
+/* Above: when panel would overflow bottom edge of viewport */
+.filter-dropdown-panel.dropdown-above {
+  top: auto;
+  bottom: calc(100% + 0.35rem);
+}
+
+/* Scrollable when constrained by viewport height */
+.filter-dropdown-panel.scrollable {
+  overflow-y: auto;
+}
+
 @keyframes dropdown-in {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
@@ -398,9 +415,17 @@ body {
 
 @media (max-width: 768px) {
   .filter-dropdown-panel {
+  .filter-dropdown-panel {
+    width: min(280px, calc(100vw - 2rem));
+  }
+  .filter-dropdown-panel:not(.dropdown-right) {
+    max-width: calc(100vw - 2rem);
+  }
+  .filter-dropdown-panel.dropdown-right {
     left: auto;
     right: 0;
-    width: min(280px, calc(100vw - 2rem));
+    max-width: calc(100vw - 2rem);
+  }
   }
 }
 
