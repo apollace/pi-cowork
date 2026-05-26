@@ -20,9 +20,7 @@
           <span class="notification-count" id="sidebar-count" style="display:none;">0</span>
         </div>
       </div>
-      <div class="sidebar-search">
-        <input type="text" id="global-search" placeholder="Search tickets…" autocomplete="off" />
-      </div>
+
       <nav class="sidebar-nav">
         <div class="nav-section">
           <div class="nav-section-title">Main</div>
@@ -146,27 +144,7 @@
       return '<p>' + escapeHtml(text).replace(/\n/g, '</p><p>') + '</p>';
     };
 
-    // ── Global Search ──
-    (function() {
-      var searchInput = document.getElementById('global-search');
-      if (!searchInput) return;
-      searchInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-          var q = searchInput.value.trim();
-          if (q) {
-            var boardId = localStorage.getItem('activeBoard');
-            var href = '/board';
-            if (boardId) href = '/board?search=' + encodeURIComponent(q);
-            else href = '/board?search=' + encodeURIComponent(q);
-            window.location.href = href;
-          }
-        }
-      });
-      // Pre-fill search from URL if on board page
-      var params = new URLSearchParams(window.location.search);
-      var searchParam = params.get('search');
-      if (searchParam) searchInput.value = searchParam;
-    })();
+
 
     const PALETTE_24 = [
       '#ef4444','#f97316','#f59e0b','#eab308','#84cc16','#22c55e',
