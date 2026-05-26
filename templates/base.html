@@ -36,9 +36,6 @@
           <a class="nav-link {% if request.endpoint == 'workflows_page' %}active{% endif %}" href="{{ url_for('workflows_page') }}">
             <span class="icon">🔄</span> Workflows
           </a>
-          <a class="nav-link {% if request.endpoint == 'backup_page' %}active{% endif %}" href="{{ url_for('backup_page') }}">
-            <span class="icon">💾</span> Backup & Restore
-          </a>
           <a class="nav-link {% if request.endpoint == 'database_backup_page' %}active{% endif %}" href="{{ url_for('database_backup_page') }}">
             <span class="icon">🗄️</span> Database Backup
           </a>

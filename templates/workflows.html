@@ -4,6 +4,7 @@
 <div class="page-header">
   <h1>Workflows</h1>
   <div class="page-actions">
+    <button class="btn" onclick="showImportWorkflow()">📥 Import</button>
     <button class="btn primary" onclick="showCreateWorkflow()">+ New Workflow</button>
   </div>
 </div>
@@ -22,6 +23,25 @@
         <button type="submit" class="btn primary">Create</button>
         <button type="button" class="btn" onclick="hideCreateWorkflow()">Cancel</button>
       </div>
+    </form>
+  </div>
+</div>
+
+<!-- Import Workflow Modal -->
+<div id="import-wf-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2>Import Workflow</h2>
+    <p>This will create a <strong>new workflow</strong> from the imported JSON file. No existing data will be deleted.</p>
+    <form id="import-wf-form" class="form-card">
+      <label>
+        Select workflow JSON file
+        <input type="file" id="import-file" accept=".json,application/json" required>
+      </label>
+      <div class="form-actions">
+        <button type="submit" class="btn primary">Import</button>
+        <button type="button" class="btn" onclick="hideImportWorkflow()">Cancel</button>
+      </div>
+      <pre id="import-result" style="margin-top:1rem;white-space:pre-wrap;word-break:break-word"></pre>
     </form>
   </div>
 </div>
@@ -231,6 +251,46 @@ function closeModal(modalId) {
     delete modal._onBackdrop;
   }
 }
+
+// ── Import Workflow ──
+
+function showImportWorkflow() { openModal('import-wf-modal'); }
+function hideImportWorkflow() {
+  closeModal('import-wf-modal');
+  document.getElementById('import-wf-form').reset();
+  document.getElementById('import-result').textContent = '';
+}
+
+document.getElementById('import-wf-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const file = document.getElementById('import-file').files[0];
+  if (!file) return;
+  const text = await file.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch (err) {
+    document.getElementById('import-result').textContent = '❌ Error: Invalid JSON file.';
+    return;
+  }
+  const res = await fetch('/api/workflows/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(json),
+  });
+  const data = await res.json();
+  if (res.ok) {
+    document.getElementById('import-result').textContent =
+      `✅ Import successful! Created workflow "${json.name || 'Imported'}" with ${data.agents} agents, ${data.statuses} statuses, ${data.transitions} transitions.`;
+    expandedWorkflows.add(data.workflow_id);
+    hideImportWorkflow();
+    loadWorkflows();
+    showToast(`Workflow "${json.name || 'Imported'}" imported successfully`, 'success');
+  } else {
+    document.getElementById('import-result').textContent =
+      `❌ Import failed: ${data.error || 'Unknown error'}`;
+  }
+});
 
 // ── Workflows ──
 
