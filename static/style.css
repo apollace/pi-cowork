@@ -415,6 +415,7 @@ body {
 
 @media (max-width: 768px) {
   .filter-dropdown-panel {
+  .filter-dropdown-panel {
     width: min(280px, calc(100vw - 2rem));
   }
   .filter-dropdown-panel:not(.dropdown-right) {
@@ -424,6 +425,7 @@ body {
     left: auto;
     right: 0;
     max-width: calc(100vw - 2rem);
+  }
   }
 }
 
