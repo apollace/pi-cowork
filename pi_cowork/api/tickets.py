@@ -14,6 +14,7 @@ from pi_cowork.models import (
     get_transitions_from, has_pending_gate_reviews, run_cli_gate,
     set_ticket_labels, get_recurring_parents,
     get_comment_counts, get_ticket_labels_batch, get_recurring_parents_batch,
+    get_ticket_status_overrides,
 )
 from pi_cowork.agents import try_spawn_or_queue, cleanup_runs, spawn_agent
 from pi_cowork.models import get_agents, get_agent
@@ -144,6 +145,7 @@ def api_ticket(ticket_id):
     d['gate_pending'] = has_pending_gate_reviews(ticket_id)
     d['question_count'] = count_unanswered_questions(ticket_id)
     d['recurring_parents'] = get_recurring_parents(ticket_id)
+    d['status_overrides'] = get_ticket_status_overrides(ticket_id)
 
     # Agent run stats — combined into a single query to reduce DB round-trips
     counts_row = query_db(

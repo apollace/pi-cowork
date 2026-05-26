@@ -390,6 +390,37 @@ ENDPOINT_REGISTRY = [
             "- DELETE {base_url}/api/db-backup/delete → delete a specific backup file (field: filename)",
         ],
     },
+    # ── Ticket Status Overrides ──
+    {
+        "key": "ticket_status_overrides_get",
+        "category": "Ticket Overrides",
+        "method": "GET",
+        "path_template": "/api/tickets/{ticket_id}/status_overrides",
+        "label": "list ticket status overrides (per-status model/thinking overrides)",
+        "doc_lines": [
+            "- GET {base_url}/api/tickets/{ticket_id}/status_overrides → list ticket status overrides (per-status model/thinking overrides)",
+        ],
+    },
+    {
+        "key": "ticket_status_overrides_put",
+        "category": "Ticket Overrides",
+        "method": "PUT",
+        "path_template": "/api/tickets/{ticket_id}/status_overrides",
+        "label": "upsert ticket status override (fields: status_id, model, thinking)",
+        "doc_lines": [
+            "- PUT {base_url}/api/tickets/{ticket_id}/status_overrides → upsert ticket status override (fields: status_id, model, thinking)",
+        ],
+    },
+    {
+        "key": "ticket_status_override_delete",
+        "category": "Ticket Overrides",
+        "method": "DELETE",
+        "path_template": "/api/tickets/{ticket_id}/status_overrides/{status_id}",
+        "label": "clear ticket status override for a specific status",
+        "doc_lines": [
+            "- DELETE {base_url}/api/tickets/{ticket_id}/status_overrides/{status_id} → clear ticket status override for a specific status",
+        ],
+    },
 ]
 
 # Key → registry entry lookup (built once at import time)

@@ -491,9 +491,22 @@ After completing your task, write a comment on the ticket summarizing what you d
     if board and board.get('long_term_vision'):
         system_prompt += f"\n\nBoard Long-Term Vision: {board['long_term_vision']}"
 
-    # Resolve effective model/thinking with precedence: status > agent > default
-    effective_model = (status.get('model') or '').strip() or agent.get('model')
-    effective_thinking = (status.get('thinking') or '').strip() or agent.get('thinking')
+    # Resolve effective model/thinking with precedence: ticket override > status > agent > default
+    from pi_cowork.models import get_ticket_status_override
+    ticket_override = get_ticket_status_override(ticket_id, status['id'])
+    if ticket_override and ticket_override.get('model') and ticket_override['model'].strip():
+        effective_model = ticket_override['model'].strip()
+    elif status.get('model') and status['model'].strip():
+        effective_model = status['model'].strip()
+    else:
+        effective_model = agent.get('model')
+
+    if ticket_override and ticket_override.get('thinking') and ticket_override['thinking'].strip():
+        effective_thinking = ticket_override['thinking'].strip()
+    elif status.get('thinking') and status['thinking'].strip():
+        effective_thinking = status['thinking'].strip()
+    else:
+        effective_thinking = agent.get('thinking')
 
     cmd = [
         "pi",

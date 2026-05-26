@@ -118,9 +118,11 @@ def mock_model_ids(monkeypatch):
     import pi_cowork.api.agents_api as _agents_api
     import pi_cowork.api.statuses as _statuses
     import pi_cowork.assistant as _assistant
+    import pi_cowork.api.ticket_status_overrides as _tso
     monkeypatch.setattr(_agents_api, 'get_model_ids', fake)
     monkeypatch.setattr(_statuses, 'get_model_ids', fake)
     monkeypatch.setattr(_assistant, 'get_model_ids', fake)
+    monkeypatch.setattr(_tso, 'get_model_ids', fake)
 
 
 @pytest.fixture

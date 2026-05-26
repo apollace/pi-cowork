@@ -3045,3 +3045,31 @@ textarea.edit-input { resize: vertical; min-height: 2.5rem; }
   flex-shrink: 0;
   align-items: flex-start;
 }
+
+/* ── Model & Effort Override Card ── */
+.model-effort-row {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border-secondary);
+}
+.model-effort-row:last-of-type {
+  border-bottom: none;
+}
+.model-effort-status-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 0.25rem;
+}
+.model-effort-field {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.model-effort-field select {
+  min-width: 0;
+}
+.model-effort-clear {
+  color: var(--danger) !important;
+  font-size: 0.75rem !important;
+  padding: 0.15rem 0.35rem !important;
+}
