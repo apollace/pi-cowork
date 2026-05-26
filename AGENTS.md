@@ -91,6 +91,7 @@ All dynamic configuration is resolved via `pi_cowork.config.get_config(key)` wit
 | Warm Spawn Threshold (sec) | `warm_spawn_threshold` | _(none)_ | `3600` | int | ⚙️ General |
 | Run Max Age (sec) | `run_max_age` | _(none)_ | `7200` | int | ⚙️ General |
 | Log Retention Days | `log_retention_days` | `PI_LOG_RETENTION_DAYS` | `30` | int | 📜 Logs & Storage |
+| Max DB Backups Retained | `db_backup_max_count` | _(none)_ | `10` | int | 📜 Logs & Storage |
 
 **Kept as env-only** (security/runtime concerns):
 - `FLASK_SECRET_KEY` — security concern, must not be in DB
@@ -102,7 +103,7 @@ All dynamic configuration is resolved via `pi_cowork.config.get_config(key)` wit
 **Settings UI** has three collapsible categories:
 1. 🤖 **Assistant** — enabled, auto-context, model, thinking, working-dir, system-prompt, api-endpoints, saved-prompts
 2. ⚙️ **General** — pi_cowork_url, **port**, max_parallel, max_per_hour, warm_spawn_threshold, run_max_age
-3. 📜 **Logs & Storage** — log_retention_days, purge terminal logs
+3. 📜 **Logs & Storage** — log_retention_days, db_backup_max_count, purge terminal logs
 
 ## Data Model
 

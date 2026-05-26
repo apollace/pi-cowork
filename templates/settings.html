@@ -115,6 +115,10 @@
           <span>Log retention (days)</span>
           <input type="number" id="cfg-log-retention" min="1" max="3650" />
         </label>
+        <label class="form-row">
+          <span>Max DB backups retained</span>
+          <input type="number" id="cfg-db-backup-max-count" min="1" max="100" />
+        </label>
         <div class="form-row" style="margin-top:0.5rem;">
           <span></span>
           <button class="btn danger" id="btn-purge-terminal-logs">Purge terminal ticket logs</button>
@@ -283,6 +287,15 @@
         document.getElementById('cfg-log-retention').value = 30;
       }
 
+      // Load db_backup_max_count setting
+      const dbBackupRes = await fetch('/api/settings/db_backup_max_count');
+      if (dbBackupRes.ok) {
+        const dbBackupData = await dbBackupRes.json();
+        document.getElementById('cfg-db-backup-max-count').value = parseInt(dbBackupData.value, 10) || 10;
+      } else {
+        document.getElementById('cfg-db-backup-max-count').value = 10;
+      }
+
       await loadSavedPrompts();
     } catch (e) {
       showFeedback('Failed to load settings', 'error');
@@ -367,6 +380,12 @@
       return;
     }
 
+    const dbBackupMaxCount = parseInt(document.getElementById('cfg-db-backup-max-count').value, 10);
+    if (isNaN(dbBackupMaxCount) || dbBackupMaxCount < 1) {
+      showFeedback('Max DB backups retained must be at least 1', 'error');
+      return;
+    }
+
     const piCoworkUrl = document.getElementById('cfg-pi-cowork-url').value.trim();
     if (!piCoworkUrl) {
       showFeedback('API base URL cannot be empty', 'error');
@@ -433,6 +452,18 @@
       const logData = await logRes.json();
       if (!logData.success) {
         showFeedback('Failed to save log retention: ' + (logData.error || 'unknown error'), 'error');
+        return;
+      }
+
+      // Save db_backup_max_count
+      const dbBackupRes = await fetch('/api/settings/db_backup_max_count', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: String(dbBackupMaxCount) }),
+      });
+      const dbBackupData = await dbBackupRes.json();
+      if (!dbBackupData.success) {
+        showFeedback('Failed to save max DB backups: ' + (dbBackupData.error || 'unknown error'), 'error');
         return;
       }
 
