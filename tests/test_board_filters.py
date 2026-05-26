@@ -124,8 +124,17 @@ def test_filter_dropdown_js_handles_max_height():
     js = _read_static('app.js')
     # Should set maxHeight when constrained
     assert 'maxHeight' in js
-    # Should ensure overflow-y auto when constrained
-    assert 'overflowY' in js
+    # Should reset overflowY in the reset block (clears inline style)
+    assert "style.overflowY = ''" in js
+    # Should use .scrollable class for overflow (not inline style.overflowY = 'auto')
+    assert "classList.add('scrollable')" in js
+    assert "style.overflowY = 'auto'" not in js
+
+
+def test_filter_dropdown_js_resets_scrollable_class():
+    """The positionFilterDropdown reset block must remove the .scrollable class."""
+    js = _read_static('app.js')
+    assert "classList.remove('scrollable')" in js or "classList.remove('dropdown-right', 'dropdown-above', 'scrollable')" in js
 
 
 def test_filter_dropdown_js_repositions_on_resize_scroll():

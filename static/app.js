@@ -33,7 +33,8 @@ async function initBoard() {
     filterDropdownPanel.style.top = '';
     filterDropdownPanel.style.bottom = '';
     filterDropdownPanel.style.maxHeight = '';
-    filterDropdownPanel.classList.remove('dropdown-right', 'dropdown-above');
+    filterDropdownPanel.style.overflowY = '';
+    filterDropdownPanel.classList.remove('dropdown-right', 'dropdown-above', 'scrollable');
 
     const triggerRect = filterDropdownBtn.getBoundingClientRect();
     const panelRect = filterDropdownPanel.getBoundingClientRect();
@@ -52,14 +53,14 @@ async function initBoard() {
       const aboveSpace = triggerRect.top - gap - 8;
       if (aboveSpace < panelRect.height) {
         filterDropdownPanel.style.maxHeight = Math.max(aboveSpace, 120) + 'px';
-        filterDropdownPanel.style.overflowY = 'auto';
+        filterDropdownPanel.classList.add('scrollable');
       }
     } else {
       // Below: check if still too tall even when below trigger
       const belowSpace = viewportH - triggerRect.bottom - gap - 8;
       if (belowSpace < panelRect.height) {
         filterDropdownPanel.style.maxHeight = Math.max(belowSpace, 120) + 'px';
-        filterDropdownPanel.style.overflowY = 'auto';
+        filterDropdownPanel.classList.add('scrollable');
       }
     }
   }
