@@ -99,16 +99,33 @@
 <div class="board-controls">
   <div class="filter-bar">
     <input type="text" id="ticket-search" placeholder="Search tickets..." autocomplete="off">
-    <div class="priority-toggles" id="priority-toggles">
-      <button type="button" class="priority-toggle" data-priority="Critical" style="display:none"><span class="priority-dot" style="background:#dc2626"></span> Critical</button>
-      <button type="button" class="priority-toggle" data-priority="High" style="display:none"><span class="priority-dot" style="background:#d97706"></span> High</button>
-      <button type="button" class="priority-toggle" data-priority="Medium" style="display:none"><span class="priority-dot" style="background:#2563eb"></span> Medium</button>
-      <button type="button" class="priority-toggle" data-priority="Low" style="display:none"><span class="priority-dot" style="background:#6b7280"></span> Low</button>
+    <div class="filter-dropdown-wrapper">
+      <button type="button" class="btn filter-dropdown-trigger" id="filter-dropdown-btn">
+        <span class="filter-dropdown-icon">⚙</span> Filters
+        <span class="filter-badge" id="filter-badge" style="display:none">0</span>
+      </button>
+      <div class="filter-dropdown-panel" id="filter-dropdown-panel" style="display:none">
+        <div class="filter-dropdown-section">
+          <h4 class="filter-dropdown-section-title">Priority</h4>
+          <div class="priority-toggles" id="priority-toggles">
+            <button type="button" class="priority-toggle" data-priority="Critical" style="display:none"><span class="priority-dot" style="background:#dc2626"></span> Critical</button>
+            <button type="button" class="priority-toggle" data-priority="High" style="display:none"><span class="priority-dot" style="background:#d97706"></span> High</button>
+            <button type="button" class="priority-toggle" data-priority="Medium" style="display:none"><span class="priority-dot" style="background:#2563eb"></span> Medium</button>
+            <button type="button" class="priority-toggle" data-priority="Low" style="display:none"><span class="priority-dot" style="background:#6b7280"></span> Low</button>
+          </div>
+        </div>
+        <div class="filter-dropdown-section">
+          <h4 class="filter-dropdown-section-title">Labels</h4>
+          <div class="filter-group label-filters" id="label-filters"></div>
+        </div>
+        <div class="filter-dropdown-section">
+          <h4 class="filter-dropdown-section-title">Display</h4>
+          <label class="filter-dropdown-checkbox"><input type="checkbox" id="show-terminal"> Show terminal statuses</label>
+        </div>
+      </div>
     </div>
-    <div class="filter-group label-filters" id="label-filters"></div>
   </div>
   <div class="filter-summary" id="filter-summary"></div>
-  <label><input type="checkbox" id="show-terminal"> Show terminal statuses</label>
 </div>
 <div class="board" id="board">
   <div id="board-skeleton">

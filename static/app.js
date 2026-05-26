@@ -20,6 +20,52 @@ async function initBoard() {
   const labelFiltersContainer = document.getElementById('label-filters');
   const priorityToggles = document.querySelectorAll('.priority-toggle');
   const filterSummary = document.getElementById('filter-summary');
+  const filterDropdownBtn = document.getElementById('filter-dropdown-btn');
+  const filterDropdownPanel = document.getElementById('filter-dropdown-panel');
+  const filterBadge = document.getElementById('filter-badge');
+
+  // Filter dropdown toggle
+  let _dropdownOpen = false;
+  function toggleFilterDropdown(forceClose) {
+    if (forceClose || _dropdownOpen) {
+      filterDropdownPanel.style.display = 'none';
+      filterDropdownBtn.classList.remove('active');
+      _dropdownOpen = false;
+    } else {
+      filterDropdownPanel.style.display = 'block';
+      filterDropdownBtn.classList.add('active');
+      _dropdownOpen = true;
+    }
+  }
+  function updateFilterBadge() {
+    const count = filterState.selectedPriorities.size + filterState.selectedLabels.size;
+    filterBadge.textContent = count;
+    filterBadge.style.display = count > 0 ? 'inline-flex' : 'none';
+  }
+  if (filterDropdownBtn) {
+    filterDropdownBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleFilterDropdown();
+    });
+  }
+  // Close dropdown on click outside
+  document.addEventListener('click', (e) => {
+    if (_dropdownOpen && !filterDropdownPanel.contains(e.target) && !filterDropdownBtn.contains(e.target)) {
+      toggleFilterDropdown(true);
+    }
+  });
+  // Close dropdown on Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && _dropdownOpen) {
+      toggleFilterDropdown(true);
+    }
+  });
+  // Prevent clicks inside dropdown from closing it
+  if (filterDropdownPanel) {
+    filterDropdownPanel.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+  }
 
   async function loadBoards() {
     const res = await fetch('/api/boards');
@@ -303,6 +349,7 @@ async function initBoard() {
         } else {
           filterState.selectedLabels.delete(e.target.value);
         }
+        updateFilterBadge();
         render();
       });
       labelFiltersContainer.appendChild(label);
@@ -398,6 +445,7 @@ async function initBoard() {
       const color = label ? label.color : '#6b7280';
       activeFilters.push({ type: 'label', value: l, label: l, color: color, clearFn: () => { filterState.selectedLabels.delete(l); updateLabelFilters(); } });
     }
+    updateFilterBadge();
     if (activeFilters.length === 0) { filterSummary.innerHTML = ''; return; }
     for (const f of activeFilters) {
       const pill = document.createElement('button');
@@ -418,6 +466,7 @@ async function initBoard() {
         filterState.selectedLabels.clear();
         if (searchInput) searchInput.value = '';
         updatePriorityToggles();
+        toggleFilterDropdown(true);
         render();
       };
       filterSummary.appendChild(clearAll);
@@ -473,6 +522,7 @@ async function initBoard() {
         filterState.selectedPriorities.add(p);
         btn.classList.add('active');
       }
+      updateFilterBadge();
       render();
     });
   });

@@ -6,9 +6,29 @@ def test_board_page_has_filter_controls(client):
     assert res.status_code == 200
     html = res.data.decode('utf-8')
     assert 'ticket-search' in html
-    assert 'priority-toggles' in html  # Replaced priority-filters with toggle buttons
+    assert 'priority-toggles' in html
     assert 'label-filters' in html
     assert 'Search tickets' in html
+    # New dropdown structure
+    assert 'filter-dropdown-btn' in html
+    assert 'filter-dropdown-panel' in html
+    assert 'filter-badge' in html
+    assert 'filter-dropdown-section' in html
+    # Terminal checkbox moved inside dropdown
+    assert 'show-terminal' in html
+    assert 'filter-dropdown-checkbox' in html
+
+
+def test_board_filter_dropdown_sections(client):
+    """Verify the dropdown panel contains Priority, Labels, and Display sections."""
+    res = client.get('/board')
+    assert res.status_code == 200
+    html = res.data.decode('utf-8')
+    # Section titles inside dropdown
+    assert 'filter-dropdown-section-title' in html
+    assert '>Priority<' in html
+    assert '>Labels<' in html
+    assert '>Display<' in html
 
 
 def test_ticket_list_includes_body_priority_and_labels(client, default_board):
@@ -37,3 +57,14 @@ def test_ticket_list_includes_body_priority_and_labels(client, default_board):
     assert 'labels' in t
     assert len(t['labels']) == 1
     assert t['labels'][0]['name'] == 'Feature'
+
+
+def test_board_page_has_filter_badge_element(client):
+    """The filter badge element exists in the HTML (JS updates visibility/count)."""
+    res = client.get('/board')
+    assert res.status_code == 200
+    html = res.data.decode('utf-8')
+    # Badge element with id filter-badge is present
+    assert 'id="filter-badge"' in html
+    # Badge starts hidden
+    assert 'style="display:none"' in html
