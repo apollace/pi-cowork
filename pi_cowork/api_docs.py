@@ -349,6 +349,47 @@ ENDPOINT_REGISTRY = [
             "- GET {base_url}/api/recurring/{task_id} → get recurring task details",
         ],
     },
+    # ── DB Backup ──
+    {
+        "key": "db_backup_list",
+        "category": "DB Backup",
+        "method": "GET",
+        "path_template": "/api/db-backup/list",
+        "label": "list all database backups (filename, size, timestamp)",
+        "doc_lines": [
+            "- GET {base_url}/api/db-backup/list → list all database backups (filename, size, timestamp)",
+        ],
+    },
+    {
+        "key": "db_backup_create",
+        "category": "DB Backup",
+        "method": "POST",
+        "path_template": "/api/db-backup/create",
+        "label": "create a manual backup of the current database",
+        "doc_lines": [
+            "- POST {base_url}/api/db-backup/create → create a manual backup of the current database",
+        ],
+    },
+    {
+        "key": "db_backup_restore",
+        "category": "DB Backup",
+        "method": "POST",
+        "path_template": "/api/db-backup/restore",
+        "label": "restore database from a backup (field: filename); creates a pre-restore safety backup first",
+        "doc_lines": [
+            "- POST {base_url}/api/db-backup/restore → restore database from a backup (field: filename); creates a pre-restore safety backup first",
+        ],
+    },
+    {
+        "key": "db_backup_delete",
+        "category": "DB Backup",
+        "method": "DELETE",
+        "path_template": "/api/db-backup/delete",
+        "label": "delete a specific backup file (field: filename)",
+        "doc_lines": [
+            "- DELETE {base_url}/api/db-backup/delete → delete a specific backup file (field: filename)",
+        ],
+    },
 ]
 
 # Key → registry entry lookup (built once at import time)
