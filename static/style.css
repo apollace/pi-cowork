@@ -2630,26 +2630,6 @@ textarea.edit-input { resize: vertical; min-height: 2.5rem; }
 .breadcrumb-sep { color: var(--text-muted); opacity: 0.5; }
 .breadcrumb-current { color: var(--text); font-weight: 600; }
 
-/* ── Global Search ── */
-.sidebar-search {
-  padding: 0.5rem 0.75rem 0;
-}
-.sidebar-search input {
-  width: 100%;
-  padding: 0.4rem 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font: inherit;
-  font-size: 0.85rem;
-  background: var(--bg);
-  color: var(--text);
-  transition: border-color .15s, box-shadow .15s;
-}
-.sidebar-search input:focus {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
-}
 
 /* ── Animations ── */
 .group {

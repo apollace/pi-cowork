@@ -33,12 +33,13 @@ def test_base_html_has_markdown_library(client):
     assert 'marked' in html
 
 
-def test_base_html_has_global_search(client):
-    """base.html should include a global search input in the sidebar."""
+def test_base_html_has_no_global_search(client):
+    """base.html should NOT include a global search input in the sidebar (removed in #86)."""
     res = client.get('/board')
     assert res.status_code == 200
     html = res.data.decode('utf-8')
-    assert 'global-search' in html
+    assert 'global-search' not in html
+    assert 'sidebar-search' not in html
 
 
 def test_base_html_has_render_markdown(client):
@@ -214,11 +215,11 @@ def test_css_has_breadcrumb_styles():
     assert '.breadcrumb-current' in css
 
 
-def test_css_has_global_search_styles():
-    """style.css should include sidebar search input styles."""
+def test_css_has_no_global_search_styles():
+    """style.css should NOT include sidebar search input styles (removed in #86)."""
     with open('static/style.css') as f:
         css = f.read()
-    assert '.sidebar-search' in css
+    assert '.sidebar-search' not in css
 
 
 def test_css_has_section_card_styles():
