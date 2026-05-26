@@ -248,6 +248,9 @@ def _migrate(db):
             'CREATE INDEX IF NOT EXISTS idx_recurring_instances_ticket_id ON recurring_instances(ticket_id)'),
         ('idx_labels_workflow_id',
             'CREATE INDEX IF NOT EXISTS idx_labels_workflow_id ON labels(workflow_id)'),
+        # Ticket #85 — Database backup retention setting
+        ('seed_db_backup_max_count',
+         "INSERT OR IGNORE INTO settings (key, value) VALUES ('db_backup_max_count', '10')"),
     ]
     for name, sql in migrations:
         already_applied = db.execute(

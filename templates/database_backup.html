@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Database Backup — pi-CoWork{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Database Backup</h1>
+</div>
+
+<div class="form-card">
+  <h2>Create Backup</h2>
+  <p>Create a manual backup of the current database file.</p>
+  <div class="form-actions">
+    <button class="btn primary" id="btn-create-backup">Create Backup</button>
+    <span id="create-feedback" class="feedback"></span>
+  </div>
+</div>
+
+<div class="form-card" style="margin-top: 1rem;">
+  <h2>Backup List</h2>
+  <div id="backup-list-container">
+    <p class="muted">Loading…</p>
+  </div>
+</div>
+
+<script>
+  async function loadBackups() {
+    const container = document.getElementById('backup-list-container');
+    try {
+      const res = await fetch('/api/db-backup/list');
+      if (!res.ok) {
+        container.innerHTML = '<p class="muted" style="color:var(--danger)">Failed to load backups</p>';
+        return;
+      }
+      const backups = await res.json();
+      if (backups.length === 0) {
+        container.innerHTML = '<p class="muted">No backups yet.</p>';
+        return;
+      }
+      let html = '<table class="backup-table"><thead><tr><th>Filename</th><th>Size</th><th>Timestamp</th><th>Actions</th></tr></thead><tbody>';
+      for (const b of backups) {
+        const sizeStr = formatSize(b.size);
+        const tsStr = b.timestamp ? new Date(b.timestamp).toLocaleString() : 'Unknown';
+        html += '<tr>'
+          + '<td>' + escapeHtml(b.filename) + '</td>'
+          + '<td>' + sizeStr + '</td>'
+          + '<td>' + tsStr + '</td>'
+          + '<td>'
+          +   '<button class="btn small" onclick="restoreBackup(\'' + escapeHtml(b.filename) + '\')">Restore</button> '
+          +   '<button class="btn small danger" onclick="deleteBackup(\'' + escapeHtml(b.filename) + '\')">Delete</button>'
+          + '</td></tr>';
+      }
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    } catch (e) {
+      container.innerHTML = '<p class="muted" style="color:var(--danger)">Error loading backups</p>';
+    }
+  }
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  async function createBackup() {
+    const btn = document.getElementById('btn-create-backup');
+    const fb = document.getElementById('create-feedback');
+    btn.disabled = true;
+    fb.textContent = 'Creating…';
+    fb.className = 'feedback';
+    try {
+      const res = await fetch('/api/db-backup/create', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        fb.textContent = '✅ Backup created: ' + data.filename;
+        fb.className = 'feedback feedback-success';
+        showToast('Backup created successfully', 'success');
+        loadBackups();
+      } else {
+        fb.textContent = '❌ ' + (data.error || 'Failed');
+        fb.className = 'feedback feedback-error';
+        showToast(data.error || 'Failed to create backup', 'error');
+      }
+    } catch (e) {
+      fb.textContent = '❌ Error: ' + e.message;
+      fb.className = 'feedback feedback-error';
+      showToast('Failed to create backup', 'error');
+    } finally {
+      btn.disabled = false;
+      setTimeout(() => { fb.textContent = ''; fb.className = 'feedback'; }, 4000);
+    }
+  }
+
+  async function restoreBackup(filename) {
+    if (!confirm('This will replace the current database. A safety backup will be created first. Continue?')) return;
+    try {
+      const res = await fetch('/api/db-backup/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: filename }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Database restored from ' + filename, 'success');
+        loadBackups();
+      } else {
+        showToast(data.error || 'Restore failed', 'error');
+      }
+    } catch (e) {
+      showToast('Restore failed: ' + e.message, 'error');
+    }
+  }
+
+  async function deleteBackup(filename) {
+    if (!confirm('Permanently delete this backup?')) return;
+    try {
+      const res = await fetch('/api/db-backup/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: filename }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Backup deleted', 'success');
+        loadBackups();
+      } else {
+        showToast(data.error || 'Delete failed', 'error');
+      }
+    } catch (e) {
+      showToast('Delete failed: ' + e.message, 'error');
+    }
+  }
+
+  document.getElementById('btn-create-backup').addEventListener('click', createBackup);
+  loadBackups();
+</script>
+
+<style>
+  .backup-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  .backup-table th,
+  .backup-table td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .backup-table th {
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .feedback-success { color: var(--success, #22c55e); }
+  .feedback-error { color: var(--danger, #ef4444); }
+</style>
+{% endblock %}

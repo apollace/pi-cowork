@@ -24,6 +24,7 @@ DEFAULTS = {
     'warm_spawn_threshold': '3600',
     'run_max_age': '7200',
     'log_retention_days': '30',
+    'db_backup_max_count': '10',
 }
 
 # ── Mapping: config key → env var name ──
@@ -36,7 +37,7 @@ ENV_MAP = {
 }
 
 # ── Type coercion for numeric settings ──
-_INT_KEYS = {'port', 'max_parallel', 'max_per_hour', 'warm_spawn_threshold', 'run_max_age', 'log_retention_days'}
+_INT_KEYS = {'port', 'max_parallel', 'max_per_hour', 'warm_spawn_threshold', 'run_max_age', 'log_retention_days', 'db_backup_max_count'}
 
 
 def get_config(key):
