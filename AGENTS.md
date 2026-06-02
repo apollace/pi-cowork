@@ -41,9 +41,9 @@ pi-cowork/
 │   ├── board.html         # CoWork board with board selector dropdown
 │   ├── ticket_form.html   # Create / edit ticket
 │   ├── ticket_detail.html # Ticket view + comments + gate reviews + agent badge
-
+│   ├── knowledge.html     # Knowledge management page
 │   ├── workflows.html     # Workflows + agents/statuses/transitions/quality gates + import workflow
-└── tests/                 # pytest suite (850+ tests)
+└── tests/                 # pytest suite (930+ tests)
     ├── conftest.py
     ├── test_tickets_api.py
     ├── test_agents_api.py
@@ -799,3 +799,4 @@ Key principles: clarity over cleverness, consistency (reuse design tokens), prog
 - **Batch queries for board listing** — The board listing endpoint uses bulk `WHERE ticket_id IN (...)` queries instead of per-ticket N+1 lookups. Batch functions: `get_comment_counts()`, `get_ticket_labels_batch()`, `get_recurring_parents_batch()`. Queue, gate, and question queries are also scoped to the board's ticket IDs rather than global. Do not reintroduce N+1 patterns.
 - **Performance indexes** — The following indexes exist and must not be dropped: `idx_tickets_board_id`, `idx_comments_ticket_id`, `idx_agent_runs_ticket_id_status`, `idx_agent_queue_ticket_id`, `idx_gate_reviews_ticket_id`, `idx_questions_ticket_id`, `idx_ticket_labels_ticket_id`, `idx_recurring_instances_ticket_id`, `idx_labels_workflow_id`.
 - **`get_model_ids` and `get_thinking_levels` monkeypatching in tests** — the `mock_model_ids` autouse fixture in `conftest.py` patches `get_model_ids` and `get_thinking_levels` in `pi_cowork.api.pi_models` and every API module that imports them at module level. When adding a new API blueprint that imports either function, you **must** also add a `monkeypatch.setattr(your_module, 'get_model_ids', fake)` line to the `mock_model_ids` fixture in `conftest.py`, otherwise model/thinking validation in the new module will use the real (cached or empty) CLI output instead of the test mock list, causing spurious 400 errors in tests.
+- **Knowledge management** — A per-board and global knowledge base for storing Markdown reference entries. Entries with `auto_context=1` are automatically injected into agent prompts and assistant context; all entries are searchable via API endpoints. Agents have read AND write access (via `created_by`/`updated_by` tracking as `'human'` or `'agent'`). Full version history is maintained in the `knowledge_versions` table every time an entry is created or updated. The `knowledge_entries` table uses `board_id=NULL` for global entries (visible across all boards) and `board_id=<id>` for board-scoped entries. When listing entries with `board_id` specified, both global and board-specific entries are returned. The `update_knowledge_entry()` model function uses `board_id=0` as a sentinel value meaning "not changed" (since `None` is a valid value meaning "make this global"). Tag management uses normalized `knowledge_tags` with a many-to-many `knowledge_entry_tags` junction table.
