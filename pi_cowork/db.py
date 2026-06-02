@@ -261,6 +261,51 @@ def _migrate(db):
                 PRIMARY KEY (ticket_id, status_id)
             )
         """),
+        # Ticket #90 — Knowledge Management System
+        ('create_knowledge_entries', """
+            CREATE TABLE IF NOT EXISTS knowledge_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                board_id INTEGER REFERENCES boards(id) ON DELETE CASCADE,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                category TEXT DEFAULT NULL,
+                auto_context BOOLEAN NOT NULL DEFAULT 0,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """),
+        ('create_knowledge_tags', """
+            CREATE TABLE IF NOT EXISTS knowledge_tags (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE
+            )
+        """),
+        ('create_knowledge_entry_tags', """
+            CREATE TABLE IF NOT EXISTS knowledge_entry_tags (
+                entry_id INTEGER NOT NULL REFERENCES knowledge_entries(id) ON DELETE CASCADE,
+                tag_id INTEGER NOT NULL REFERENCES knowledge_tags(id) ON DELETE CASCADE,
+                PRIMARY KEY (entry_id, tag_id)
+            )
+        """),
+        ('create_knowledge_versions', """
+            CREATE TABLE IF NOT EXISTS knowledge_versions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                entry_id INTEGER NOT NULL REFERENCES knowledge_entries(id) ON DELETE CASCADE,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                category TEXT,
+                auto_context BOOLEAN NOT NULL DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                created_by TEXT DEFAULT 'human'
+            )
+        """),
+        ('idx_knowledge_entries_board_id',
+            'CREATE INDEX IF NOT EXISTS idx_knowledge_entries_board_id ON knowledge_entries(board_id)'),
+        ('idx_knowledge_entries_category',
+            'CREATE INDEX IF NOT EXISTS idx_knowledge_entries_category ON knowledge_entries(category)'),
+        ('idx_knowledge_versions_entry_id',
+            'CREATE INDEX IF NOT EXISTS idx_knowledge_versions_entry_id ON knowledge_versions(entry_id)'),
     ]
     for name, sql in migrations:
         already_applied = db.execute(

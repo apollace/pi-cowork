@@ -423,6 +423,21 @@ def spawn_agent(ticket, status, agent, old_status_id=None):
         board_id=board_id, workflow_id=workflow_id
     )
 
+    # ── Knowledge context injection ──
+    # Inject auto_context entries relevant to this board into the agent prompt.
+    from pi_cowork.models import get_auto_context_entries
+    knowledge_entries = get_auto_context_entries(board_id=board_id)
+    knowledge_block = ""
+    if knowledge_entries:
+        lines = ["Knowledge entries (use GET /api/knowledge/{id} for full content):"]
+        for ke in knowledge_entries:
+            scope = f"Board: {ke['board_name']}" if ke.get('board_id') else "Global"
+            preview = (ke['content'] or '')[:150].replace('\n', ' ')
+            if len(ke.get('content') or '') > 150:
+                preview += '...'
+            lines.append(f"- [{ke['id']}] {ke['title']} ({scope}): {preview}")
+        knowledge_block = "\n".join(lines)
+
     if transitions_line:
         done_instruction = "When done: first add a comment to the ticket summarizing what you did, then update the ticket status to exactly one of the statuses listed above (or leave it where it is if you asked questions via the questions endpoint)."
     else:
@@ -460,7 +475,7 @@ New comments since last update:
 
 API:
 {api_docs}
-
+{knowledge_block}
 {goal_instruction}
 {transitions_line}
 {done_instruction}"""
@@ -477,7 +492,7 @@ API:
 {board_ctx}{git_info}{change_note}\nDescription:
 {ticket['body'] or '(no description)'}\nComments:
 {all_comments_block}\nAPI:
-{api_docs}\nThis is a new prompt, forget the goals you had from previous prompts.
+{api_docs}\n{knowledge_block}\nThis is a new prompt, forget the goals you had from previous prompts.
 Your goal: {goal_line}
 {transitions_line}
 {done_instruction}"""

@@ -22,6 +22,7 @@ from pi_cowork.api.endpoint_registry import endpoint_registry_bp
 from pi_cowork.api.pi_models import pi_models_bp
 from pi_cowork.api.db_backup import db_backup_bp
 from pi_cowork.api.ticket_status_overrides import ticket_status_overrides_bp
+from pi_cowork.api.knowledge import knowledge_bp
 
 
 ALL_BLUEPRINTS = [
@@ -47,6 +48,7 @@ ALL_BLUEPRINTS = [
     pi_models_bp,
     db_backup_bp,
     ticket_status_overrides_bp,
+    knowledge_bp,
 ]
 
 

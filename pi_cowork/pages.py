@@ -72,6 +72,11 @@ def register_pages(app):
         from flask import render_template
         return render_template('database_backup.html')
 
+    @app.route('/knowledge')
+    def knowledge_page():
+        from flask import render_template
+        return render_template('knowledge.html')
+
     @app.context_processor
     def inject_persistent_flash():
         state = _read_and_clear_update_state()

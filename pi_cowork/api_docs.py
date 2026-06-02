@@ -421,6 +421,87 @@ ENDPOINT_REGISTRY = [
             "- DELETE {base_url}/api/tickets/{ticket_id}/status_overrides/{status_id} → clear ticket status override for a specific status",
         ],
     },
+    # ── Knowledge Management ──
+    {
+        "key": "knowledge_list",
+        "category": "Knowledge",
+        "method": "GET",
+        "path_template": "/api/knowledge",
+        "label": "list knowledge entries (query: board_id, search, category, auto_context, tags)",
+        "doc_lines": [
+            "- GET {base_url}/api/knowledge?board_id={board_id} → list knowledge entries (query: board_id, search, category, auto_context, tags). Omit board_id for global-only; provide board_id for global + board-specific.",
+        ],
+    },
+    {
+        "key": "knowledge_get",
+        "category": "Knowledge",
+        "method": "GET",
+        "path_template": "/api/knowledge/{entry_id}",
+        "label": "get a knowledge entry by ID",
+        "doc_lines": [
+            "- GET {base_url}/api/knowledge/{entry_id} → get a knowledge entry by ID",
+        ],
+    },
+    {
+        "key": "knowledge_create",
+        "category": "Knowledge",
+        "method": "POST",
+        "path_template": "/api/knowledge",
+        "label": "create a knowledge entry (fields: title, content, board_id, category, auto_context, tags, sort_order)",
+        "doc_lines": [
+            "- POST {base_url}/api/knowledge → create a knowledge entry (fields: title, content, board_id or null for global, category, auto_context, tags as array of strings, sort_order, created_by 'human'/'agent')",
+        ],
+    },
+    {
+        "key": "knowledge_update",
+        "category": "Knowledge",
+        "method": "PUT",
+        "path_template": "/api/knowledge/{entry_id}",
+        "label": "update a knowledge entry (fields: title, content, board_id, category, auto_context, tags, sort_order)",
+        "doc_lines": [
+            "- PUT {base_url}/api/knowledge/{entry_id} → update a knowledge entry (fields: title, content, board_id, category, auto_context, tags as array of strings, sort_order, updated_by 'human'/'agent'). Auto-creates a version history record.",
+        ],
+    },
+    {
+        "key": "knowledge_delete",
+        "category": "Knowledge",
+        "method": "DELETE",
+        "path_template": "/api/knowledge/{entry_id}",
+        "label": "delete a knowledge entry (cascades versions and tags)",
+        "doc_lines": [
+            "- DELETE {base_url}/api/knowledge/{entry_id} → delete a knowledge entry (cascades versions and tags)",
+        ],
+    },
+    {
+        "key": "knowledge_search",
+        "category": "Knowledge",
+        "method": "GET",
+        "path_template": "/api/knowledge/search",
+        "label": "search knowledge entries by query (params: q, board_id)",
+        "doc_lines": [
+            "- GET {base_url}/api/knowledge/search?q=query&board_id={board_id} → search knowledge entries by query (params: q required, board_id optional. Returns global + board-specific matches.)",
+        ],
+    },
+    {
+        "key": "knowledge_versions",
+        "category": "Knowledge",
+        "method": "GET",
+        "path_template": "/api/knowledge/{entry_id}/versions",
+        "label": "list version history for a knowledge entry",
+        "doc_lines": [
+            "- GET {base_url}/api/knowledge/{entry_id}/versions → list version history for a knowledge entry",
+        ],
+    },
+    {
+        "key": "knowledge_version_restore",
+        "category": "Knowledge",
+        "method": "POST",
+        "path_template": "/api/knowledge/{entry_id}/versions/{version_id}/restore",
+        "label": "restore a previous version as current",
+        "doc_lines": [
+            "- POST {base_url}/api/knowledge/{entry_id}/versions/{version_id}/restore → restore a previous version as current (field: restored_by 'human'/'agent')",
+        ],
+    },
 ]
 
 # Key → registry entry lookup (built once at import time)

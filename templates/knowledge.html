@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Knowledge — pi-CoWork{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='knowledge.js') }}"></script>
+{% endblock %}
+
+{% block content %}
+<div class="knowledge-page">
+  <div class="knowledge-header">
+    <h1>📚 Knowledge</h1>
+    <button class="btn primary" id="knowledge-create-btn">+ New Entry</button>
+  </div>
+
+  <div class="knowledge-filters">
+    <div class="filter-group">
+      <label for="knowledge-scope">Scope</label>
+      <select id="knowledge-scope" class="edit-input">
+        <option value="">All</option>
+        <option value="global">Global</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label for="knowledge-search">Search</label>
+      <input type="text" id="knowledge-search" class="edit-input" placeholder="Search titles & content…">
+    </div>
+    <div class="filter-group">
+      <label for="knowledge-category">Category</label>
+      <select id="knowledge-category" class="edit-input">
+        <option value="">All Categories</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label for="knowledge-auto-context">Auto-context only</label>
+      <input type="checkbox" id="knowledge-auto-context">
+    </div>
+  </div>
+
+  <div id="knowledge-grid" class="knowledge-grid">
+    <div class="knowledge-empty">Loading knowledge entries…</div>
+  </div>
+
+  <!-- Detail Modal -->
+  <div id="knowledge-detail-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h2 id="knowledge-detail-title"></h2>
+        <div class="modal-header-actions">
+          <button class="btn small" id="knowledge-edit-btn">Edit</button>
+          <button class="btn small" id="knowledge-versions-btn">Versions</button>
+          <button class="btn small ghost" id="knowledge-detail-close">✕</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="knowledge-detail-meta">
+          <span id="knowledge-detail-scope" class="badge"></span>
+          <span id="knowledge-detail-category" class="badge"></span>
+          <span id="knowledge-detail-auto-context" class="badge"></span>
+          <span id="knowledge-detail-date" class="muted"></span>
+        </div>
+        <div id="knowledge-detail-tags" class="knowledge-tags-list"></div>
+        <div id="knowledge-detail-content" class="knowledge-content-preview"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create/Edit Modal -->
+  <div id="knowledge-form-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h2 id="knowledge-form-heading">New Knowledge Entry</h2>
+        <button class="btn small ghost" id="knowledge-form-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="knowledge-form">
+          <input type="hidden" id="knowledge-form-id">
+          <div class="form-row">
+            <div class="form-field">
+              <label for="knowledge-form-title">Title*</label>
+              <input type="text" id="knowledge-form-title" class="edit-input" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-field">
+              <label for="knowledge-form-board-id">Board Scope*</label>
+              <select id="knowledge-form-board-id" class="edit-input">
+                <option value="__global__">Global (all boards)</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="knowledge-form-category">Category</label>
+              <input type="text" id="knowledge-form-category" class="edit-input" placeholder="e.g. Convention, Process, Reference">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-field">
+              <label for="knowledge-form-content">Content (Markdown)*</label>
+              <div class="knowledge-editor-wrap">
+                <div class="knowledge-editor-tabs">
+                  <button type="button" class="knowledge-editor-tab active" data-tab="write">Write</button>
+                  <button type="button" class="knowledge-editor-tab" data-tab="preview">Preview</button>
+                </div>
+                <textarea id="knowledge-form-content" class="edit-input knowledge-textarea" rows="12" required></textarea>
+                <div id="knowledge-form-preview" class="knowledge-preview-area"></div>
+              </div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-field">
+              <label for="knowledge-form-tags">Tags</label>
+              <input type="text" id="knowledge-form-tags" class="edit-input" placeholder="Comma-separated tags">
+            </div>
+            <div class="form-field">
+              <label for="knowledge-form-auto-context">⚡ Auto-context (inject into agent prompts)</label>
+              <input type="checkbox" id="knowledge-form-auto-context">
+            </div>
+            <div class="form-field">
+              <label for="knowledge-form-sort-order">Sort order</label>
+              <input type="number" id="knowledge-form-sort-order" class="edit-input" value="0" style="width:80px;">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn primary">Save</button>
+            <button type="button" class="btn ghost" id="knowledge-form-cancel">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Versions Modal -->
+  <div id="knowledge-versions-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h2>Version History</h2>
+        <button class="btn small ghost" id="knowledge-versions-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="knowledge-versions-list" class="knowledge-versions-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
