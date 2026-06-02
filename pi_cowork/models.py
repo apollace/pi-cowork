@@ -806,3 +806,346 @@ def cron_human_readable(cron_expression):
     if minute == '0' and hour == '9' and dom == '1' and month == '*' and dow == '*':
         return "1st of every month at 9:00 AM"
     return cron_expression
+
+
+# ---------------------------------------------------------------------------
+# Knowledge Management
+# ---------------------------------------------------------------------------
+
+def get_knowledge_entries(board_id=None, search=None, category=None, auto_context=None, tags=None):
+    """List knowledge entries with optional filters.
+    
+    When board_id is specified, returns both global (board_id IS NULL) and 
+    board-specific entries for that board.
+    When board_id is None, returns only global entries.
+    """
+    conditions = []
+    args = []
+    
+    if board_id is not None:
+        conditions.append("(ke.board_id = ? OR ke.board_id IS NULL)")
+        args.append(board_id)
+    else:
+        conditions.append("ke.board_id IS NULL")
+    
+    if search:
+        conditions.append("(ke.title LIKE ? OR ke.content LIKE ?)")
+        args.extend([f'%{search}%', f'%{search}%'])
+    
+    if category is not None:
+        conditions.append("ke.category = ?")
+        args.append(category)
+    
+    if auto_context is not None:
+        conditions.append("ke.auto_context = ?")
+        args.append(1 if auto_context else 0)
+    
+    if tags:
+        tag_names = tags if isinstance(tags, list) else [tags]
+        placeholders = ','.join('?' * len(tag_names))
+        conditions.append(f"""ke.id IN (
+            SELECT ket.entry_id FROM knowledge_entry_tags ket
+            JOIN knowledge_tags kt ON ket.tag_id = kt.id
+            WHERE kt.name IN ({placeholders})
+        )""")
+        args.extend(tag_names)
+    
+    where = ' AND '.join(conditions) if conditions else '1=1'
+    rows = query_db(
+        f"""SELECT ke.*, b.name AS board_name
+           FROM knowledge_entries ke
+           LEFT JOIN boards b ON ke.board_id = b.id
+           WHERE {where}
+           ORDER BY ke.sort_order, ke.updated_at DESC""",
+        tuple(args)
+    )
+    result = []
+    for r in rows:
+        entry = row_to_dict(r)
+        # Load tags for entry
+        tag_rows = query_db(
+            """SELECT kt.id, kt.name FROM knowledge_tags kt
+               JOIN knowledge_entry_tags ket ON ket.tag_id = kt.id
+               WHERE ket.entry_id = ? ORDER BY kt.name""",
+            (entry['id'],)
+        )
+        entry['tags'] = [row_to_dict(t) for t in tag_rows]
+        result.append(entry)
+    return result
+
+
+def get_knowledge_entry(entry_id):
+    """Get a single knowledge entry with tags."""
+    row = query_db(
+        """SELECT ke.*, b.name AS board_name
+           FROM knowledge_entries ke
+           LEFT JOIN boards b ON ke.board_id = b.id
+           WHERE ke.id = ?""",
+        (entry_id,), one=True
+    )
+    if not row:
+        return None
+    entry = row_to_dict(row)
+    tag_rows = query_db(
+        """SELECT kt.id, kt.name FROM knowledge_tags kt
+           JOIN knowledge_entry_tags ket ON ket.tag_id = kt.id
+           WHERE ket.entry_id = ? ORDER BY kt.name""",
+        (entry_id,)
+    )
+    entry['tags'] = [row_to_dict(t) for t in tag_rows]
+    return entry
+
+
+def search_knowledge(query, board_id=None):
+    """Full-text search across title + content, filtered by board scope.
+    Returns global + board-specific matches.
+    """
+    conditions = []
+    args = []
+    
+    if board_id is not None:
+        conditions.append("(ke.board_id = ? OR ke.board_id IS NULL)")
+        args.append(board_id)
+    
+    if query:
+        conditions.append("(ke.title LIKE ? OR ke.content LIKE ?)")
+        args.extend([f'%{query}%', f'%{query}%'])
+    
+    where = ' AND '.join(conditions) if conditions else '1=1'
+    rows = query_db(
+        f"""SELECT ke.*, b.name AS board_name
+           FROM knowledge_entries ke
+           LEFT JOIN boards b ON ke.board_id = b.id
+           WHERE {where}
+           ORDER BY ke.sort_order, ke.updated_at DESC""",
+        tuple(args)
+    )
+    result = []
+    for r in rows:
+        entry = row_to_dict(r)
+        tag_rows = query_db(
+            """SELECT kt.id, kt.name FROM knowledge_tags kt
+               JOIN knowledge_entry_tags ket ON ket.tag_id = kt.id
+               WHERE ket.entry_id = ? ORDER BY kt.name""",
+            (entry['id'],)
+        )
+        entry['tags'] = [row_to_dict(t) for t in tag_rows]
+        result.append(entry)
+    return result
+
+
+def create_knowledge_entry(title, content, board_id=None, category=None,
+                            auto_context=False, tags=None, sort_order=0,
+                            created_by='human'):
+    """Create a knowledge entry. Returns the new entry dict with tags."""
+    auto_context_val = 1 if auto_context else 0
+    cur = run_db(
+        """INSERT INTO knowledge_entries (board_id, title, content, category, auto_context, sort_order)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (board_id, title.strip(), content, category, auto_context_val, sort_order)
+    )
+    entry_id = cur.lastrowid
+    
+    # Create version history record
+    run_db(
+        """INSERT INTO knowledge_versions (entry_id, title, content, category, auto_context, created_by)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (entry_id, title.strip(), content, category, auto_context_val, created_by)
+    )
+    
+    # Handle tags
+    if tags:
+        _set_entry_tags(entry_id, tags)
+    
+    return get_knowledge_entry(entry_id)
+
+
+def update_knowledge_entry(entry_id, title=None, content=None, board_id=0,
+                            category=None, auto_context=None, tags=None,
+                            sort_order=None, updated_by='human'):
+    """Update a knowledge entry. Auto-creates version record.
+    
+    board_id uses 0 as sentinel for 'not changed' since None is a valid value (global).
+    Returns the updated entry dict or None if not found.
+    """
+    entry = get_knowledge_entry(entry_id)
+    if not entry:
+        return None
+    
+    updates = []
+    args = []
+    
+    if title is not None:
+        updates.append("title = ?")
+        args.append(title.strip())
+    if content is not None:
+        updates.append("content = ?")
+        args.append(content)
+    # board_id uses 0 sentinel — only update if explicitly provided
+    if board_id == 0:
+        pass  # not changed
+    elif board_id is None:
+        updates.append("board_id = ?")
+        args.append(None)  # set to global
+    else:
+        updates.append("board_id = ?")
+        args.append(board_id)
+    if category is not None:
+        updates.append("category = ?")
+        args.append(category if category else None)
+    if auto_context is not None:
+        updates.append("auto_context = ?")
+        args.append(1 if auto_context else 0)
+    if sort_order is not None:
+        updates.append("sort_order = ?")
+        args.append(sort_order)
+    
+    if updates:
+        updates.append("updated_at = CURRENT_TIMESTAMP")
+        args.append(entry_id)
+        run_db(
+            f"UPDATE knowledge_entries SET {', '.join(updates)} WHERE id = ?",
+            tuple(args)
+        )
+    
+    # Handle tags update
+    if tags is not None:
+        _set_entry_tags(entry_id, tags)
+    
+    # Create version history record (always record after any update)
+    updated_entry = get_knowledge_entry(entry_id)
+    if updated_entry:
+        run_db(
+            """INSERT INTO knowledge_versions (entry_id, title, content, category, auto_context, created_by)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (entry_id, updated_entry['title'], updated_entry['content'],
+             updated_entry.get('category'), 1 if updated_entry.get('auto_context') else 0,
+             updated_by)
+        )
+    
+    return updated_entry
+
+
+def delete_knowledge_entry(entry_id):
+    """Delete a knowledge entry (cascades versions + tags)."""
+    run_db("DELETE FROM knowledge_entry_tags WHERE entry_id = ?", (entry_id,))
+    run_db("DELETE FROM knowledge_versions WHERE entry_id = ?", (entry_id,))
+    run_db("DELETE FROM knowledge_entries WHERE id = ?", (entry_id,))
+
+
+def get_knowledge_versions(entry_id):
+    """Get all versions of a knowledge entry."""
+    rows = query_db(
+        "SELECT * FROM knowledge_versions WHERE entry_id = ? ORDER BY created_at DESC, id DESC",
+        (entry_id,)
+    )
+    return [row_to_dict(r) for r in rows]
+
+
+def get_knowledge_version(entry_id, version_id):
+    """Get a specific version of a knowledge entry."""
+    row = query_db(
+        "SELECT * FROM knowledge_versions WHERE entry_id = ? AND id = ?",
+        (entry_id, version_id), one=True
+    )
+    return row_to_dict(row) if row else None
+
+
+def restore_knowledge_version(entry_id, version_id, restored_by='human'):
+    """Restore a previous version as the current entry. Returns the updated entry."""
+    version = get_knowledge_version(entry_id, version_id)
+    if not version:
+        return None
+    return update_knowledge_entry(
+        entry_id,
+        title=version['title'],
+        content=version['content'],
+        category=version.get('category'),
+        auto_context=bool(version.get('auto_context', 0)),
+        updated_by=restored_by
+    )
+
+
+def get_auto_context_entries(board_id=None):
+    """Get all auto_context entries for injection into agent prompts.
+    Returns entries with board_id matching the given board OR global (board_id IS NULL)."""
+    if board_id is not None:
+        rows = query_db(
+            """SELECT ke.id, ke.title, ke.content, ke.board_id, b.name AS board_name, ke.category
+               FROM knowledge_entries ke
+               LEFT JOIN boards b ON ke.board_id = b.id
+               WHERE ke.auto_context = 1 AND (ke.board_id = ? OR ke.board_id IS NULL)
+               ORDER BY ke.sort_order, ke.updated_at DESC""",
+            (board_id,)
+        )
+    else:
+        rows = query_db(
+            """SELECT ke.id, ke.title, ke.content, ke.board_id, b.name AS board_name, ke.category
+               FROM knowledge_entries ke
+               LEFT JOIN boards b ON ke.board_id = b.id
+               WHERE ke.auto_context = 1 AND ke.board_id IS NULL
+               ORDER BY ke.sort_order, ke.updated_at DESC"""
+        )
+    return [row_to_dict(r) for r in rows]
+
+
+def get_knowledge_categories(board_id=None):
+    """Get distinct categories for knowledge entries."""
+    if board_id is not None:
+        rows = query_db(
+            """SELECT DISTINCT ke.category FROM knowledge_entries ke
+               WHERE ke.category IS NOT NULL AND (ke.board_id = ? OR ke.board_id IS NULL)
+               ORDER BY ke.category""",
+            (board_id,)
+        )
+    else:
+        rows = query_db(
+            """SELECT DISTINCT category FROM knowledge_entries
+               WHERE category IS NOT NULL AND board_id IS NULL
+               ORDER BY category"""
+        )
+    return [r['category'] for r in rows]
+
+
+def get_knowledge_count_for_board(board_id):
+    """Get count of knowledge entries relevant to a board (global + board-specific)."""
+    row = query_db(
+        """SELECT COUNT(*) AS c FROM knowledge_entries
+           WHERE board_id = ? OR board_id IS NULL""",
+        (board_id,), one=True
+    )
+    return row['c'] if row else 0
+
+
+def _set_entry_tags(entry_id, tags):
+    """Set tags for a knowledge entry. tags is a list of tag name strings."""
+    # Clear existing tags
+    run_db("DELETE FROM knowledge_entry_tags WHERE entry_id = ?", (entry_id,))
+    
+    for tag_name in tags:
+        tag_name = tag_name.strip()
+        if not tag_name:
+            continue
+        # Find or create tag
+        existing = query_db(
+            "SELECT id FROM knowledge_tags WHERE name = ?", (tag_name,), one=True
+        )
+        if existing:
+            tag_id = existing['id']
+        else:
+            cur = run_db("INSERT INTO knowledge_tags (name) VALUES (?)", (tag_name,))
+            tag_id = cur.lastrowid
+        # Link entry to tag
+        try:
+            run_db(
+                "INSERT INTO knowledge_entry_tags (entry_id, tag_id) VALUES (?, ?)",
+                (entry_id, tag_id)
+            )
+        except Exception:
+            pass  # Duplicate, ignore
+
+
+def get_all_tags():
+    """Get all knowledge tags."""
+    rows = query_db("SELECT * FROM knowledge_tags ORDER BY name")
+    return [row_to_dict(r) for r in rows]

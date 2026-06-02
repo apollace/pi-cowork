@@ -96,12 +96,26 @@ def _assistant_session_dir(board_id=None):
     return os.path.join(work_dir, '.pi-sessions', 'assistant-global')
 
 
-def _get_assistant_system_prompt(cfg):
+def _get_assistant_system_prompt(cfg, board_id=None):
     base = (cfg.get('system_prompt') or '').strip()
     if not base:
         base = config.DEFAULT_ASSISTANT_SYSTEM_PROMPT
     docs = build_assistant_api_docs(cfg.get('api_endpoints'))
-    return f"{base}\n\n{docs}"
+    prompt = f"{base}\n\n{docs}"
+    # Inject board-relevant knowledge entries if auto_context is enabled
+    if cfg.get('auto_context') and board_id is not None:
+        from pi_cowork.models import get_auto_context_entries
+        entries = get_auto_context_entries(board_id=board_id)
+        if entries:
+            lines = ["\nKnowledge:"]
+            for ke in entries:
+                scope = f"Board: {ke['board_name']}" if ke.get('board_id') else "Global"
+                preview = (ke['content'] or '')[:200].replace('\n', ' ')
+                if len(ke.get('content') or '') > 200:
+                    preview += '...'
+                lines.append(f"- [{ke['id']}] {ke['title']} ({scope}): {preview}")
+            prompt += '\n'.join(lines)
+    return prompt
 
 
 # ---------------------------------------------------------------------------
@@ -162,7 +176,7 @@ def api_assistant_chat():
         model = cfg.get('model')
         work_dir = _assistant_work_dir(board_id)
         session_dir = _assistant_session_dir(board_id)
-        system_prompt = _get_assistant_system_prompt(cfg)
+        system_prompt = _get_assistant_system_prompt(cfg, board_id=board_id)
 
         cmd = [
             "pi",

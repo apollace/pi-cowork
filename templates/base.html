@@ -27,6 +27,9 @@
           <a class="nav-link {% if request.endpoint == 'board' %}active{% endif %}" href="{{ url_for('board') }}">
             <span class="icon">📋</span> Board
           </a>
+          <a class="nav-link {% if request.endpoint == 'knowledge_page' %}active{% endif %}" href="{{ url_for('knowledge_page') }}">
+            <span class="icon">📚</span> Knowledge
+          </a>
           <a class="nav-link {% if request.endpoint == 'update_page' %}active{% endif %}" href="{{ url_for('update_page') }}">
             <span class="icon">⬆️</span> Update
           </a>

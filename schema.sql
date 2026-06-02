@@ -268,6 +268,48 @@ INSERT OR IGNORE INTO statuses (name, sort_order, is_default, is_terminal, agent
 ('Closed', 13, 0, 1, NULL, NULL, 1),
 ('Dropped', 14, 0, 1, NULL, NULL, 1);
 
+-- Knowledge entries (current/live version)
+CREATE TABLE IF NOT EXISTS knowledge_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    board_id INTEGER REFERENCES boards(id) ON DELETE CASCADE,  -- NULL = global
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,  -- Markdown
+    category TEXT DEFAULT NULL,
+    auto_context BOOLEAN NOT NULL DEFAULT 0,  -- Inject into agent prompts?
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Knowledge tags (normalized)
+CREATE TABLE IF NOT EXISTS knowledge_tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
+);
+
+-- Knowledge entry ↔ tag mapping
+CREATE TABLE IF NOT EXISTS knowledge_entry_tags (
+    entry_id INTEGER NOT NULL REFERENCES knowledge_entries(id) ON DELETE CASCADE,
+    tag_id INTEGER NOT NULL REFERENCES knowledge_tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (entry_id, tag_id)
+);
+
+-- Version history (full revision tracking)
+CREATE TABLE IF NOT EXISTS knowledge_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id INTEGER NOT NULL REFERENCES knowledge_entries(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    category TEXT,
+    auto_context BOOLEAN NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_by TEXT DEFAULT 'human'  -- 'human' or 'agent'
+);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_entries_board_id ON knowledge_entries(board_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_entries_category ON knowledge_entries(category);
+CREATE INDEX IF NOT EXISTS idx_knowledge_versions_entry_id ON knowledge_versions(entry_id);
+
 -- Seed transitions (when to move — the "how" is in the API docs)
 -- Instructions describe *when* to transition, not the API call (that's redundant with the API docs in the prompt).
 INSERT OR IGNORE INTO transitions (from_status_id, to_status_id, instructions, workflow_id) VALUES

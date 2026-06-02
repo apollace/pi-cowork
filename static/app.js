@@ -164,7 +164,16 @@ async function initBoard() {
       }
       // Update header
       boardTitle.textContent = currentBoardData.name;
-      boardMeta.innerHTML = `<span class="badge muted">${escapeHtml(currentBoardData.workflow_name)}</span>`;
+      boardMeta.innerHTML = `<span class="badge muted">${escapeHtml(currentBoardData.workflow_name)}</span> <a href="/knowledge" class="badge muted" style="cursor:pointer;text-decoration:none;">📚 Knowledge <span id="board-knowledge-count"></span></a>`;
+      // Load knowledge count for this board
+      try {
+        const kRes = await fetch('/api/knowledge?board_id=' + currentBoardId);
+        if (kRes.ok) {
+          const kEntries = await kRes.json();
+          const countEl = document.getElementById('board-knowledge-count');
+          if (countEl) countEl.textContent = '(' + kEntries.length + ')';
+        }
+      } catch(e) { /* silently ignore */ }
       renderRunningPanel(runningRuns);
     } catch (e) {
       if (typeof showToast === 'function') showToast('Failed to load board: ' + e.message, 'error');
