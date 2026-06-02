@@ -685,20 +685,8 @@ def process_recurring_tasks():
         bus.publish(TICKET_CREATED, ticket_id=ticket_id, title=ticket_title, board_id=task['board_id'], status_id=task['status_id'])
 
         # Bug C fix: If the initial status has an agent, spawn it (mirrors api_create_ticket)
-        from pi_cowork.agents import try_spawn_or_queue
-        status = get_status(task['status_id'])
-        if status and status.get('agent_id'):
-            agent = get_agent(status['agent_id'])
-            if agent:
-                full_ticket = query_db("""
-                    SELECT t.*, b.name AS board_name, w.name AS workflow_name, b.workflow_id
-                    FROM tickets t
-                    JOIN boards b ON t.board_id = b.id
-                    JOIN workflows w ON b.workflow_id = w.id
-                    WHERE t.id = ?
-                """, (ticket_id,), one=True)
-                if full_ticket:
-                    try_spawn_or_queue(row_to_dict(full_ticket), status, agent)
+        from pi_cowork.agents import spawn_agent_for_ticket
+        spawn_agent_for_ticket(ticket_id, task['status_id'])
 
         # Update next_trigger_at and last_triggered_at
         last_triggered = compute_next_trigger(task['cron_expression'], after=triggered_time if triggered_time else datetime.now(timezone.utc))

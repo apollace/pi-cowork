@@ -16,7 +16,7 @@ from pi_cowork.models import (
     get_comment_counts, get_ticket_labels_batch, get_recurring_parents_batch,
     get_ticket_status_overrides,
 )
-from pi_cowork.agents import try_spawn_or_queue, cleanup_runs, spawn_agent
+from pi_cowork.agents import try_spawn_or_queue, cleanup_runs, spawn_agent, spawn_agent_for_ticket
 from pi_cowork.models import get_agents, get_agent
 from pi_cowork.events import bus, TICKET_CREATED, TICKET_STATUS_CHANGED, TICKET_UPDATED, GATE_PENDING
 from pi_cowork.system_logs import add_log
@@ -219,19 +219,7 @@ def api_create_ticket():
         set_ticket_labels(ticket_id, board['workflow_id'], label_ids)
 
     # If the initial status has an agent, spawn it (mirrors api_update_ticket logic)
-    status = get_status(status_id)
-    if status and status.get('agent_id'):
-        agent = get_agent(status['agent_id'])
-        if agent:
-            full_ticket = query_db("""
-                SELECT t.*, b.name AS board_name, w.name AS workflow_name, b.workflow_id
-                FROM tickets t
-                JOIN boards b ON t.board_id = b.id
-                JOIN workflows w ON b.workflow_id = w.id
-                WHERE t.id = ?
-            """, (ticket_id,), one=True)
-            if full_ticket:
-                try_spawn_or_queue(row_to_dict(full_ticket), status, agent)
+    spawn_agent_for_ticket(ticket_id, status_id)
 
     return jsonify({"id": ticket_id, "status_id": status_id, "board_id": board_id, "labels": get_ticket_labels(ticket_id)}), 201
 
