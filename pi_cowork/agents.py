@@ -299,6 +299,28 @@ def drain_queue():
 # Spawn logic
 # ---------------------------------------------------------------------------
 
+def spawn_agent_for_ticket(ticket_id, status_id):
+    """Spawn an agent for a newly-created ticket if its status has one.
+
+    Encapsulates the common pattern: get status → check agent_id → get agent →
+    query full ticket (with board/workflow joins) → try_spawn_or_queue.
+    Used after ticket creation and recurring-task triggers.
+    """
+    status = get_status(status_id)
+    if status and status.get('agent_id'):
+        agent = get_agent(status['agent_id'])
+        if agent:
+            full_ticket = query_db("""
+                SELECT t.*, b.name AS board_name, w.name AS workflow_name, b.workflow_id
+                FROM tickets t
+                JOIN boards b ON t.board_id = b.id
+                JOIN workflows w ON b.workflow_id = w.id
+                WHERE t.id = ?
+            """, (ticket_id,), one=True)
+            if full_ticket:
+                try_spawn_or_queue(row_to_dict(full_ticket), status, agent)
+
+
 def try_spawn_or_queue(ticket, status, agent, old_status_id=None):
     # Bug 2 fix: Clean up any stale queue entries for this ticket before
     # attempting a direct spawn. Without this, an agent spawned directly

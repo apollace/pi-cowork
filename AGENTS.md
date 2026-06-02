@@ -788,7 +788,7 @@ Key principles: clarity over cleverness, consistency (reuse design tokens), prog
 - Adding heavy frontend frameworks — keep it vanilla.
 - Adding complex UIs or auth without explicit user request.
 - Breaking existing test coverage — run tests before committing.
-- Moving agent spawn logic outside `spawn_agent()`, `api_update_ticket()`, `api_create_ticket()`, `process_recurring_tasks()`, or `api_trigger_recurring()`. All five paths now spawn agents correctly.
+- Moving agent spawn logic outside `spawn_agent()`, `spawn_agent_for_ticket()`, `api_update_ticket()`, `api_create_ticket()`, `process_recurring_tasks()`, or `api_trigger_recurring()`. `spawn_agent_for_ticket(ticket_id, status_id)` in `pi_cowork/agents.py` is the shared helper used by `api_create_ticket`, `process_recurring_tasks`, and `api_trigger_recurring` to avoid duplicating the get-status→get-agent→query-full-ticket→try_spawn_or_queue pattern. All paths spawn agents correctly.
 - Calling `request.get_json()` (without `silent=True`) on POST endpoints that may receive an empty body or non-JSON content type. Flask returns 415 Unsupported Media Type. Use `request.get_json(silent=True) or {}` for safe parsing.
 
 ## Known Constraints & Recurring Pitfalls

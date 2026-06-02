@@ -84,7 +84,7 @@ def test_answer_last_question_triggers_agent_spawn(client, default_workflow, def
 
     # Create ticket in Research status — suppress agent spawn on creation
     # so the test can isolate the spawn-triggering-by-answer behavior.
-    with patch('pi_cowork.api.tickets.try_spawn_or_queue'):
+    with patch('pi_cowork.api.tickets.spawn_agent_for_ticket'):
         res = client.post('/api/tickets', json={
             'title': 'Q',
             'board_id': default_board['id'],
@@ -134,7 +134,7 @@ def test_batch_answer_creates_single_comment(client, default_workflow, default_b
 
     # Create ticket in Research status — suppress agent spawn on creation
     # so the test can isolate the batch-answer comment behavior.
-    with patch('pi_cowork.api.tickets.try_spawn_or_queue'):
+    with patch('pi_cowork.api.tickets.spawn_agent_for_ticket'):
         res = client.post('/api/tickets', json={
             'title': 'Q',
             'board_id': default_board['id'],
