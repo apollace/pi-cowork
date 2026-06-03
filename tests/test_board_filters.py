@@ -162,3 +162,173 @@ def test_filter_dropdown_mobile_css_respects_right_alignment():
     mobile_section = css[mobile_start:mobile_start + 2000]
     # Should have .dropdown-right rule in mobile
     assert 'dropdown-right' in mobile_section
+
+
+# ── Board preferences persistence tests ──
+
+def test_app_js_has_save_board_prefs_function():
+    """The app.js must define a saveBoardPrefs() function."""
+    js = _read_static('app.js')
+    assert 'function saveBoardPrefs()' in js
+
+
+def test_app_js_has_restore_board_prefs_function():
+    """The app.js must define a restoreBoardPrefs() function."""
+    js = _read_static('app.js')
+    assert 'function restoreBoardPrefs()' in js
+
+
+def test_app_js_uses_board_prefs_key_pattern():
+    """The localStorage key must follow the board_prefs_{id} pattern."""
+    js = _read_static('app.js')
+    assert "'board_prefs_'" in js or '"board_prefs_"' in js
+    assert 'boardPrefsKey' in js
+
+
+def test_app_js_collapsed_groups_stored_as_status_ids():
+    """Collapsed groups must be stored as an array of status IDs."""
+    js = _read_static('app.js')
+    # The save should spread collapsed (a Set of status IDs) into an array
+    assert 'collapsedGroups: [...collapsed]' in js
+    # The restore should populate collapsed from an array
+    assert "collapsed.clear()" in js
+    # Should iterate and add each ID from collapsedGroups
+    assert "collapsedGroups.forEach" in js or "collapsedGroups.forEach" in js
+
+
+def test_app_js_save_includes_all_filter_fields():
+    """The saved preferences must include all five filter/layout fields."""
+    js = _read_static('app.js')
+    # Find the saveBoardPrefs function body
+    save_start = js.find('function saveBoardPrefs()')
+    assert save_start != -1
+    save_end = js.find('function restoreBoardPrefs()', save_start)
+    save_body = js[save_start:save_end]
+    assert 'searchQuery' in save_body
+    assert 'selectedPriorities' in save_body
+    assert 'selectedLabels' in save_body
+    assert 'collapsedGroups' in save_body
+    assert 'showTerminal' in save_body
+
+
+def test_app_js_restore_applies_all_filter_fields():
+    """The restore function must apply all five filter/layout fields."""
+    js = _read_static('app.js')
+    restore_start = js.find('function restoreBoardPrefs()')
+    assert restore_start != -1
+    # Find end of restore function
+    # Search for the next function definition or top-level declaration
+    restore_end = js.find('\n  async function loadBoards', restore_start)
+    if restore_end == -1:
+        restore_end = js.find('\n  }\n  ', restore_start + 100)
+    restore_body = js[restore_start:restore_end]
+    # Each field must be restored
+    assert 'filterState.searchQuery' in restore_body
+    assert 'filterState.selectedPriorities' in restore_body
+    assert 'filterState.selectedLabels' in restore_body
+    assert 'collapsed' in restore_body
+    assert 'showTerminal.checked' in restore_body
+
+
+def test_app_js_save_called_on_search_input():
+    """saveBoardPrefs must be called when the search input changes."""
+    js = _read_static('app.js')
+    # Find the search input event handler
+    idx = js.find("searchInput.addEventListener('input'")
+    assert idx != -1
+    # Check that saveBoardPrefs is called within this handler
+    handler_block = js[idx:idx + 300]
+    assert 'saveBoardPrefs()' in handler_block
+
+
+def test_app_js_save_called_on_priority_toggle():
+    """saveBoardPrefs must be called when a priority toggle is clicked."""
+    js = _read_static('app.js')
+    # There are two priorityToggles.forEach occurrences — the click handler is the second one
+    first_idx = js.find("priorityToggles.forEach")
+    assert first_idx != -1
+    idx = js.find("priorityToggles.forEach", first_idx + 1)
+    assert idx != -1
+    handler_block = js[idx:idx + 600]
+    assert 'saveBoardPrefs()' in handler_block
+
+
+def test_app_js_save_called_on_label_filter_change():
+    """saveBoardPrefs must be called when a label filter checkbox changes."""
+    js = _read_static('app.js')
+    # Find the label filter change handler inside updateLabelFilters
+    idx = js.find("'change'", js.find('updateLabelFilters'))
+    assert idx != -1
+    # Get a reasonable chunk around it
+    block = js[idx:idx + 300]
+    assert 'saveBoardPrefs()' in block
+
+
+def test_app_js_save_called_on_collapse_toggle():
+    """saveBoardPrefs must be called when a group header is collapsed/expanded."""
+    js = _read_static('app.js')
+    # Find the click handler for group headers inside buildGroup
+    # Look for the first collapsed.add/collapsed.delete in buildGroup
+    idx = js.find('group.querySelector')
+    assert idx != -1
+    # The group-header click handler should contain saveBoardPrefs
+    header_handler_start = js.find('header.addEventListener(\'click\'', idx - 200)
+    assert header_handler_start != -1
+    handler_block = js[header_handler_start:header_handler_start + 500]
+    assert 'saveBoardPrefs()' in handler_block
+
+
+def test_app_js_save_called_on_show_terminal_change():
+    """saveBoardPrefs must be called when the show-terminal checkbox changes."""
+    js = _read_static('app.js')
+    idx = js.find("showTerminal.addEventListener('change'")
+    assert idx != -1
+    handler_block = js[idx:idx + 300]
+    assert 'saveBoardPrefs()' in handler_block
+
+
+def test_app_js_save_called_on_clear_all():
+    """saveBoardPrefs must be called when the 'Clear all' button is clicked."""
+    js = _read_static('app.js')
+    idx = js.find("clearAll.textContent = 'Clear all'")
+    assert idx != -1
+    handler_block = js[idx:idx + 500]
+    assert 'saveBoardPrefs()' in handler_block
+
+
+def test_app_js_restore_called_in_refresh():
+    """restoreBoardPrefs must be called in the refresh() function before render()."""
+    js = _read_static('app.js')
+    # Find where restoreBoardPrefs is called
+    idx = js.find('restoreBoardPrefs()')
+    assert idx != -1
+    # It should be called before render() in refresh
+    # Check that render() appears after restoreBoardPrefs() in the refresh function
+    refresh_start = js.find('async function refresh()')
+    assert refresh_start != -1
+    restore_idx = js.find('restoreBoardPrefs()', refresh_start)
+    render_idx = js.find('render()', restore_idx)
+    assert render_idx > restore_idx
+
+
+def test_app_js_restore_handles_missing_data():
+    """restoreBoardPrefs must handle missing/corrupt localStorage gracefully."""
+    js = _read_static('app.js')
+    restore_start = js.find('function restoreBoardPrefs()')
+    restore_end = js.find('async function loadBoards', restore_start)
+    restore_body = js[restore_start:restore_end]
+    # Must have try/catch for JSON.parse errors
+    assert 'try {' in restore_body
+    assert 'catch' in restore_body
+    # Must return early if no saved data
+    assert 'if (!raw) return' in restore_body or 'if (raw === null) return' in restore_body
+
+
+def test_app_js_save_handles_storage_errors():
+    """saveBoardPrefs must handle localStorage errors gracefully."""
+    js = _read_static('app.js')
+    save_start = js.find('function saveBoardPrefs()')
+    save_end = js.find('function restoreBoardPrefs()', save_start)
+    save_body = js[save_start:save_end]
+    assert 'try {' in save_body
+    assert 'catch' in save_body

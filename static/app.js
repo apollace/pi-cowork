@@ -16,6 +16,55 @@ async function initBoard() {
     selectedPriorities: new Set(),
     selectedLabels: new Set(),
   };
+
+  // ── Board preferences persistence (localStorage) ──
+  function boardPrefsKey(boardId) {
+    return 'board_prefs_' + boardId;
+  }
+
+  function saveBoardPrefs() {
+    if (!currentBoardId) return;
+    try {
+      const prefs = {
+        searchQuery: filterState.searchQuery,
+        selectedPriorities: [...filterState.selectedPriorities],
+        selectedLabels: [...filterState.selectedLabels],
+        collapsedGroups: [...collapsed],
+        showTerminal: showTerminal.checked,
+      };
+      localStorage.setItem(boardPrefsKey(currentBoardId), JSON.stringify(prefs));
+    } catch (e) {
+      // localStorage unavailable or full — silently ignore
+    }
+  }
+
+  function restoreBoardPrefs() {
+    if (!currentBoardId) return;
+    try {
+      const raw = localStorage.getItem(boardPrefsKey(currentBoardId));
+      if (!raw) return;
+      const prefs = JSON.parse(raw);
+      if (typeof prefs.searchQuery === 'string') {
+        filterState.searchQuery = prefs.searchQuery;
+        if (searchInput) searchInput.value = prefs.searchQuery;
+      }
+      if (Array.isArray(prefs.selectedPriorities)) {
+        filterState.selectedPriorities = new Set(prefs.selectedPriorities);
+      }
+      if (Array.isArray(prefs.selectedLabels)) {
+        filterState.selectedLabels = new Set(prefs.selectedLabels);
+      }
+      if (Array.isArray(prefs.collapsedGroups)) {
+        collapsed.clear();
+        prefs.collapsedGroups.forEach(id => collapsed.add(id));
+      }
+      if (typeof prefs.showTerminal === 'boolean') {
+        showTerminal.checked = prefs.showTerminal;
+      }
+    } catch (e) {
+      // Corrupt or stale data — fall back to defaults
+    }
+  }
   const searchInput = document.getElementById('ticket-search');
   const labelFiltersContainer = document.getElementById('label-filters');
   const priorityToggles = document.querySelectorAll('.priority-toggle');
@@ -182,6 +231,7 @@ async function initBoard() {
     } finally {
       if (skeleton) skeleton.style.display = 'none';
     }
+    restoreBoardPrefs();
     render();
   }
 
@@ -404,6 +454,7 @@ async function initBoard() {
           filterState.selectedLabels.delete(e.target.value);
         }
         updateFilterBadge();
+        saveBoardPrefs();
         render();
       });
       labelFiltersContainer.appendChild(label);
@@ -463,6 +514,7 @@ async function initBoard() {
       } else {
         collapsed.add(status.id);
       }
+      saveBoardPrefs();
       render();
     });
     header.addEventListener('keydown', (e) => {
@@ -473,6 +525,7 @@ async function initBoard() {
         } else {
           collapsed.add(status.id);
         }
+        saveBoardPrefs();
         render();
       }
     });
@@ -521,6 +574,7 @@ async function initBoard() {
         if (searchInput) searchInput.value = '';
         updatePriorityToggles();
         toggleFilterDropdown(true);
+        saveBoardPrefs();
         render();
       };
       filterSummary.appendChild(clearAll);
@@ -557,11 +611,15 @@ async function initBoard() {
     renderFilterSummary();
   }
 
-  showTerminal.addEventListener('change', refresh);
+  showTerminal.addEventListener('change', () => {
+    saveBoardPrefs();
+    refresh();
+  });
 
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
       filterState.searchQuery = e.target.value;
+      saveBoardPrefs();
       render();
     });
   }
@@ -577,6 +635,7 @@ async function initBoard() {
         btn.classList.add('active');
       }
       updateFilterBadge();
+      saveBoardPrefs();
       render();
     });
   });
