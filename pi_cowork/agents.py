@@ -615,6 +615,7 @@ After completing your task, write a comment on the ticket summarizing what you d
 def _drain_loop(app):
     """Background loop: periodically clean up runs and drain the queue."""
     _last_log_cleanup = time.time()
+    _last_event_log_cleanup = time.time()
     _last_recurring_check = 0  # track 60s interval for recurring tasks
     while True:
         try:
@@ -631,6 +632,11 @@ def _drain_loop(app):
                     from pi_cowork.system_logs import cleanup_old_logs
                     cleanup_old_logs()
                     _last_log_cleanup = time.time()
+                # Event log rotation: run once per day (86400 seconds)
+                if time.time() - _last_event_log_cleanup >= 86400:
+                    from pi_cowork.event_log import cleanup_old_event_logs
+                    cleanup_old_event_logs()
+                    _last_event_log_cleanup = time.time()
         except Exception:
             logger.exception("Error in drain loop, will retry")
         time.sleep(10)

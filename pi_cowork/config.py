@@ -24,6 +24,7 @@ DEFAULTS = {
     'warm_spawn_threshold': '3600',
     'run_max_age': '7200',
     'log_retention_days': '30',
+    'event_log_retention_days': '30',
     'db_backup_max_count': '10',
 }
 
@@ -34,10 +35,11 @@ ENV_MAP = {
     'max_parallel': 'PI_MAX_PARALLEL',
     'max_per_hour': 'PI_MAX_PER_HOUR',
     'log_retention_days': 'PI_LOG_RETENTION_DAYS',
+    'event_log_retention_days': 'PI_EVENT_LOG_RETENTION_DAYS',
 }
 
 # ── Type coercion for numeric settings ──
-_INT_KEYS = {'port', 'max_parallel', 'max_per_hour', 'warm_spawn_threshold', 'run_max_age', 'log_retention_days', 'db_backup_max_count'}
+_INT_KEYS = {'port', 'max_parallel', 'max_per_hour', 'warm_spawn_threshold', 'run_max_age', 'log_retention_days', 'event_log_retention_days', 'db_backup_max_count'}
 
 
 def get_config(key):
