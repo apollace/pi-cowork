@@ -457,9 +457,9 @@ ENDPOINT_REGISTRY = [
         "category": "Knowledge",
         "method": "PUT",
         "path_template": "/api/knowledge/{entry_id}",
-        "label": "update a knowledge entry (fields: title, content, board_id, category, auto_context, tags, sort_order)",
+        "label": "update a knowledge entry (fields: title, content, board_id, clear_board_id, category, auto_context, tags, sort_order)",
         "doc_lines": [
-            "- PUT {base_url}/api/knowledge/{entry_id} → update a knowledge entry (fields: title, content, board_id, category, auto_context, tags as array of strings, sort_order, updated_by 'human'/'agent'). Auto-creates a version history record.",
+            "- PUT {base_url}/api/knowledge/{entry_id} → update a knowledge entry (fields: title, content, board_id, clear_board_id, category, auto_context, tags as array of strings, sort_order, updated_by 'human'/'agent'). board_id sets the entry to a specific board; clear_board_id=True sets it to global (board_id=NULL). Omitting both leaves board_id unchanged. Providing both board_id and clear_board_id=True is an error. Auto-creates a version history record.",
         ],
     },
     {
