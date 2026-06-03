@@ -27,8 +27,7 @@ tickets_bp = Blueprint('tickets', __name__)
 @tickets_bp.route('/api/tickets', methods=['GET'])
 def api_tickets():
     board_id = request.args.get('board_id', type=int)
-    limit = request.args.get('limit', 100, type=int)
-    offset = request.args.get('offset', 0, type=int)
+    include_terminal = request.args.get('include_terminal', 'false').lower() == 'true'
     if board_id is None:
         return jsonify({"error": "board_id is required"}), 400
 
@@ -40,25 +39,44 @@ def api_tickets():
         if wf_row:
             workflow_git_enabled = bool(wf_row['git_enabled'])
 
-    rows = query_db("""
-        SELECT t.*, s.name AS status_name, a.name AS agent_name, b.name AS board_name, b.workflow_id, w.git_enabled
-        FROM tickets t
-        JOIN statuses s ON t.status_id = s.id
-        LEFT JOIN agents a ON s.agent_id = a.id
-        JOIN boards b ON t.board_id = b.id
-        JOIN workflows w ON b.workflow_id = w.id
-        WHERE t.board_id = ?
-        ORDER BY
-          CASE t.priority
-            WHEN 'Critical' THEN 4
-            WHEN 'High' THEN 3
-            WHEN 'Medium' THEN 2
-            WHEN 'Low' THEN 1
-            ELSE 2
-          END DESC,
-          t.created_at DESC
-        LIMIT ? OFFSET ?
-    """, (board_id, limit, offset))
+    if include_terminal:
+        rows = query_db("""
+            SELECT t.*, s.name AS status_name, a.name AS agent_name, b.name AS board_name, b.workflow_id, w.git_enabled
+            FROM tickets t
+            JOIN statuses s ON t.status_id = s.id
+            LEFT JOIN agents a ON s.agent_id = a.id
+            JOIN boards b ON t.board_id = b.id
+            JOIN workflows w ON b.workflow_id = w.id
+            WHERE t.board_id = ?
+            ORDER BY
+              CASE t.priority
+                WHEN 'Critical' THEN 4
+                WHEN 'High' THEN 3
+                WHEN 'Medium' THEN 2
+                WHEN 'Low' THEN 1
+                ELSE 2
+              END DESC,
+              t.created_at DESC
+        """, (board_id,))
+    else:
+        rows = query_db("""
+            SELECT t.*, s.name AS status_name, a.name AS agent_name, b.name AS board_name, b.workflow_id, w.git_enabled
+            FROM tickets t
+            JOIN statuses s ON t.status_id = s.id
+            LEFT JOIN agents a ON s.agent_id = a.id
+            JOIN boards b ON t.board_id = b.id
+            JOIN workflows w ON b.workflow_id = w.id
+            WHERE t.board_id = ? AND s.is_terminal = 0
+            ORDER BY
+              CASE t.priority
+                WHEN 'Critical' THEN 4
+                WHEN 'High' THEN 3
+                WHEN 'Medium' THEN 2
+                WHEN 'Low' THEN 1
+                ELSE 2
+              END DESC,
+              t.created_at DESC
+        """, (board_id,))
 
     if not rows:
         return jsonify([])
