@@ -275,6 +275,9 @@ CREATE INDEX IF NOT EXISTS idx_system_logs_timestamp ON system_logs(timestamp);
 CREATE INDEX IF NOT EXISTS idx_system_logs_level ON system_logs(level);
 CREATE INDEX IF NOT EXISTS idx_system_logs_action_type ON system_logs(action_type);
 CREATE INDEX IF NOT EXISTS idx_system_logs_ticket_id ON system_logs(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_notification_dismissals_dismissed_at ON notification_dismissals(dismissed_at);
+CREATE INDEX IF NOT EXISTS idx_gate_reviews_ticket_id_status_created_at ON gate_reviews(ticket_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_questions_ticket_id_created_at ON questions(ticket_id, created_at);
 
 -- =============================================================================
 -- SEED DATA

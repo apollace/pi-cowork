@@ -311,6 +311,15 @@ def _migrate(db):
             'CREATE INDEX IF NOT EXISTS idx_event_log_created_at ON event_log(created_at)'),
         ('seed_event_log_retention_days',
          "INSERT OR IGNORE INTO settings (key, value) VALUES ('event_log_retention_days', '30')"),
+        # Ticket #98 — Notification dismissals TTL and periodic cleanup
+        ('idx_notification_dismissals_dismissed_at',
+            'CREATE INDEX IF NOT EXISTS idx_notification_dismissals_dismissed_at ON notification_dismissals(dismissed_at)'),
+        ('idx_gate_reviews_ticket_id_status_created_at',
+            'CREATE INDEX IF NOT EXISTS idx_gate_reviews_ticket_id_status_created_at ON gate_reviews(ticket_id, status, created_at)'),
+        ('idx_questions_ticket_id_created_at',
+            'CREATE INDEX IF NOT EXISTS idx_questions_ticket_id_created_at ON questions(ticket_id, created_at)'),
+        ('seed_notification_dismissal_retention_days',
+         "INSERT OR IGNORE INTO settings (key, value) VALUES ('notification_dismissal_retention_days', '7')"),
     ]
     for name, sql in migrations:
         already_applied = db.execute(

@@ -799,6 +799,75 @@ def cron_human_readable(cron_expression):
 
 
 # ---------------------------------------------------------------------------
+# Notification Dismissals Cleanup
+# ---------------------------------------------------------------------------
+
+def cleanup_old_notification_dismissals(max_age_days=None):
+    """Delete notification_dismissals rows older than *max_age_days*.
+
+    Called periodically from the drain loop.  Works inside and outside a
+    Flask application context.
+
+    Retention priority:
+    1. Explicit max_age_days argument
+    2. DB settings table (notification_dismissal_retention_days key)
+    3. PI_NOTIFICATION_DISMISSAL_RETENTION_DAYS environment variable
+    4. Default of 7 days
+
+    Re-dismissing a notification replaces the row with a fresh dismissed_at
+    timestamp, effectively resetting the TTL — no separate created_at column
+    is needed.
+
+    Returns the number of rows deleted.
+    """
+    import os
+    import sqlite3
+    from datetime import datetime, timezone, timedelta
+    from pi_cowork.config import get_config
+
+    if max_age_days is None:
+        max_age_days = get_config('notification_dismissal_retention_days')
+        if max_age_days is None:
+            max_age_days = 7
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+
+    try:
+        from flask import has_app_context
+        if has_app_context():
+            from pi_cowork.db import get_db
+            db = get_db()
+            cur = db.execute(
+                "DELETE FROM notification_dismissals WHERE dismissed_at < ?",
+                (cutoff,)
+            )
+            db.commit()
+            deleted = cur.rowcount
+        else:
+            raise RuntimeError("No app context")
+    except (ImportError, RuntimeError):
+        from pi_cowork import config as _config
+        path = os.environ.get('DATABASE', _config.DATABASE)
+        conn = sqlite3.connect(path)
+        try:
+            cur = conn.execute(
+                "DELETE FROM notification_dismissals WHERE dismissed_at < ?",
+                (cutoff,)
+            )
+            conn.commit()
+            deleted = cur.rowcount
+        finally:
+            conn.close()
+
+    if deleted:
+        logger.info(
+            "Notification dismissals cleanup: deleted %d rows older than %d days",
+            deleted, max_age_days
+        )
+    return deleted
+
+
+# ---------------------------------------------------------------------------
 # Knowledge Management
 # ---------------------------------------------------------------------------
 

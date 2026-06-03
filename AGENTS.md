@@ -93,6 +93,7 @@ All dynamic configuration is resolved via `pi_cowork.config.get_config(key)` wit
 | Log Retention Days | `log_retention_days` | `PI_LOG_RETENTION_DAYS` | `30` | int | 📜 Logs & Storage |
 | Event Log Retention Days | `event_log_retention_days` | `PI_EVENT_LOG_RETENTION_DAYS` | `30` | int | 📜 Logs & Storage |
 | Max DB Backups Retained | `db_backup_max_count` | _(none)_ | `10` | int | 📜 Logs & Storage |
+| Notification Dismissal Retention Days | `notification_dismissal_retention_days` | `PI_NOTIFICATION_DISMISSAL_RETENTION_DAYS` | `7` | int | 📜 Logs & Storage |
 
 **Kept as env-only** (security/runtime concerns):
 - `FLASK_SECRET_KEY` — security concern, must not be in DB
@@ -104,7 +105,7 @@ All dynamic configuration is resolved via `pi_cowork.config.get_config(key)` wit
 **Settings UI** has three collapsible categories:
 1. 🤖 **Assistant** — enabled, auto-context, model, thinking, working-dir, system-prompt, api-endpoints, saved-prompts
 2. ⚙️ **General** — pi_cowork_url, **port**, max_parallel, max_per_hour, warm_spawn_threshold, run_max_age
-3. 📜 **Logs & Storage** — log_retention_days, event_log_retention_days, db_backup_max_count, purge terminal logs
+3. 📜 **Logs & Storage** — log_retention_days, event_log_retention_days, db_backup_max_count, notification_dismissal_retention_days, purge terminal logs
 
 ## Data Model
 
@@ -672,6 +673,7 @@ event: ticket.status_changed\ndata: {"ticket_id":42,"old_status_id":86,"new_stat
 - The **existing agent log SSE** (`/api/agent_runs/<id>/stream`) is **unchanged** — it serves a different purpose (line-by-line log streaming)
 - The SSE generator subscribes/unsubscribes from the EventBus on connect/disconnect — no leaks
 - **Timestamp-based notification dismissals** — `notification_dismissals.dismissed_at` is compared against `MAX(created_at)` of the underlying events (gate reviews or questions). A dismissed notification stays hidden until a new event is created after `dismissed_at`. The old `clear_notification_dismissal()` auto-clear mechanism was removed — it deleted the entire dismissal row on every new event, causing notifications to always reappear even for already-seen events. All database timestamps used in comparisons must use SQLite-compatible format (`YYYY-MM-DD HH:MM:SS`), not Python's `.isoformat()` which includes timezone offsets incompatible with SQLite string comparisons.
+- **Notification dismissals TTL** — `cleanup_old_notification_dismissals()` runs daily in the drain loop, deleting `notification_dismissals` rows where `dismissed_at` is older than the configured retention period (default 7 days, configurable via DB setting `notification_dismissal_retention_days`, env var `PI_NOTIFICATION_DISMISSAL_RETENTION_DAYS`). Re-dismissing a notification replaces the row with a fresh `dismissed_at`, effectively resetting the TTL. This follows the same pattern as `cleanup_old_logs()` and `cleanup_old_event_logs()`. An index on `notification_dismissals(dismissed_at)` enables efficient TTL deletion. Covering indexes on `gate_reviews(ticket_id, status, created_at)` and `questions(ticket_id, created_at)` optimize the correlated subqueries in the notifications endpoint.
 - **No new dependencies**: `queue.Queue` + Flask `stream_with_context` only
 
 ## Label UI Architecture

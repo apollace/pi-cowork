@@ -123,6 +123,10 @@
           <span>Max DB backups retained</span>
           <input type="number" id="cfg-db-backup-max-count" min="1" max="100" />
         </label>
+        <label class="form-row">
+          <span>Notification dismissal retention (days)</span>
+          <input type="number" id="cfg-notification-dismissal-retention" min="1" max="3650" />
+        </label>
         <div class="form-row" style="margin-top:0.5rem;">
           <span></span>
           <button class="btn danger" id="btn-purge-terminal-logs">Purge terminal ticket logs</button>
@@ -300,6 +304,15 @@
         document.getElementById('cfg-event-log-retention').value = 30;
       }
 
+      // Load notification dismissal retention setting
+      const ndRes = await fetch('/api/settings/notification_dismissal_retention_days');
+      if (ndRes.ok) {
+        const ndData = await ndRes.json();
+        document.getElementById('cfg-notification-dismissal-retention').value = parseInt(ndData.value, 10) || 7;
+      } else {
+        document.getElementById('cfg-notification-dismissal-retention').value = 7;
+      }
+
       // Load db_backup_max_count setting
       const dbBackupRes = await fetch('/api/settings/db_backup_max_count');
       if (dbBackupRes.ok) {
@@ -405,6 +418,12 @@
       return;
     }
 
+    const notificationDismissalRetention = parseInt(document.getElementById('cfg-notification-dismissal-retention').value, 10);
+    if (isNaN(notificationDismissalRetention) || notificationDismissalRetention < 1) {
+      showFeedback('Notification dismissal retention days must be at least 1', 'error');
+      return;
+    }
+
     const piCoworkUrl = document.getElementById('cfg-pi-cowork-url').value.trim();
     if (!piCoworkUrl) {
       showFeedback('API base URL cannot be empty', 'error');
@@ -495,6 +514,18 @@
       const dbBackupData = await dbBackupRes.json();
       if (!dbBackupData.success) {
         showFeedback('Failed to save max DB backups: ' + (dbBackupData.error || 'unknown error'), 'error');
+        return;
+      }
+
+      // Save notification dismissal retention days
+      const ndRes = await fetch('/api/settings/notification_dismissal_retention_days', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: String(notificationDismissalRetention) }),
+      });
+      const ndData = await ndRes.json();
+      if (!ndData.success) {
+        showFeedback('Failed to save notification dismissal retention: ' + (ndData.error || 'unknown error'), 'error');
         return;
       }
 
