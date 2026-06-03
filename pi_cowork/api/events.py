@@ -19,6 +19,7 @@ from pi_cowork.events import (
 logger = logging.getLogger(__name__)
 
 MAX_CONNECTIONS = 50
+RETRY_AFTER_SECONDS = 5
 
 EVENT_NAMES = [
     TICKET_CREATED, TICKET_STATUS_CHANGED, TICKET_UPDATED,
@@ -65,6 +66,7 @@ def api_events_stream():
                 "Too many SSE connections",
                 status=429,
                 mimetype='text/plain',
+                headers={'Retry-After': str(RETRY_AFTER_SECONDS)},
             )
         _active_connections += 1
 

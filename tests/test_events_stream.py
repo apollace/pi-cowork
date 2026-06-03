@@ -6,7 +6,7 @@ import threading
 import pytest
 
 from pi_cowork.events import bus, TICKET_CREATED, COMMENT_ADDED, TICKET_STATUS_CHANGED, GATE_PENDING, QUESTION_ASKED
-from pi_cowork.api.events import _event_generator, _get_board_id_for_ticket, MAX_CONNECTIONS, EVENT_NAMES
+from pi_cowork.api.events import _event_generator, _get_board_id_for_ticket, MAX_CONNECTIONS, RETRY_AFTER_SECONDS, EVENT_NAMES
 
 
 @pytest.fixture(autouse=True)
@@ -203,6 +203,7 @@ class TestSSEStreamEndpoint:
         try:
             rv = client.get(f'/api/events/stream?board_id={default_board["id"]}', buffered=False)
             assert rv.status_code == 429
+            assert rv.headers.get('Retry-After') == str(RETRY_AFTER_SECONDS)
             rv.close()
         finally:
             with ev_mod._connections_lock:
