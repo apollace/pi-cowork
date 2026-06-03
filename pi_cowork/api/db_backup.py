@@ -1,4 +1,14 @@
-"""API: Database Backup & Restore — list, create, restore, and delete DB backups."""
+"""API: Database Backup & Restore — list, create, restore, and delete DB backups.
+
+Security note: The restore endpoint (``POST /api/db-backup/restore``) is a
+destructive operation that overwrites the current database.  It MUST originate
+from a human, not from an AI agent.  A random secret is generated at app
+startup and stored in the Flask config as ``HUMAN_ACTION_SECRET``.  The web
+UI includes this secret in the ``X-Human-Action`` header on restore requests.
+The endpoint also requires ``"confirm": true`` in the request body to
+force explicit acknowledgment.  Requests that lack a valid secret or the
+confirm flag are rejected with 403/400 respectively.
+"""
 
 import os
 import re
@@ -153,9 +163,27 @@ def api_restore_backup():
     """Restore the database from a specified backup file.
 
     Creates a safety backup of the current DB first, then overwrites with
-    the selected backup. Requires {"filename": "..."} in request body.
+    the selected backup. Requires {"filename": "...", "confirm": true} in
+    request body and a valid ``X-Human-Action`` header.
     """
+    # ── Human-action guard ────────────────────────────────────────────
+    # Database restore is a destructive operation that must come from the
+    # web UI (a human), not from an AI agent.  The UI sends a random
+    # per-instance secret in the X-Human-Action header; agents never
+    # receive this secret.
+    secret = current_app.config.get('HUMAN_ACTION_SECRET', '')
+    provided = request.headers.get('X-Human-Action', '')
+    if not secret or provided != secret:
+        add_log('WARNING', 'http_request', 'DB restore blocked — missing or invalid X-Human-Action header')
+        return jsonify({"error": "Database restore requires human action. Missing or invalid authentication."}), 403
+    # ─────────────────────────────────────────────────────────────────
+
     data = request.get_json() or {}
+
+    # Require explicit confirmation
+    if not data.get('confirm'):
+        return jsonify({"error": "confirm must be true to perform a destructive restore"}), 400
+
     filename = data.get('filename')
 
     if not filename:

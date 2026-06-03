@@ -375,9 +375,9 @@ ENDPOINT_REGISTRY = [
         "category": "DB Backup",
         "method": "POST",
         "path_template": "/api/db-backup/restore",
-        "label": "restore database from a backup (field: filename); creates a pre-restore safety backup first",
+        "label": "restore database from a backup (fields: filename, confirm); requires X-Human-Action header; creates a pre-restore safety backup first",
         "doc_lines": [
-            "- POST {base_url}/api/db-backup/restore → restore database from a backup (field: filename); creates a pre-restore safety backup first",
+            "- POST {base_url}/api/db-backup/restore → restore database from a backup (fields: filename, confirm must be true); requires X-Human-Action header (human-only action); creates a pre-restore safety backup first",
         ],
     },
     {
@@ -522,6 +522,7 @@ AGENT_RESTRICTED_KEYS = {
     'gate_reviews_list',
     'quality_gates_list',
     'notifications_list',
+    'db_backup_restore',
 }
 
 

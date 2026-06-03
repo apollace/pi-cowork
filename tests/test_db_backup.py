@@ -1,4 +1,4 @@
-"""Tests for Database Backup & Restore feature (Ticket #85)."""
+"""Tests for Database Backup & Restore feature (Ticket #85 & #109)."""
 
 import json
 import os
@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+
+from tests.conftest import HUMAN_ACTION_SECRET_FOR_TESTS
 
 
 @pytest.fixture
@@ -31,6 +33,22 @@ def _db_path(client):
     """Get the current DB path from the test app config."""
     from flask import current_app
     return Path(current_app.config['DATABASE'])
+
+
+def _restore_headers():
+    """Return headers required for the restore endpoint (X-Human-Action)."""
+    return {
+        'Content-Type': 'application/json',
+        'X-Human-Action': HUMAN_ACTION_SECRET_FOR_TESTS,
+    }
+
+
+def _restore_body(filename, confirm=True):
+    """Return a JSON body string for the restore endpoint."""
+    body = {'filename': filename}
+    if confirm is not None:
+        body['confirm'] = confirm
+    return json.dumps(body)
 
 
 class TestListBackups:
@@ -135,8 +153,10 @@ class TestRestoreBackup:
         assert res.status_code == 200
         assert res.get_json()['value'] == 'modified'
 
-        # Restore from backup
-        res = client.post('/api/db-backup/restore', json={'filename': backup_filename})
+        # Restore from backup (with required headers and confirm)
+        res = client.post('/api/db-backup/restore',
+                          headers=_restore_headers(),
+                          data=_restore_body(backup_filename))
         assert res.status_code == 200
         assert res.get_json()['success'] is True
 
@@ -159,8 +179,10 @@ class TestRestoreBackup:
         # Count current backup files
         before_count = len(list(backup_dir.glob('*.db')))
 
-        # Restore from backup
-        res = client.post('/api/db-backup/restore', json={'filename': backup_filename})
+        # Restore from backup (with required headers and confirm)
+        res = client.post('/api/db-backup/restore',
+                          headers=_restore_headers(),
+                          data=_restore_body(backup_filename))
         assert res.status_code == 200
 
         # After restore, there should be one more backup (the pre-restore safety)
@@ -174,19 +196,77 @@ class TestRestoreBackup:
     def test_restore_nonexistent_file(self, client, backup_dir):
         """Restore with bad filename that matches pattern but doesn't exist → 404 error."""
         res = client.post('/api/db-backup/restore',
-                          json={'filename': 'pi-cowork_20250101_120000.db'})
+                          headers=_restore_headers(),
+                          data=_restore_body('pi-cowork_20250101_120000.db'))
         assert res.status_code == 404
 
     def test_restore_invalid_filename(self, client, backup_dir):
         """Restore with path traversal → 400 error."""
         res = client.post('/api/db-backup/restore',
-                          json={'filename': '../etc/passwd'})
+                          headers=_restore_headers(),
+                          data=_restore_body('../etc/passwd'))
         assert res.status_code == 400
 
     def test_restore_missing_filename(self, client, backup_dir):
         """Restore without filename → 400 error."""
-        res = client.post('/api/db-backup/restore', json={})
+        res = client.post('/api/db-backup/restore',
+                          headers=_restore_headers(),
+                          data=json.dumps({'confirm': True}))
         assert res.status_code == 400
+
+
+class TestRestoreBackupSecurity:
+    """Security tests for the restore endpoint (Ticket #109).
+
+    The restore endpoint requires both a valid X-Human-Action header
+    (same pattern as gate reviews) and confirm=true in the request body.
+    """
+
+    def test_restore_missing_human_action_header(self, client, backup_dir):
+        """Restore without X-Human-Action header → 403."""
+        res = client.post('/api/db-backup/restore',
+                          headers={'Content-Type': 'application/json'},
+                          data=json.dumps({
+                              'filename': 'pi-cowork_20250101_120000.db',
+                              'confirm': True,
+                          }))
+        assert res.status_code == 403
+        assert 'human action' in res.get_json()['error'].lower()
+
+    def test_restore_invalid_human_action_header(self, client, backup_dir):
+        """Restore with wrong X-Human-Action header → 403."""
+        res = client.post('/api/db-backup/restore',
+                          headers={
+                              'Content-Type': 'application/json',
+                              'X-Human-Action': 'wrong-secret',
+                          },
+                          data=json.dumps({
+                              'filename': 'pi-cowork_20250101_120000.db',
+                              'confirm': True,
+                          }))
+        assert res.status_code == 403
+        assert 'human action' in res.get_json()['error'].lower()
+
+    def test_restore_missing_confirm(self, client, backup_dir):
+        """Restore without confirm field → 400."""
+        res = client.post('/api/db-backup/restore',
+                          headers=_restore_headers(),
+                          data=json.dumps({
+                              'filename': 'pi-cowork_20250101_120000.db',
+                          }))
+        assert res.status_code == 400
+        assert 'confirm' in res.get_json()['error'].lower()
+
+    def test_restore_confirm_false(self, client, backup_dir):
+        """Restore with confirm=false → 400."""
+        res = client.post('/api/db-backup/restore',
+                          headers=_restore_headers(),
+                          data=json.dumps({
+                              'filename': 'pi-cowork_20250101_120000.db',
+                              'confirm': False,
+                          }))
+        assert res.status_code == 400
+        assert 'confirm' in res.get_json()['error'].lower()
 
 
 class TestDeleteBackup:

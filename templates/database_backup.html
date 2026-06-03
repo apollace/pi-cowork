@@ -97,12 +97,26 @@
   }
 
   async function restoreBackup(filename) {
-    if (!confirm('This will replace the current database. A safety backup will be created first. Continue?')) return;
+    const warning =
+      '⚠️ DANGEROUS OPERATION\n\n' +
+      'This will REPLACE the entire current database with the backup file.\n\n' +
+      '• All data created after this backup will be PERMANENTLY LOST.\n' +
+      '• A safety backup of the current database will be created first.\n' +
+      '• This action cannot be undone.\n\n' +
+      'Type "RESTORE" to confirm:';
+    const confirmed = prompt(warning);
+    if (confirmed !== 'RESTORE') {
+      showToast('Restore cancelled', 'warning');
+      return;
+    }
     try {
       const res = await fetch('/api/db-backup/restore', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: filename }),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Human-Action': '{{ human_action_secret }}',
+        },
+        body: JSON.stringify({ filename: filename, confirm: true }),
       });
       const data = await res.json();
       if (res.ok) {
