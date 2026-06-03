@@ -158,6 +158,6 @@ def ensure_ticket_branch(working_directory, ticket_id, ticket_title, existing_br
 
     # Persist branch on ticket if it changed or was generated
     if existing_branch != branch:
-        run_db("UPDATE tickets SET branch = ? WHERE id = ?", (branch, ticket_id))
+        run_db("UPDATE tickets SET branch = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (branch, ticket_id))
 
     return branch

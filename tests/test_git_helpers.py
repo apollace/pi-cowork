@@ -193,7 +193,7 @@ def test_ensure_ticket_branch_persists_new_branch(tmp_path):
     assert result is not None
     # run_db should have been called to persist the branch
     mock_run_db.assert_called_once_with(
-        "UPDATE tickets SET branch = ? WHERE id = ?", (result, 55)
+        "UPDATE tickets SET branch = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (result, 55)
     )
 
 
