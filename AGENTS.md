@@ -629,7 +629,7 @@ The UI updates in real-time via Server-Sent Events (SSE), replacing all polling.
   - Board ID resolution: `TICKET_CREATED` includes `board_id` in kwargs; other events resolve via lightweight DB lookup (`_get_board_id_for_ticket`)
   - Heartbeat (`: keepalive\n\n`) every 25s to prevent proxy timeouts
   - On disconnect, subscriber is removed from bus and connection counter decremented
-  - Max 50 concurrent connections (returns 429 if exceeded)
+  - Max 50 concurrent connections (returns 429 with `Retry-After: 5` header if exceeded)
 
 - **Frontend (base.html)**: A single shared `EventSource` connection
   - Connected on page load, board_id from `localStorage.activeBoard`
