@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS agents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     description TEXT NOT NULL,
+    model TEXT,
+    thinking TEXT,
+    api_endpoints TEXT,
     workflow_id INTEGER NOT NULL REFERENCES workflows(id),
     UNIQUE(name, workflow_id)
 );
@@ -225,6 +228,53 @@ CREATE TABLE IF NOT EXISTS assistant_saved_prompts (
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Event log: persistent audit trail for system events
+CREATE TABLE IF NOT EXISTS event_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_name TEXT NOT NULL,
+    payload TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- System logs: centralised application-level logging
+CREATE TABLE IF NOT EXISTS system_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    level TEXT NOT NULL CHECK(level IN ('INFO','WARNING','ERROR','CRITICAL')),
+    action_type TEXT NOT NULL,
+    message TEXT NOT NULL,
+    details TEXT,
+    ticket_id INTEGER
+);
+
+-- Notification dismissals: timestamp-based per-ticket dismissal of gate/question notifications
+CREATE TABLE IF NOT EXISTS notification_dismissals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id INTEGER NOT NULL,
+    notification_type TEXT NOT NULL CHECK(notification_type IN ('gate_review', 'question')),
+    dismissed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(ticket_id, notification_type)
+);
+
+-- =============================================================================
+-- INDEXES
+-- =============================================================================
+
+CREATE INDEX IF NOT EXISTS idx_tickets_board_id ON tickets(board_id);
+CREATE INDEX IF NOT EXISTS idx_comments_ticket_id ON comments(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_ticket_id_status ON agent_runs(ticket_id, status);
+CREATE INDEX IF NOT EXISTS idx_agent_queue_ticket_id ON agent_queue(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_gate_reviews_ticket_id ON gate_reviews(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_questions_ticket_id ON questions(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_labels_ticket_id ON ticket_labels(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_recurring_instances_ticket_id ON recurring_instances(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_labels_workflow_id ON labels(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_event_log_created_at ON event_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_system_logs_timestamp ON system_logs(timestamp);
+CREATE INDEX IF NOT EXISTS idx_system_logs_level ON system_logs(level);
+CREATE INDEX IF NOT EXISTS idx_system_logs_action_type ON system_logs(action_type);
+CREATE INDEX IF NOT EXISTS idx_system_logs_ticket_id ON system_logs(ticket_id);
 
 -- =============================================================================
 -- SEED DATA
