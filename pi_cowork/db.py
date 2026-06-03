@@ -306,6 +306,11 @@ def _migrate(db):
             'CREATE INDEX IF NOT EXISTS idx_knowledge_entries_category ON knowledge_entries(category)'),
         ('idx_knowledge_versions_entry_id',
             'CREATE INDEX IF NOT EXISTS idx_knowledge_versions_entry_id ON knowledge_versions(entry_id)'),
+        # Ticket #97 — Event log rotation: index for efficient cleanup
+        ('create_event_log_idx_created_at',
+            'CREATE INDEX IF NOT EXISTS idx_event_log_created_at ON event_log(created_at)'),
+        ('seed_event_log_retention_days',
+         "INSERT OR IGNORE INTO settings (key, value) VALUES ('event_log_retention_days', '30')"),
     ]
     for name, sql in migrations:
         already_applied = db.execute(
