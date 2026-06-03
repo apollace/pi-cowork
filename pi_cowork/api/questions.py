@@ -11,6 +11,11 @@ from pi_cowork.agents import try_spawn_or_queue
 from pi_cowork.events import bus, QUESTION_ASKED, QUESTION_ANSWERED
 from pi_cowork.system_logs import add_log
 
+
+def _bump_ticket_updated_at(ticket_id):
+    """Touch the ticket's updated_at timestamp for change detection."""
+    run_db("UPDATE tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", (ticket_id,))
+
 questions_bp = Blueprint('questions', __name__)
 
 
@@ -45,6 +50,7 @@ def api_create_questions(ticket_id):
         )
         ids.append(cur.lastrowid)
     bus.publish(QUESTION_ASKED, ticket_id=ticket_id, count=len(ids))
+    _bump_ticket_updated_at(ticket_id)
     for qid in ids:
         add_log('INFO', 'db_change', f'INSERT questions/{qid}', details={'operation': 'INSERT', 'table': 'questions', 'record_id': qid}, ticket_id=ticket_id)
     return jsonify({"ids": ids}), 201
@@ -67,6 +73,7 @@ def api_answer_question(question_id):
     run_db("DELETE FROM questions WHERE id = ?", (question_id,))
     add_log('INFO', 'db_change', f'DELETE questions/{question_id}', details={'operation': 'DELETE', 'table': 'questions', 'record_id': question_id}, ticket_id=ticket_id)
     bus.publish(QUESTION_ANSWERED, ticket_id=ticket_id, question_id=question_id)
+    _bump_ticket_updated_at(ticket_id)
 
     # If no more questions remain, attempt to spawn an agent for the current status
     remaining = count_unanswered_questions(ticket_id)
@@ -128,6 +135,8 @@ def api_batch_answer(ticket_id):
         run_db("DELETE FROM questions WHERE id = ?", (qid,))
         add_log('INFO', 'db_change', f'DELETE questions/{qid}', details={'operation': 'DELETE', 'table': 'questions', 'record_id': qid}, ticket_id=ticket_id)
         bus.publish(QUESTION_ANSWERED, ticket_id=ticket_id, question_id=qid)
+
+    _bump_ticket_updated_at(ticket_id)
 
     remaining = count_unanswered_questions(ticket_id)
     if remaining == 0:

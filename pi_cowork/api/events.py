@@ -45,6 +45,16 @@ def _get_board_id_for_ticket(ticket_id):
         return None
 
 
+def _get_ticket_updated_at(ticket_id):
+    """Look up the updated_at timestamp for a given ticket_id. Returns None if not found."""
+    try:
+        from pi_cowork.db import query_db
+        row = query_db("SELECT updated_at FROM tickets WHERE id = ?", (ticket_id,), one=True)
+        return row['updated_at'] if row else None
+    except Exception:
+        return None
+
+
 @events_bp.route('/api/events/stream')
 def api_events_stream():
     """SSE endpoint that forwards EventBus events to browser clients.
@@ -127,8 +137,16 @@ def _event_generator(board_id):
                 if event_board_id != board_id:
                     continue  # skip events for other boards
 
-            # Build SSE frame
+            # Enrich with updated_at for ticket-related events
+            # This enables SSE clients to detect changes without re-fetching
             data = dict(kwargs)
+            ticket_id = data.get('ticket_id')
+            if ticket_id is not None and 'updated_at' not in data:
+                updated_at = _get_ticket_updated_at(ticket_id)
+                if updated_at is not None:
+                    data['updated_at'] = updated_at
+
+            # Build SSE frame
             yield f"event: {event_name}\ndata: {json.dumps(data)}\n\n"
 
             last_heartbeat = time.monotonic()

@@ -28,6 +28,7 @@ def get_comments(ticket_id):
 
 def add_comment(ticket_id, body):
     cur = run_db("INSERT INTO comments (ticket_id, body) VALUES (?, ?)", (ticket_id, body))
+    run_db("UPDATE tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", (ticket_id,))
     bus.publish(COMMENT_ADDED, ticket_id=ticket_id, body=body)
     return cur.lastrowid
 
@@ -379,6 +380,7 @@ def set_ticket_labels(ticket_id, workflow_id, label_ids):
                 run_db("INSERT INTO ticket_labels (ticket_id, label_id) VALUES (?, ?)", (ticket_id, lid))
             except Exception:
                 pass
+    run_db("UPDATE tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", (ticket_id,))
     return True
 
 

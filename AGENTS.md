@@ -579,6 +579,7 @@ Each workflow has a `git_enabled` boolean flag (default `False`). When enabled:
 
 ## Key Decisions
 
+- **`updated_at` bumped on all ticket-affecting operations** — The `tickets.updated_at` column is updated whenever a ticket is modified, but also when related data changes: comments added (`add_comment()` in models.py), labels changed (`set_ticket_labels()` in models.py), questions asked or answered (API handlers in questions.py), and git branch set (`ensure_ticket_branch()` in git_helpers.py). All these operations run `UPDATE tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`. The SSE event generator enriches ticket-related events with the current `updated_at` value from the database (via `_get_ticket_updated_at()` in events.py), enabling clients to detect changes without re-fetching the full ticket list.
 - **No ticket deletion** — terminal statuses only (Closed/Dropped).
 - **Board deletion is destructive** — all tickets, comments, agent runs, and queue entries for that board are permanently deleted.
 - **Agent delete blocked** if assigned to a status.
@@ -660,11 +661,11 @@ The UI updates in real-time via Server-Sent Events (SSE), replacing all polling.
 
 ### SSE Event Format
 
-Each EventBus event is forwarded as a named SSE frame:
+Each EventBus event is forwarded as a named SSE frame. Ticket-related events are automatically enriched with the ticket's `updated_at` timestamp (resolved via DB lookup by the SSE generator) to enable client-side change detection without re-fetching:
 ```
-event: ticket.created\ndata: {"ticket_id":42,"title":"...","board_id":3,"status_id":86}\n\n
-event: comment.added\ndata: {"ticket_id":42,"body":"..."}\n\n
-event: ticket.status_changed\ndata: {"ticket_id":42,"old_status_id":86,"new_status_id":87}\n\n```
+event: ticket.created\ndata: {"ticket_id":42,"title":"...","board_id":3,"status_id":86,"updated_at":"2026-06-03 12:34:56"}\n\n
+event: comment.added\ndata: {"ticket_id":42,"body":"...","updated_at":"2026-06-03 12:34:56"}\n\n
+event: ticket.status_changed\ndata: {"ticket_id":42,"old_status_id":86,"new_status_id":87,"updated_at":"2026-06-03 12:34:56"}\n\n```
 
 ### Important Notes
 
@@ -799,6 +800,7 @@ Key principles: clarity over cleverness, consistency (reuse design tokens), prog
 
 ## Known Constraints & Recurring Pitfalls
 
+- **`updated_at` must be bumped on all ticket-affecting operations** — Whenever a related entity changes (comment added, label changed, question asked/answered, git branch set), the ticket's `updated_at` must be bumped via `UPDATE tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`. This ensures SSE clients can detect all changes via `updated_at` in event payloads. The bump is done in: `add_comment()` and `set_ticket_labels()` in models.py, `_bump_ticket_updated_at()` in questions.py (called after question ask/answer/batch-answer), and `ensure_ticket_branch()` in git_helpers.py. If you add a new operation that modifies ticket-related data (comments, labels, questions, etc.), you must also bump `updated_at` on the affected ticket.
 - **Patch `time.sleep` in kill-handler tests** — `pi_cowork/api/agent_runs.py` uses `time.sleep(0.5)` in the SIGKILL escalation polling loop. Tests that exercise the kill endpoint must patch `pi_cowork.api.agent_runs.time.sleep` to avoid real sleeps (5s total for the escalation path). Without this patch, tests are slow and flaky under CI load.
 - **Board listing API uses `comment_count` not `comments`** — `GET /api/tickets?board_id=` returns `comment_count` (integer) instead of `comments` (full array) to reduce payload size. The detail endpoint `GET /api/tickets/<id>` still returns the full `comments` array. Do not reintroduce per-ticket comment fetching in the board listing.
 - **Board listing API excludes terminal tickets by default** — `GET /api/tickets?board_id=` adds `AND s.is_terminal = 0` to the WHERE clause unless `include_terminal=true` is passed. The frontend's "Show terminal" checkbox triggers a new `refresh()` call with `include_terminal=true` when checked and `include_terminal=false` when unchecked. There is no `limit`/`offset` pagination — all matching tickets are returned. Previous `limit=100` default caused tickets beyond 100 to be invisible.
