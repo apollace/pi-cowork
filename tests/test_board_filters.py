@@ -311,6 +311,16 @@ def test_app_js_restore_called_in_refresh():
     assert render_idx > restore_idx
 
 
+def test_app_js_save_called_on_individual_pill_dismissal():
+    """saveBoardPrefs must be called when a single filter pill is dismissed (✕ button)."""
+    js = _read_static('app.js')
+    # Find the pill.onclick handler inside renderFilterSummary
+    idx = js.find("pill.onclick")
+    assert idx != -1
+    handler_block = js[idx:idx + 200]
+    assert 'saveBoardPrefs()' in handler_block
+
+
 def test_app_js_restore_handles_missing_data():
     """restoreBoardPrefs must handle missing/corrupt localStorage gracefully."""
     js = _read_static('app.js')

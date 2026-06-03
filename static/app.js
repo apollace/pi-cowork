@@ -560,7 +560,7 @@ async function initBoard() {
       const bg = f.color || '#2563eb';
       pill.style.cssText = `background:${bg}22;color:${bg};border:1px solid ${bg}55;`;
       pill.innerHTML = `${escapeHtml(f.label)} <span class="filter-pill-remove">✕</span>`;
-      pill.onclick = () => { f.clearFn(); render(); };
+      pill.onclick = () => { f.clearFn(); saveBoardPrefs(); render(); };
       filterSummary.appendChild(pill);
     }
     if (activeFilters.length > 1) {

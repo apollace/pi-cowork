@@ -730,7 +730,8 @@ The UI underwent a broad set of improvements. Key conventions:
     - `maxHeight` constraint — when panel doesn't fit above or below, constrains height with `overflow-y: auto`
     - Repositions on `resize` and `scroll` events while open
   - CSS classes: `.filter-dropdown-wrapper`, `.filter-dropdown-trigger`, `.filter-dropdown-panel`, `.filter-dropdown-section`, `.filter-dropdown-section-title`, `.filter-dropdown-checkbox`, `.filter-badge`, `.dropdown-right`, `.dropdown-above`, `.scrollable`
-- **Filter Summary**: Active filters shown as dismissible pills (`.filter-pill`) with a "Clear all" button (`.filter-clear-all`)
+- **Filter Summary**: Active filters shown as dismissible pills (`.filter-pill`) with a "Clear all" button (`.filter-clear-all`). Each pill's ✕ handler calls `saveBoardPrefs()` before `render()` so individual dismissals persist to localStorage immediately.
+- **Board Preferences Persistence** (`board_prefs_{id}`): Filters and layout state are saved to `localStorage` under the key `board_prefs_{boardId}` via `saveBoardPrefs()`. Stored fields: `searchQuery`, `selectedPriorities` (array), `selectedLabels` (array), `collapsedGroups` (array of status IDs), `showTerminal` (boolean). `saveBoardPrefs()` is called on every user action that changes state: search input, priority toggle, label filter, group collapse/expand, show-terminal checkbox, individual pill dismissal, and "Clear all". `restoreBoardPrefs()` is called in `refresh()` before `render()` to apply saved state. Both functions use try/catch to handle unavailable or corrupt localStorage gracefully.
 - **Loading Skeleton**: `.board-skeleton` with `.skeleton` elements shown while board data loads
 - **Card redesign (Ticket #80)**: Cards use three-zone layout, priority accent borders, and read-only status pills (see UI Design Guidelines below)
 
