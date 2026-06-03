@@ -105,8 +105,12 @@ def api_knowledge_create():
 def api_knowledge_update(entry_id):
     """Update a knowledge entry. Auto-creates version record.
 
-    Fields: title, content, board_id (0=no change, null=global, int=specific board),
-    category, auto_context, tags (array of tag name strings), sort_order, updated_by
+    Fields: title, content, board_id (int, optional — set to specific board),
+    clear_board_id (bool, optional — set to True to make entry global, i.e. board_id=NULL),
+    category, auto_context, tags (array of tag name strings), sort_order, updated_by.
+
+    Omitting both board_id and clear_board_id leaves board_id unchanged.
+    Providing both board_id and clear_board_id=True is a 400 error.
     """
     existing = get_knowledge_entry(entry_id)
     if not existing:
@@ -115,7 +119,8 @@ def api_knowledge_update(entry_id):
     data = request.get_json(silent=True) or {}
     title = data.get('title')
     content = data.get('content')
-    board_id = data.get('board_id', 0)  # 0 sentinel = not changed
+    board_id = data.get('board_id')
+    clear_board_id = data.get('clear_board_id', False)
     category = data.get('category')
     auto_context = data.get('auto_context')
     tags = data.get('tags')
@@ -124,12 +129,16 @@ def api_knowledge_update(entry_id):
     if updated_by not in ('human', 'agent'):
         updated_by = 'human'
 
+    # Validate: cannot provide both board_id and clear_board_id
+    if clear_board_id and board_id is not None:
+        return jsonify({"error": "Cannot provide both board_id and clear_board_id"}), 400
+
     # Validate board_id if explicitly set
-    if board_id != 0 and board_id is not None:
+    if board_id is not None:
         try:
             board_id = int(board_id)
         except (ValueError, TypeError):
-            return jsonify({"error": "board_id must be an integer or null"}), 400
+            return jsonify({"error": "board_id must be an integer"}), 400
         board = get_board(board_id)
         if not board:
             return jsonify({"error": "Board not found"}), 404
@@ -145,7 +154,8 @@ def api_knowledge_update(entry_id):
     entry = update_knowledge_entry(
         entry_id, title=title, content=content, board_id=board_id,
         category=category, auto_context=auto_context, tags=tags,
-        sort_order=sort_order, updated_by=updated_by
+        sort_order=sort_order, updated_by=updated_by,
+        clear_board_id=clear_board_id
     )
     return jsonify(entry)
 

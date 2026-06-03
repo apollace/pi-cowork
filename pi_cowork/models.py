@@ -950,12 +950,15 @@ def create_knowledge_entry(title, content, board_id=None, category=None,
     return get_knowledge_entry(entry_id)
 
 
-def update_knowledge_entry(entry_id, title=None, content=None, board_id=0,
+def update_knowledge_entry(entry_id, title=None, content=None, board_id=None,
                             category=None, auto_context=None, tags=None,
-                            sort_order=None, updated_by='human'):
+                            sort_order=None, updated_by='human', clear_board_id=False):
     """Update a knowledge entry. Auto-creates version record.
-    
-    board_id uses 0 as sentinel for 'not changed' since None is a valid value (global).
+
+    board_id: If provided, set to this board. None means not changed (unless
+              clear_board_id is True).
+    clear_board_id: If True, set board_id to NULL (global). Cannot be used
+              together with board_id.
     Returns the updated entry dict or None if not found.
     """
     entry = get_knowledge_entry(entry_id)
@@ -971,13 +974,11 @@ def update_knowledge_entry(entry_id, title=None, content=None, board_id=0,
     if content is not None:
         updates.append("content = ?")
         args.append(content)
-    # board_id uses 0 sentinel — only update if explicitly provided
-    if board_id == 0:
-        pass  # not changed
-    elif board_id is None:
+    # board_id: clear_board_id takes priority; then explicit board_id; else no change
+    if clear_board_id:
         updates.append("board_id = ?")
         args.append(None)  # set to global
-    else:
+    elif board_id is not None:
         updates.append("board_id = ?")
         args.append(board_id)
     if category is not None:

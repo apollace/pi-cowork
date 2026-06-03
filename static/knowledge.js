@@ -307,10 +307,16 @@
     try {
       let res;
       if (editingEntryId) {
-        // PUT — board_id 0 means no change
+        // PUT — use clear_board_id for global, board_id for specific board,
+        // or omit both for no change
         const updateData = { ...data };
-        if (updateData.board_id === null) {
-          updateData.board_id = null;  // set to global
+        delete updateData.board_id; // Will be set explicitly based on dropdown
+        if (boardIdVal === '__global__') {
+          // User selected "Global" — send clear_board_id to make entry global
+          updateData.clear_board_id = true;
+        } else {
+          // User selected a specific board — send board_id
+          updateData.board_id = data.board_id;
         }
         res = await fetch('/api/knowledge/' + editingEntryId, {
           method: 'PUT',
