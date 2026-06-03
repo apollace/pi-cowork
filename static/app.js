@@ -151,7 +151,7 @@ async function initBoard() {
       currentBoardData = await boardRes.json();
       const [sRes, tRes, rRes, lRes] = await Promise.all([
         fetch(`/api/statuses?workflow_id=${currentBoardData.workflow_id}`),
-        fetch(`/api/tickets?board_id=${currentBoardId}`),
+        fetch(`/api/tickets?board_id=${currentBoardId}&include_terminal=${showTerminal.checked}`),
         fetch(`/api/running_agent_runs?board_id=${currentBoardId}`),
         fetch(`/api/labels?workflow_id=${currentBoardData.workflow_id}`),
       ]);
@@ -557,7 +557,7 @@ async function initBoard() {
     renderFilterSummary();
   }
 
-  showTerminal.addEventListener('change', render);
+  showTerminal.addEventListener('change', refresh);
 
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
