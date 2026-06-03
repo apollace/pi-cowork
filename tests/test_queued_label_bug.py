@@ -21,7 +21,8 @@ Bug 4: (pre-existing) Unanswered questions block spawn in drain_queue.
 
 Bug 5: Stale queue cleanup safety net — cleanup_runs() now periodically removes
        queue entries where the ticket already has a running agent, or entries
-       older than 2 hours.
+       older than 2 hours, or entries where the same agent already completed/failed
+       for the ticket after the queue entry was created.
 """
 
 import json
@@ -482,6 +483,245 @@ def test_cleanup_runs_removes_old_queue_entries(client, default_workflow, defaul
 
     q_data = json.loads(client.get(f'/api/tickets/{tid1}').data)
     assert q_data['queued'] is False, "Old queue entry (>2 hours) should be removed"
+
+
+def test_cleanup_runs_removes_queue_entry_when_same_agent_completed(client, default_workflow, default_board):
+    """Bug 5 (rule 3): cleanup_runs should remove queue entries where the same agent
+    already has a completed run that started after the queue entry was created."""
+    _set_limits(client, max_parallel=2, max_per_hour=10)
+
+    agent = client.post('/api/agents', json={
+        'name': 'CompletedCleanupAgent',
+        'description': 'd',
+        'workflow_id': default_workflow['id'],
+    })
+    aid = json.loads(agent.data)['id']
+
+    s1 = client.post('/api/statuses', json={
+        'name': 'CompletedCleanupStage',
+        'sort_order': 1,
+        'agent_id': aid,
+        'workflow_id': default_workflow['id'],
+    })
+    id1 = json.loads(s1.data)['id']
+
+    ticket1 = client.post('/api/tickets', json={'title': 'CompletedCleanup1', 'board_id': default_board['id']})
+    tid1 = json.loads(ticket1.data)['id']
+
+    from pi_cowork.db import get_db
+
+    # Insert a queue entry (queued 5 minutes ago)
+    with client.application.app_context():
+        db = get_db()
+        db.execute(
+            "INSERT INTO agent_queue (ticket_id, status_id, agent_id, reason, queued_at) "
+            "VALUES (?, ?, ?, 'parallel', datetime('now', '-5 minutes'))",
+            (tid1, id1, aid)
+        )
+        db.commit()
+
+    # Verify queue entry exists
+    q_data = json.loads(client.get(f'/api/tickets/{tid1}').data)
+    assert q_data['queued'] is True
+
+    # Insert a completed agent run for the same ticket+agent that started AFTER the queue entry
+    with client.application.app_context():
+        db = get_db()
+        db.execute(
+            "INSERT INTO agent_runs (ticket_id, agent_id, started_at, status, completed_at) "
+            "VALUES (?, ?, datetime('now', '-3 minutes'), 'completed', datetime('now', '-1 minute'))",
+            (tid1, aid)
+        )
+        db.commit()
+
+    # Run cleanup_runs — should remove the queue entry since the same agent completed after queuing
+    with client.application.app_context():
+        from pi_cowork.agents import cleanup_runs
+        cleanup_runs()
+
+    q_data = json.loads(client.get(f'/api/tickets/{tid1}').data)
+    assert q_data['queued'] is False, "Queue entry should be removed when same agent completed after queuing"
+
+
+def test_cleanup_runs_preserves_queue_entry_when_completed_before_queued(client, default_workflow, default_board):
+    """Bug 5 (rule 3): cleanup_runs should NOT remove queue entries where the completed
+    run started BEFORE the queue entry (legitimate re-queue)."""
+    _set_limits(client, max_parallel=2, max_per_hour=10)
+
+    agent = client.post('/api/agents', json={
+        'name': 'RequeuePreserveAgent',
+        'description': 'd',
+        'workflow_id': default_workflow['id'],
+    })
+    aid = json.loads(agent.data)['id']
+
+    s1 = client.post('/api/statuses', json={
+        'name': 'RequeuePreserveStage',
+        'sort_order': 1,
+        'agent_id': aid,
+        'workflow_id': default_workflow['id'],
+    })
+    id1 = json.loads(s1.data)['id']
+
+    ticket1 = client.post('/api/tickets', json={'title': 'RequeuePreserve1', 'board_id': default_board['id']})
+    tid1 = json.loads(ticket1.data)['id']
+
+    from pi_cowork.db import get_db
+
+    # Insert a completed agent run that started BEFORE the queue entry (old run)
+    with client.application.app_context():
+        db = get_db()
+        db.execute(
+            "INSERT INTO agent_runs (ticket_id, agent_id, started_at, status, completed_at) "
+            "VALUES (?, ?, datetime('now', '-2 hours'), 'completed', datetime('now', '-1 hour'))",
+            (tid1, aid)
+        )
+        db.commit()
+
+    # Insert a queue entry (queued 5 minutes ago — AFTER the completed run started)
+    with client.application.app_context():
+        db = get_db()
+        db.execute(
+            "INSERT INTO agent_queue (ticket_id, status_id, agent_id, reason, queued_at) "
+            "VALUES (?, ?, ?, 'parallel', datetime('now', '-5 minutes'))",
+            (tid1, id1, aid)
+        )
+        db.commit()
+
+    # Verify queue entry exists
+    q_data = json.loads(client.get(f'/api/tickets/{tid1}').data)
+    assert q_data['queued'] is True
+
+    # Run cleanup_runs — should NOT remove the queue entry (completed run started before queue)
+    with client.application.app_context():
+        from pi_cowork.agents import cleanup_runs
+        cleanup_runs()
+
+    q_data = json.loads(client.get(f'/api/tickets/{tid1}').data)
+    assert q_data['queued'] is True, "Queue entry should be preserved when completed run started before queue"
+
+
+def test_cleanup_runs_removes_queue_entry_when_same_agent_failed(client, default_workflow, default_board):
+    """Bug 5 (rule 3): cleanup_runs should remove queue entries where the same agent
+    already has a failed run that started after the queue entry was created."""
+    _set_limits(client, max_parallel=2, max_per_hour=10)
+
+    agent = client.post('/api/agents', json={
+        'name': 'FailedCleanupAgent',
+        'description': 'd',
+        'workflow_id': default_workflow['id'],
+    })
+    aid = json.loads(agent.data)['id']
+
+    s1 = client.post('/api/statuses', json={
+        'name': 'FailedCleanupStage',
+        'sort_order': 1,
+        'agent_id': aid,
+        'workflow_id': default_workflow['id'],
+    })
+    id1 = json.loads(s1.data)['id']
+
+    ticket1 = client.post('/api/tickets', json={'title': 'FailedCleanup1', 'board_id': default_board['id']})
+    tid1 = json.loads(ticket1.data)['id']
+
+    from pi_cowork.db import get_db
+
+    # Insert a queue entry (queued 5 minutes ago)
+    with client.application.app_context():
+        db = get_db()
+        db.execute(
+            "INSERT INTO agent_queue (ticket_id, status_id, agent_id, reason, queued_at) "
+            "VALUES (?, ?, ?, 'parallel', datetime('now', '-5 minutes'))",
+            (tid1, id1, aid)
+        )
+        db.commit()
+
+    # Verify queue entry exists
+    q_data = json.loads(client.get(f'/api/tickets/{tid1}').data)
+    assert q_data['queued'] is True
+
+    # Insert a failed agent run for the same ticket+agent that started AFTER the queue entry
+    with client.application.app_context():
+        db = get_db()
+        db.execute(
+            "INSERT INTO agent_runs (ticket_id, agent_id, started_at, status, completed_at) "
+            "VALUES (?, ?, datetime('now', '-3 minutes'), 'failed', datetime('now', '-1 minute'))",
+            (tid1, aid)
+        )
+        db.commit()
+
+    # Run cleanup_runs — should remove the queue entry since the same agent failed after queuing
+    with client.application.app_context():
+        from pi_cowork.agents import cleanup_runs
+        cleanup_runs()
+
+    q_data = json.loads(client.get(f'/api/tickets/{tid1}').data)
+    assert q_data['queued'] is False, "Queue entry should be removed when same agent failed after queuing"
+
+
+def test_cleanup_runs_preserves_queue_entry_for_different_agent(client, default_workflow, default_board):
+    """Bug 5 (rule 3): cleanup_runs should NOT remove queue entries for different agents
+    when another agent completed for the same ticket."""
+    _set_limits(client, max_parallel=2, max_per_hour=10)
+
+    agent_a = client.post('/api/agents', json={
+        'name': 'DifferentAgentA',
+        'description': 'd',
+        'workflow_id': default_workflow['id'],
+    })
+    aid_a = json.loads(agent_a.data)['id']
+
+    agent_b = client.post('/api/agents', json={
+        'name': 'DifferentAgentB',
+        'description': 'd',
+        'workflow_id': default_workflow['id'],
+    })
+    aid_b = json.loads(agent_b.data)['id']
+
+    s1 = client.post('/api/statuses', json={
+        'name': 'DifferentAgentStage',
+        'sort_order': 1,
+        'agent_id': aid_a,
+        'workflow_id': default_workflow['id'],
+    })
+    id1 = json.loads(s1.data)['id']
+
+    ticket1 = client.post('/api/tickets', json={'title': 'DifferentAgent1', 'board_id': default_board['id']})
+    tid1 = json.loads(ticket1.data)['id']
+
+    from pi_cowork.db import get_db
+
+    # Insert a queue entry for agent B (queued 5 minutes ago)
+    with client.application.app_context():
+        db = get_db()
+        db.execute(
+            "INSERT INTO agent_queue (ticket_id, status_id, agent_id, reason, queued_at) "
+            "VALUES (?, ?, ?, 'parallel', datetime('now', '-5 minutes'))",
+            (tid1, id1, aid_b)
+        )
+        db.commit()
+
+    # Verify queue entry exists
+    q_data = json.loads(client.get(f'/api/tickets/{tid1}').data)
+    assert q_data['queued'] is True
+
+    # Insert a completed agent run for agent A (different agent) for the same ticket
+    with client.application.app_context():
+        db = get_db()
+        db.execute(
+            "INSERT INTO agent_runs (ticket_id, agent_id, started_at, status, completed_at) "
+            "VALUES (?, ?, datetime('now', '-3 minutes'), 'completed', datetime('now', '-1 minute'))",
+            (tid1, aid_a)
+        )
+        db.commit()
+
+    # Run cleanup_runs — should NOT remove the queue entry (different agent)
+    with client.application.app_context():
+        from pi_cowork.agents import cleanup_runs
+        cleanup_runs()
+
+    q_data = json.loads(client.get(f'/api/tickets/{tid1}').data)
+    assert q_data['queued'] is True, "Queue entry for different agent should be preserved"
 
 
 def test_cleanup_runs_preserves_recent_queue_entries(client, default_workflow, default_board):

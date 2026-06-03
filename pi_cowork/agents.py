@@ -153,6 +153,9 @@ def cleanup_runs():
     Also cleans up stale queue entries (Bug 5 safety net):
     - Removes queue entries where the ticket already has a running agent
     - Removes queue entries older than 2 hours that have not been started
+    - Removes queue entries where the same agent already completed/failed
+      for the ticket after the queue entry was created (prevents re-spawn
+      of a completed agent from a stale queue entry)
     """
     now = datetime.now(timezone.utc)
     rows = query_db("SELECT id, pid, started_at FROM agent_runs WHERE status = 'running'")
@@ -195,6 +198,17 @@ def cleanup_runs():
     # Remove queue entries older than 2 hours that have not been started
     run_db(
         "DELETE FROM agent_queue WHERE started_at IS NULL AND queued_at < datetime('now', '-2 hours')"
+    )
+    # Remove queue entries where the same agent already completed/failed for
+    # the ticket after the queue entry was created
+    run_db(
+        """DELETE FROM agent_queue WHERE started_at IS NULL AND EXISTS (
+            SELECT 1 FROM agent_runs ar
+            WHERE ar.ticket_id = agent_queue.ticket_id
+            AND ar.agent_id = agent_queue.agent_id
+            AND ar.status IN ('completed', 'failed')
+            AND ar.started_at >= agent_queue.queued_at
+        )"""
     )
 
 
