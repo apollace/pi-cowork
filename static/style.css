@@ -701,6 +701,36 @@ body {
   color: var(--primary);
 }
 
+.card-ask-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  border: 1px solid #a855f755;
+  background: transparent;
+  color: #a855f7;
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  margin-left: auto;
+  transition: background .15s, border-color .15s, color .15s, opacity .15s;
+}
+.card-ask-btn:hover:not(:disabled) {
+  background: #a855f711;
+  border-color: #a855f7;
+  color: #a855f7;
+}
+.card-ask-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  color: var(--text-muted);
+  border-color: var(--border);
+  background: transparent;
+}
+
 .card-link {
   text-decoration: none;
   color: inherit;

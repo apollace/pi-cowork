@@ -514,9 +514,9 @@ def api_ask_agent(ticket_id):
     if not status:
         return jsonify({"error": "Current status not found"}), 409
 
-    # Guard: terminal status
-    if status.get('is_terminal'):
-        return jsonify({"error": "Cannot ask agent: ticket is in a terminal status"}), 409
+    # Note: terminal-status tickets are intentionally allowed — the agent
+    # in ask mode never changes the ticket status, so asking on a Closed
+    # or Dropped ticket still produces a useful comment thread.
 
     # Resolve target agent: explicit agent_id wins, otherwise default to
     # the current status's assigned agent.  Mirrors how api_spawn_agent

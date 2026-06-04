@@ -529,8 +529,13 @@ class TestAskSessionReuse:
 # ---------------------------------------------------------------------------
 
 class TestAskBlocked:
-    def test_ask_blocked_on_terminal_status(self, client, default_workflow, default_board):
-        """Terminal status → 409."""
+    def test_ask_works_on_terminal_status(self, client, default_workflow, default_board):
+        """Terminal status → 200, mode='ask' run, system comment with preview.
+
+        Per Ticket #118: ask should work on any status, including terminal
+        ones, because the agent in ask mode never changes the ticket
+        status, so the answer still lands as a useful comment thread.
+        """
         agent = _create_agent(client, default_workflow['id'], 'AskTermAgent',
                               'term test agent.')
         status = _create_status(client, default_workflow['id'], 'AskTermStage', agent['id'],
@@ -543,32 +548,105 @@ class TestAskBlocked:
         })
         assert ticket_res.status_code == 201
         ticket = json.loads(ticket_res.data)
+        # The work-spawn that fires on ticket creation takes the only
+        # available parallel slot. Mark it completed so the ask can fire.
+        with client.application.app_context():
+            from pi_cowork.db import get_db
+            db = get_db()
+            db.execute(
+                "UPDATE agent_runs SET status = 'completed' WHERE ticket_id = ? AND status = 'running'",
+                (ticket['id'],),
+            )
+            db.commit()
 
-        res = client.post(f'/api/tickets/{ticket["id"]}/ask',
-                          json={'question': 'Am I done?'})
-        assert res.status_code == 409
-        assert 'terminal' in json.loads(res.data)['error'].lower()
+        popen_se, _ = _make_fake_popen()
+        with patch('app.subprocess.Popen', side_effect=popen_se):
+            res = client.post(f'/api/tickets/{ticket["id"]}/ask',
+                              json={'question': 'Am I done?'})
+        assert res.status_code == 200, res.data
+        data = json.loads(res.data)
+        assert data['success'] is True
+        assert data['agent']['id'] == agent['id']
+        assert data['spawned'] is True
 
-    def test_ask_blocked_on_unanswered_questions(self, client, default_workflow, default_board):
-        """Open questions → 409 (agent would be blocked by try_spawn_or_queue)."""
+        # agent_runs row should be mode='ask'
+        runs = json.loads(client.get(f'/api/tickets/{ticket["id"]}/agent_runs').data)
+        ask_runs = [r for r in runs if r['mode'] == 'ask']
+        assert len(ask_runs) == 1
+        assert ask_runs[0]['status'] == 'running'
+
+        # System comment with the question preview
+        comments = json.loads(client.get(f'/api/tickets/{ticket["id"]}/comments').data)
+        preview_comments = [c for c in comments if 'Asked agent' in c['body']]
+        assert len(preview_comments) == 1
+        assert 'Am I done?' in preview_comments[0]['body']
+
+    def test_ask_works_on_terminal_status_with_explicit_agent(self, client, default_workflow, default_board):
+        """Terminal status + explicit agent_id → 200, no status change."""
+        agent_a = _create_agent(client, default_workflow['id'], 'AskTermA',
+                                'agent a.')
+        agent_b = _create_agent(client, default_workflow['id'], 'AskTermB',
+                                'agent b.')
+        # Terminal status with agent_a, ticket starts in this status
+        status = _create_status(client, default_workflow['id'], 'AskTermStageEA', agent_a['id'],
+                                 sort_order=1, is_terminal=True)
+        ticket_res = client.post('/api/tickets', json={
+            'title': 'Terminal with explicit',
+            'board_id': default_board['id'],
+            'status_id': status['id'],
+        })
+        assert ticket_res.status_code == 201
+        ticket = json.loads(ticket_res.data)
+
+        # Capture the ticket's status before the ask
+        before = json.loads(client.get(f'/api/tickets/{ticket["id"]}').data)
+        assert before['status_id'] == status['id']
+
+        popen_se, _ = _make_fake_popen()
+        with patch('app.subprocess.Popen', side_effect=popen_se):
+            res = client.post(f'/api/tickets/{ticket["id"]}/ask', json={
+                'agent_id': agent_b['id'],
+                'question': 'Use agent b on terminal ticket.',
+            })
+        assert res.status_code == 200, res.data
+        data = json.loads(res.data)
+        assert data['agent']['id'] == agent_b['id']
+
+        # Status must NOT have changed
+        after = json.loads(client.get(f'/api/tickets/{ticket["id"]}').data)
+        assert after['status_id'] == status['id']
+
+    def test_ask_works_with_unanswered_questions(self, client, default_workflow, default_board):
+        """Open questions → 200, ask run is still created.
+
+        Per Ticket #118: the two flows are independent. The user can ask
+        a free-form question even when the agent has open questions it
+        asked the human.
+        """
         agent = _create_agent(client, default_workflow['id'], 'AskQAgent',
                               'q test agent.')
         status = _create_status(client, default_workflow['id'], 'AskQStage', agent['id'],
                                  sort_order=1)
         ticket = _create_ticket(client, default_board['id'])
+        _move_ticket_to_status(client, ticket['id'], status['id'])
 
-        # Post a question (no answer) so the agent is blocked
+        # Post a question (no answer) so there are unanswered questions
         qres = client.post(f'/api/tickets/{ticket["id"]}/questions', json={
             'questions': [{'body': 'What color?', 'options': ['red', 'blue']}],
         })
         assert qres.status_code == 201
 
-        res = client.post(f'/api/tickets/{ticket["id"]}/ask',
-                          json={'question': 'Are you stuck?'})
-        assert res.status_code == 409
-        # The error should mention questions / blocked
-        body = json.loads(res.data)
-        assert body.get('error')
+        popen_se, _ = _make_fake_popen()
+        with patch('app.subprocess.Popen', side_effect=popen_se):
+            res = client.post(f'/api/tickets/{ticket["id"]}/ask',
+                              json={'question': 'Are you stuck?'})
+        assert res.status_code == 200, res.data
+        data = json.loads(res.data)
+        assert data['spawned'] is True
+
+        # Confirm there's an ask run
+        runs = json.loads(client.get(f'/api/tickets/{ticket["id"]}/agent_runs').data)
+        assert any(r['mode'] == 'ask' and r['status'] == 'running' for r in runs)
 
     def test_ask_blocked_when_ask_run_in_flight(self, client, default_workflow, default_board):
         """Another ask run already running on this ticket → 409."""
@@ -785,3 +863,78 @@ class TestAskUI:
         assert len(runs) >= 1
         for run in runs:
             assert 'mode' in run, f"agent_runs row should include 'mode': {run}"
+
+
+# ---------------------------------------------------------------------------
+# UI: hash-trigger for the Ask Agent modal (Ticket #118)
+# ---------------------------------------------------------------------------
+
+class TestAskHashTrigger:
+    def test_ask_modal_triggered_by_hash_in_ticket_html(self, client, default_workflow, default_board):
+        """GET /ticket/<id> must include both the hash handler and the modal
+        so the modal can be auto-opened via #ask-agent.
+        """
+        agent = _create_agent(client, default_workflow['id'], 'AskHashAgent',
+                              'hash trigger test.')
+        _create_status(client, default_workflow['id'], 'AskHashStage', agent['id'],
+                        sort_order=1)
+        ticket = _create_ticket(client, default_board['id'])
+        res = client.get(f'/ticket/{ticket["id"]}')
+        assert res.status_code == 200
+        html = res.data.decode('utf-8')
+        # The hash-trigger block must be present
+        assert '#ask-agent' in html, "Hash-trigger for ask-agent should be in the page"
+        # The modal element it opens must be present
+        assert 'ask-agent-modal' in html, "Ask Agent modal should be in the page"
+        # The handler must reference the showAskAgentModal function
+        assert 'showAskAgentModal' in html, "Hash handler should call showAskAgentModal"
+
+    def test_ask_modal_triggered_by_hash_function_in_template(self):
+        """The ticket detail template source contains the hash-trigger
+        logic that calls showAskAgentModal().
+        """
+        import os
+        template_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), 'templates', 'ticket_detail.html'
+        )
+        with open(template_path) as f:
+            html = f.read()
+        # Must contain the location.hash check
+        assert "location.hash === '#ask-agent'" in html
+        # Must contain the open function call
+        assert 'showAskAgentModal()' in html
+
+
+# ---------------------------------------------------------------------------
+# UI: card-level 💬 Ask button on the board (Ticket #118)
+# ---------------------------------------------------------------------------
+
+class TestCardAskButton:
+    def test_card_ask_button_in_app_js(self):
+        """static/app.js contains the card-level Ask button wiring."""
+        import os
+        app_js_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), 'static', 'app.js'
+        )
+        with open(app_js_path) as f:
+            js = f.read()
+        # The card button class
+        assert 'card-ask-btn' in js, "card-ask-btn class should be referenced in app.js"
+        # The click handler navigation
+        assert '#ask-agent' in js, "Click handler should navigate to #ask-agent hash"
+        # The button uses preventDefault + stopPropagation to avoid card-link
+        assert 'card-ask-btn' in js
+
+    def test_card_ask_button_styles(self):
+        """static/style.css contains the .card-ask-btn style block."""
+        import os
+        style_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), 'static', 'style.css'
+        )
+        with open(style_path) as f:
+            css = f.read()
+        assert '.card-ask-btn' in css, "card-ask-btn style block should exist"
+        # Should have a disabled state
+        assert '.card-ask-btn:disabled' in css, "card-ask-btn disabled state should exist"
+        # Should have a hover state (enabled only)
+        assert '.card-ask-btn:hover' in css, "card-ask-btn hover state should exist"

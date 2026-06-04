@@ -313,7 +313,8 @@ Ticket detail pages expose an **Ask Agent** button (💬) next to the Run/Re-run
 - `agent_id` is optional — defaults to the current status's assigned agent. Must belong to the ticket's workflow.
 - `question` is required (non-empty after strip).
 - Returns 200 with `{ success, agent: {id, name}, spawned, queued }` (same shape as `/spawn`).
-- Returns 409 if the ticket is in a terminal status, no agent is assigned (and no `agent_id` given), the explicit `agent_id` belongs to a different workflow, or another ask run is already in flight on the ticket.
+- Returns 409 if no agent is assigned (and no `agent_id` given), the explicit `agent_id` belongs to a different workflow, or another ask run is already in flight on the ticket.
+- Terminal-status tickets are accepted (Ticket #118): the agent in ask mode never changes the ticket status, so asking on a Closed/Dropped ticket still produces a useful comment thread.
 - Returns 400 if `question` is missing or empty.
 - Returns 404 if the ticket does not exist.
 
@@ -340,12 +341,11 @@ The system prompt is replaced (or appended) with the per-agent `ask_system_promp
 
 ### UI
 
-The **Ask Agent** button on the ticket detail page is hidden when:
-- The ticket is in a terminal status
-- There are unanswered questions (mirrors the spawn-block behaviour)
-- A `mode='ask'` run is already running on this ticket (one ask at a time; multiple work runs are already blocked by the parallel limit)
+The **Ask Agent** button on the ticket detail page is hidden only when the workflow has zero agents (no useful modal). The button is **disabled** when an agent is already running on the ticket (Ticket #118). All other conditions — terminal status, open questions, missing current-status agent — keep the button enabled (the modal lets the user pick an agent explicitly).
 
-Clicking the button opens a modal with an agent selector (defaults to the current status's agent) and a question textarea. On success the modal closes, a toast confirms which agent was asked, and agent-runs + comments refresh via SSE. A single ask run is in flight at a time; the second concurrent ask returns 409 with a clear error.
+Every board kanban card (Ticket #118) also has a small 💬 button in its `.card-footer` (`.card-ask-btn` class). The button is rendered only when the workflow has at least one agent. It is disabled when an agent is already running on the ticket. Clicking the button navigates to `/ticket/<id>#ask-agent`; the ticket detail page detects the hash and auto-opens the Ask modal once `initRunAgentButton()` has finished populating the button state.
+
+Clicking the Ask button opens a modal with an agent selector (defaults to the current status's agent) and a question textarea. On success the modal closes, a toast confirms which agent was asked, and agent-runs + comments refresh via SSE. A single ask run is in flight at a time; the second concurrent ask returns 409 with a clear error.
 
 ## API (JSON)
 
