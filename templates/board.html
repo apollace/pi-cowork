@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Board — pi-CoWork{% endblock %}
 {% block content %}
-<div class="page-header">
+<div class="page-header board-page-header">
   <div class="board-header-left">
     <h1 id="board-title">Board</h1>
     <div class="board-meta" id="board-meta"></div>
   </div>
   <div class="page-actions">
-    <a class="btn primary" id="new-ticket-btn" href="{{ url_for('new_ticket') }}">+ New Ticket</a>
-    <button class="btn" id="manage-boards-btn" onclick="toggleBoardPanel()" title="Manage boards">
+    <a class="btn primary btn-compact-primary" id="new-ticket-btn" href="{{ url_for('new_ticket') }}">+ New Ticket</a>
+    <button class="btn btn-compact-secondary" id="manage-boards-btn" onclick="toggleBoardPanel()" title="Manage boards">
       <span>📁</span> Boards
     </button>
   </div>
