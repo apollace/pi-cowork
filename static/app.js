@@ -8,6 +8,7 @@ async function initBoard() {
   let statuses = [];
   let tickets = [];
   let workflowLabels = [];
+  let workflowAgentCount = 0;
   let currentBoardId = null;
   let currentBoardData = null;
   const collapsed = new Set();
@@ -198,16 +199,21 @@ async function initBoard() {
         return;
       }
       currentBoardData = await boardRes.json();
-      const [sRes, tRes, rRes, lRes] = await Promise.all([
+      const [sRes, tRes, rRes, lRes, aRes] = await Promise.all([
         fetch(`/api/statuses?workflow_id=${currentBoardData.workflow_id}`),
         fetch(`/api/tickets?board_id=${currentBoardId}&include_terminal=${showTerminal.checked}`),
         fetch(`/api/running_agent_runs?board_id=${currentBoardId}`),
         fetch(`/api/labels?workflow_id=${currentBoardData.workflow_id}`),
+        fetch(`/api/agents?workflow_id=${currentBoardData.workflow_id}`),
       ]);
       statuses = await sRes.json();
       tickets = await tRes.json();
       workflowLabels = lRes.ok ? await lRes.json() : [];
+      workflowAgentCount = aRes.ok ? (await aRes.json()).length : 0;
       const runningRuns = rRes.ok ? await rRes.json() : [];
+      // Build a Set<number> of ticket ids that currently have a running
+      // agent run — used to disable the per-card 💬 Ask button.
+      const runningTicketIds = new Set(runningRuns.map(r => r.ticket_id));
       if (newTicketBtn) {
         newTicketBtn.href = `/ticket/new?board_id=${currentBoardId}`;
       }
@@ -387,6 +393,13 @@ async function initBoard() {
     const labelPills = (ticket.labels || []).map(l =>
       `<span class="badge label-pill" style="background:${escapeHtml(l.color)}33;color:${escapeHtml(l.color)};border:1px solid ${escapeHtml(l.color)}55;">${escapeHtml(l.name)}</span>`
     ).join('');
+    // Card-level Ask button (Ticket #118). Hidden when the workflow has
+    // no agents (no useful modal). Disabled when an agent is already
+    // running on this ticket.
+    const isRunning = runningTicketIds.has(ticket.id);
+    const askBtnHtml = workflowAgentCount > 0
+      ? `<button type="button" class="card-ask-btn" data-ticket-id="${ticket.id}" title="${isRunning ? 'Cannot ask: an agent is already running on this ticket' : 'Ask the assigned agent a question'}"${isRunning ? ' disabled' : ''}>💬</button>`
+      : '';
     card.innerHTML = `
       <a class="card-link" href="/ticket/${ticket.id}">
         <div class="card-header">
@@ -411,6 +424,7 @@ async function initBoard() {
         ${questionBadge}
         ${recurringBadge}
         ${branchBadge}
+        ${askBtnHtml}
       </div>
     `;
 
@@ -421,6 +435,19 @@ async function initBoard() {
         e.preventDefault();
         e.stopPropagation();
         moveTicket(ticket.id, parseInt(e.target.value));
+      });
+    }
+
+    // Attach click handler for the Ask button (Ticket #118). Must not
+    // bubble to the card link, otherwise we'd navigate to /ticket/<id>
+    // instead of /ticket/<id>#ask-agent.
+    const askBtnEl = card.querySelector('.card-ask-btn');
+    if (askBtnEl) {
+      askBtnEl.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (askBtnEl.disabled) return;
+        window.location.href = `/ticket/${ticket.id}#ask-agent`;
       });
     }
 

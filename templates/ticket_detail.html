@@ -625,6 +625,24 @@
       const hasPreviousRun = agentRunCount > 0;
       const questionCount = data.question_count || 0;
 
+      // Fetch the workflow's agent count to know whether to even render
+      // the Ask button (no useful modal when the workflow has no agents).
+      let workflowAgentCount = 0;
+      try {
+        const wfRes = await fetch('/api/workflows');
+        if (wfRes.ok) {
+          const workflows = await wfRes.json();
+          const wf = workflows.find(w => w.id === data.workflow_id);
+          if (wf) {
+            const agentsRes = await fetch(`/api/agents?workflow_id=${wf.id}`);
+            if (agentsRes.ok) {
+              const agents = await agentsRes.json();
+              workflowAgentCount = agents.length;
+            }
+          }
+        }
+      } catch (e) { /* keep default 0 */ }
+
       if (hasPreviousRun && !isTerminal && hasAgent && runningCount === 0) {
         btn.style.display = 'none';
         rerunBtn.style.display = 'inline-flex';
@@ -656,25 +674,24 @@
         rerunBtn.style.display = 'none';
       }
 
-      // Ask Agent button: show when ticket is not terminal, has an agent
-      // assigned to the current status, no unanswered questions, and no ask
-      // run currently in flight (any other agent run already blocks spawning
-      // via the parallel limit; we add an explicit in-flight check for UX).
+      // Ask Agent button: simplified per the plan — the ONLY condition
+      // that disables the Ask button is "an agent is already running on
+      // this ticket". Terminal status, open questions, and missing
+      // current-status agent are all no longer blocking (the ask endpoint
+      // accepts any status; a missing default agent is handled in the
+      // modal where the user picks one explicitly). Hide the button
+      // entirely when the workflow has no agents at all (no useful modal).
       if (askBtn) {
-        if (!isTerminal && hasAgent && questionCount === 0 && runningCount === 0) {
-          askBtn.style.display = 'inline-flex';
-          askBtn.disabled = false;
-          askBtn.title = 'Ask the assigned agent a question (Q&A mode)';
-        } else if (!isTerminal && hasAgent && questionCount > 0) {
-          askBtn.style.display = 'inline-flex';
-          askBtn.disabled = true;
-          askBtn.title = 'Cannot ask: unanswered questions exist';
-        } else if (!isTerminal && hasAgent && runningCount > 0) {
+        if (workflowAgentCount === 0) {
+          askBtn.style.display = 'none';
+        } else if (runningCount > 0) {
           askBtn.style.display = 'inline-flex';
           askBtn.disabled = true;
           askBtn.title = 'Cannot ask: an agent is already running on this ticket';
         } else {
-          askBtn.style.display = 'none';
+          askBtn.style.display = 'inline-flex';
+          askBtn.disabled = false;
+          askBtn.title = 'Ask the assigned agent a question (Q&A mode)';
         }
       }
     } catch(e) {
@@ -1048,6 +1065,23 @@
     if (this.disabled) return;
     showAskAgentModal();
   });
+
+  // ── Hash-trigger: if the page was opened with #ask-agent in the URL,
+  // auto-open the modal once the Ask button has been initialised.
+  // Falls back to a 200ms timer in case initRunAgentButton() resolves
+  // before this script runs.
+  function _maybeOpenAskModalFromHash() {
+    if (location.hash === '#ask-agent') {
+      const askBtn = document.getElementById('ask-agent-btn');
+      if (askBtn && askBtn.style.display !== 'none' && !askBtn.disabled) {
+        showAskAgentModal();
+      }
+    }
+  }
+  if (location.hash === '#ask-agent') {
+    // Wait a tick for initRunAgentButton to finish populating the button.
+    setTimeout(_maybeOpenAskModalFromHash, 200);
+  }
 
   // Submit the ask
   document.getElementById('ask-agent-form').addEventListener('submit', async function(e) {

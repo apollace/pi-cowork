@@ -358,15 +358,22 @@ def try_spawn_or_queue(ticket, status, agent, old_status_id=None, ask_question=N
         "DELETE FROM agent_queue WHERE ticket_id = ? AND started_at IS NULL",
         (ticket['id'],)
     )
-    # Block agent spawn while gate reviews are pending
+    # Block agent spawn while gate reviews are pending (applies to both
+    # work and ask modes — an ask run shouldn't fire while the ticket is
+    # stuck behind a quality gate either).
     if has_pending_gate_reviews(ticket['id']):
         logger.info("Skipping agent spawn for ticket %d — pending gate reviews exist", ticket['id'])
         return
-    # Block agent spawn while unanswered questions exist
-    question_count = count_unanswered_questions(ticket['id'])
-    if question_count > 0:
-        _add_question_wait_comment(ticket['id'], question_count)
-        return
+    # Block work-spawn while unanswered questions exist. ASK-mode spawns
+    # (Ticket #118) are deliberately NOT blocked by this guard: the two
+    # flows are independent, and the ask agent never changes the ticket
+    # status so its answer still lands as a useful comment even if other
+    # questions are still open.
+    if ask_question is None:
+        question_count = count_unanswered_questions(ticket['id'])
+        if question_count > 0:
+            _add_question_wait_comment(ticket['id'], question_count)
+            return
     cleanup_runs()
     with _spawn_lock:
         if count_running() >= get_config('max_parallel'):
@@ -392,11 +399,15 @@ def spawn_agent(ticket, status, agent, old_status_id=None, ask_question=None, as
     ticket_id = ticket['id']
     is_ask = ask_question is not None
 
-    # Block spawn if unanswered questions exist
-    question_count = count_unanswered_questions(ticket_id)
-    if question_count > 0:
-        _add_question_wait_comment(ticket_id, question_count)
-        return False
+    # Block work-spawn if unanswered questions exist. ASK-mode spawns
+    # (Ticket #118) bypass this guard: the ask agent never changes the
+    # ticket status, and asking while questions are still open is a
+    # supported flow.
+    if not is_ask:
+        question_count = count_unanswered_questions(ticket_id)
+        if question_count > 0:
+            _add_question_wait_comment(ticket_id, question_count)
+            return False
 
     now = datetime.now(timezone.utc)
     board_id = ticket.get('board_id')
