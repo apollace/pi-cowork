@@ -640,7 +640,17 @@ The UI updates in real-time via Server-Sent Events (SSE), replacing all polling.
   - `sse:open` event dispatched on connect/reconnect → triggers full refresh to re-sync state
   - `window._reconnectSSE()` available for programmatic reconnection
 
-- **Board page (app.js)**: Listens for all board-relevant SSE events → debounced `refresh()` (500ms)
+- **Board page (app.js)**: Listens for all board-relevant SSE events → debounced `syncTickets()` (500ms)
+  - `syncTickets()` fetches only the ticket list and running agents, then calls `diffAndUpdateBoard(newTickets)` to apply **surgical DOM updates** instead of full `refresh()`:
+    - **New tickets**: create card and append to correct column (entrance animation runs automatically).
+    - **Status changes**: move the existing card element from old column to new column.
+    - **In-place updates** (priority, title, labels, badges): update only changed sub-elements within the existing card, preserving element identity.
+    - **Removed tickets**: remove card element directly.
+    - **Filter changes**: if a ticket newly matches or stops matching active filters, add/remove it accordingly.
+  - `renderRunningPanel()` also diffs runs instead of wiping `innerHTML`.
+  - **Full `refresh()`** is reserved for: initial page load, board switch, filter changes, show-terminal toggle, and `sse:open` reconnect (full resync).
+  - The skeleton loader is suppressed on SSE syncs — shown only on full refresh.
+  - UX state preserved: column collapse, scroll position, active popovers (closed if their ticket is removed/moved), and kill button handlers.
   - Replaces the former 30s polling interval
 
 - **Ticket detail (ticket_detail.html)**: Listens for ticket-scoped SSE events (filtered by `ticket_id`)
