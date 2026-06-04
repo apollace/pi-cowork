@@ -1,5 +1,5 @@
 :root {
-  --bg: #f3f4f6;
+  --bg: #F8F9FA;
   --surface: #ffffff;
   --surface-elevated: #ffffff;
   --text: #111827;
@@ -529,8 +529,8 @@ body {
   cursor: pointer;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
+  background: transparent;
+  border: none;
 }
 
 .group-header-content {
@@ -551,6 +551,7 @@ body {
 .group-title {
   font-weight: 600;
   font-size: 0.95rem;
+  color: #1A1D20;
   min-width: 0;
   overflow-wrap: break-word;
 }
