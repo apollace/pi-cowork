@@ -96,6 +96,7 @@ body {
 
 .container {
   padding: 1.5rem;
+  padding-bottom: 80px;
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
@@ -1315,6 +1316,7 @@ textarea.edit-input { resize: vertical; min-height: 2.5rem; }
   }
   .container {
     padding: 1rem;
+    padding-bottom: 80px;
   }
   .page-header {
     flex-direction: column;
