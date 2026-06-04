@@ -374,7 +374,7 @@ async function loadWorkflowDetail(id) {
         <h3 class="wf-subtitle">Boards using this workflow</h3>
         <div class="wf-boards-list">
           ${wfBoards.map(b => `
-            <span class="badge muted" style="cursor:pointer" onclick="selectAndGoBoard(${b.id})">📁 ${escapeHtml(b.name)}</span>
+            <span class="badge muted cursor-pointer" onclick="selectAndGoBoard(${b.id})">📁 ${escapeHtml(b.name)}</span>
           `).join('')}
         </div>
       </div>
@@ -517,7 +517,7 @@ document.getElementById('create-wf-form').addEventListener('submit', async (e) =
     hideCreateWorkflow();
     loadWorkflows();
   } else {
-    const d = await res.json(); alert(d.error || 'Failed');
+    const d = await res.json(); showToast(d.error || 'Failed', 'error');
   }
 });
 
@@ -546,14 +546,14 @@ document.getElementById('edit-wf-form').addEventListener('submit', async (e) => 
     body: JSON.stringify(body),
   });
   if (res.ok) { hideEditWorkflow(); loadWorkflows(); }
-  else { const d = await res.json(); alert(d.error || 'Failed'); }
+  else { const d = await res.json(); showToast(d.error || 'Failed', 'error'); }
 });
 
 async function deleteWorkflow(id) {
   if (!confirm('Delete this workflow? All agents, statuses, and transitions will be lost.')) return;
   const res = await fetch(`/api/workflows/${id}`, { method: 'DELETE' });
   if (res.ok) { loadWorkflows(); }
-  else { const d = await res.json(); alert(d.error || 'Failed'); }
+  else { const d = await res.json(); showToast(d.error || 'Failed', 'error'); }
 }
 
 async function exportWorkflow(id) {
@@ -594,7 +594,7 @@ document.getElementById('create-board-form').addEventListener('submit', async (e
     }),
   });
   if (res.ok) { hideCreateBoard(); loadWorkflowDetail(parseInt(fd.get('workflow_id'))); loadWorkflows(); }
-  else { const d = await res.json(); alert(d.error || 'Failed'); }
+  else { const d = await res.json(); showToast(d.error || 'Failed', 'error'); }
 });
 
 // ── Endpoint Registry (cached) ──
@@ -785,14 +785,14 @@ document.getElementById('agent-form').addEventListener('submit', async (e) => {
   if (!id) body.workflow_id = workflowId;
   const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
   if (res.ok) { hideAgentModal(); loadWorkflowDetail(workflowId); }
-  else { const d = await res.json(); alert(d.error || 'Failed'); }
+  else { const d = await res.json(); showToast(d.error || 'Failed', 'error'); }
 });
 
 async function deleteAgent(agentId, workflowId) {
   if (!confirm('Delete this agent?')) return;
   const res = await fetch(`/api/agents/${agentId}`, { method: 'DELETE' });
   if (res.ok) loadWorkflowDetail(workflowId);
-  else { const d = await res.json(); alert(d.error || 'Failed'); }
+  else { const d = await res.json(); showToast(d.error || 'Failed', 'error'); }
 }
 
 // ── Status CRUD ──
@@ -870,14 +870,14 @@ document.getElementById('status-form').addEventListener('submit', async (e) => {
   if (!id) body.workflow_id = workflowId;
   const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
   if (res.ok) { hideStatusModal(); loadWorkflowDetail(workflowId); }
-  else { const d = await res.json(); alert(d.error || 'Failed'); }
+  else { const d = await res.json(); showToast(d.error || 'Failed', 'error'); }
 });
 
 async function deleteStatus(statusId, workflowId) {
   if (!confirm('Delete this status?')) return;
   const res = await fetch(`/api/statuses/${statusId}`, { method: 'DELETE' });
   if (res.ok) loadWorkflowDetail(workflowId);
-  else { const d = await res.json(); alert(d.error || 'Failed'); }
+  else { const d = await res.json(); showToast(d.error || 'Failed', 'error'); }
 }
 
 // ── Transition CRUD ──
@@ -940,14 +940,14 @@ document.getElementById('transition-form').addEventListener('submit', async (e) 
   if (!id) body.workflow_id = workflowId;
   const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
   if (res.ok) { hideTransitionModal(); loadWorkflowDetail(workflowId); }
-  else { const d = await res.json(); alert(d.error || 'Failed'); }
+  else { const d = await res.json(); showToast(d.error || 'Failed', 'error'); }
 });
 
 async function deleteTransition(transitionId, workflowId) {
   if (!confirm('Delete this transition?')) return;
   const res = await fetch(`/api/transitions/${transitionId}`, { method: 'DELETE' });
   if (res.ok) loadWorkflowDetail(workflowId);
-  else { const d = await res.json(); alert(d.error || 'Failed'); }
+  else { const d = await res.json(); showToast(d.error || 'Failed', 'error'); }
 }
 
 // ── Quality Gates ──
@@ -979,7 +979,7 @@ function showGateCreate(workflowId) {
 
 async function showGateEdit(gateId, workflowId) {
   const res = await fetch(`/api/quality_gates/${gateId}`);
-  if (!res.ok) { alert('Gate not found'); return; }
+  if (!res.ok) { showToast('Gate not found', 'error'); return; }
   const gate = await res.json();
   const form = document.getElementById('gate-form');
   form.elements.id.value = gate.id;
@@ -1052,11 +1052,11 @@ document.getElementById('gate-form').addEventListener('submit', async (e) => {
     if (gateType === 'cli') updateBody.config = body.config;
     const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(updateBody) });
     if (res.ok) { hideGateModal(); loadWorkflowDetail(workflowId); }
-    else { const d = await res.json(); alert(d.error || 'Failed'); }
+    else { const d = await res.json(); showToast(d.error || 'Failed', 'error'); }
   } else {
     const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
     if (res.ok) { hideGateModal(); loadWorkflowDetail(workflowId); }
-    else { const d = await res.json(); alert(d.error || 'Failed'); }
+    else { const d = await res.json(); showToast(d.error || 'Failed', 'error'); }
   }
 });
 
@@ -1064,7 +1064,7 @@ async function deleteGate(gateId, workflowId) {
   if (!confirm('Delete this quality gate?')) return;
   const res = await fetch(`/api/quality_gates/${gateId}`, { method: 'DELETE' });
   if (res.ok) loadWorkflowDetail(workflowId);
-  else { const d = await res.json(); alert(d.error || 'Failed'); }
+  else { const d = await res.json(); showToast(d.error || 'Failed', 'error'); }
 }
 
 // ── Labels ──
@@ -1131,14 +1131,14 @@ document.getElementById('label-form').addEventListener('submit', async (e) => {
   if (!id) body.workflow_id = workflowId;
   const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
   if (res.ok) { hideLabelModal(); loadWorkflowDetail(workflowId); }
-  else { const d = await res.json(); alert(d.error || 'Failed'); }
+  else { const d = await res.json(); showToast(d.error || 'Failed', 'error'); }
 });
 
 async function deleteLabel(labelId, workflowId) {
   if (!confirm('Delete this label?')) return;
   const res = await fetch(`/api/labels/${labelId}`, { method: 'DELETE' });
   if (res.ok) loadWorkflowDetail(workflowId);
-  else { const d = await res.json(); alert(d.error || 'Failed'); }
+  else { const d = await res.json(); showToast(d.error || 'Failed', 'error'); }
 }
 
 document.getElementById('agent-model-select').addEventListener('change', function() {

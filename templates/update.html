@@ -4,7 +4,7 @@
 <div class="section">
   <h1>Update</h1>
 
-  <div class="card" style="margin-bottom:1rem;">
+  <div class="card mb-1">
     <div class="card-row">
       <strong>Current branch:</strong> {{ info.branch }}
     </div>
@@ -23,11 +23,11 @@
     {% endif %}
   {% endwith %}
 
-  <div class="toolbar" style="margin-top:1rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
-    <form action="{{ url_for('update_check') }}" method="post" style="display:inline;">
+  <div class="toolbar-flex">
+    <form action="{{ url_for('update_check') }}" method="post" class="inline-form">
       <button type="submit" class="btn">Check for updates</button>
     </form>
-    <form action="{{ url_for('update_run') }}" method="post" style="display:inline;">
+    <form action="{{ url_for('update_run') }}" method="post" class="inline-form">
       <button type="submit" class="btn primary">Update app</button>
     </form>
   </div>

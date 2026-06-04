@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}#{{ ticket.id }} {{ ticket.title }} — pi-CoWork{% endblock %}
+{% block title %}#{{ ticket.id }} {{ ticket.title }} - pi-CoWork{% endblock %}
 {% block content %}
 <div class="page-header">
   <div>
@@ -9,7 +9,7 @@
       <span class="breadcrumb-current">#{{ ticket.id }}</span>
     </div>
     <h1>#{{ ticket.id }} {{ ticket.title }}</h1>
-    <div class="meta" style="margin:0.25rem 0 0;">
+    <div class="meta meta-gap">
       <span class="badge status">{{ ticket.status_name }}</span>
       {% if ticket.priority %}
       {% set priority_colors = {'Low': '#6b7280', 'Medium': '#2563eb', 'High': '#d97706', 'Critical': '#dc2626'} %}
@@ -37,27 +37,41 @@
       </div>
     </section>
 
-    <section class="gate-reviews-section" id="gate-reviews-section" style="display:none;">
+    <section class="gate-reviews-section" id="gate-reviews-section">
       <h2>🚧 Quality Gates</h2>
-      <div id="gate-reviews-list"></div>
+      <div id="gate-reviews-list">
+        <div class="skeleton skeleton-text" style="width:40%"></div>
+        <div class="skeleton skeleton-text" style="width:70%"></div>
+        <div class="skeleton skeleton-text" style="width:55%"></div>
+      </div>
     </section>
 
-    <section class="agent-runs-section" id="agent-runs-section" style="display:none;">
+    <section class="agent-runs-section" id="agent-runs-section">
       <h2>⚙️ Agent Runs</h2>
-      <div id="agent-runs-list"></div>
-      <div id="agent-runs-actions" style="margin-top:0.5rem;"></div>
+      <div id="agent-runs-list">
+        <div class="skeleton skeleton-text" style="width:30%"></div>
+        <div class="skeleton skeleton-card"></div>
+      </div>
+      <div id="agent-runs-actions" class="mt-05"></div>
     </section>
 
-    <section class="questions-section" id="questions-section" style="display:none;">
+    <section class="questions-section" id="questions-section">
       <h2>❓ Questions</h2>
-      <div id="questions-list"></div>
+      <div id="questions-list">
+        <div class="skeleton skeleton-text" style="width:50%"></div>
+        <div class="skeleton skeleton-text" style="width:80%"></div>
+      </div>
     </section>
 
     <section class="section-card">
       <h2>Comments</h2>
-      <ul class="comment-list" id="comment-list"></ul>
+      <ul class="comment-list" id="comment-list">
+        <li class="skeleton skeleton-text" style="width:60%"></li>
+        <li class="skeleton skeleton-text" style="width:80%"></li>
+        <li class="skeleton skeleton-text" style="width:45%"></li>
+      </ul>
       <form id="comment-form" class="comment-form">
-        <textarea name="body" placeholder="Write a comment…" required rows="4"></textarea>
+        <textarea name="body" placeholder="Write a comment..." required rows="4"></textarea>
         <button type="submit" class="btn primary">Add</button>
       </form>
     </section>
@@ -96,25 +110,25 @@
       {% endif %}
       <div class="sidebar-field">
         <div class="sidebar-field-label">Created</div>
-        <div class="sidebar-field-value" id="sidebar-created">{{ ticket.created_at[:16] if ticket.created_at else '—' }}</div>
+        <div class="sidebar-field-value" id="sidebar-created">{{ ticket.created_at[:16] if ticket.created_at else '-' }}</div>
       </div>
       <div class="sidebar-field">
         <div class="sidebar-field-label">Updated</div>
-        <div class="sidebar-field-value" id="sidebar-updated">{{ ticket.updated_at[:16] if ticket.updated_at else '—' }}</div>
+        <div class="sidebar-field-value" id="sidebar-updated">{{ ticket.updated_at[:16] if ticket.updated_at else '-' }}</div>
       </div>
     </div>
 
     <div class="sidebar-card">
       <h3>Labels</h3>
-      <div id="labels-picker" style="margin-top:0.25rem;"></div>
+      <div id="labels-picker" class="mt-025"></div>
     </div>
 
     <div class="sidebar-card" id="model-effort-card">
       <h3>Model & Effort</h3>
-      <div id="model-effort-content" style="margin-top:0.25rem;"></div>
+      <div id="model-effort-content" class="mt-025"></div>
     </div>
 
-    <section class="recurring-card" id="recurring-section" style="display:none;">
+    <section class="recurring-card hidden" id="recurring-section">
       <h3>🔄 Recurring Task</h3>
       <div id="recurring-info"></div>
     </section>
@@ -128,7 +142,7 @@
     if (!descEl) return;
     var rawBody = {{ ticket.body | tojson }};
     if (!rawBody || rawBody.trim() === '') {
-      descEl.innerHTML = '<p style="color:var(--text-muted);font-style:italic;">No description</p>';
+      descEl.innerHTML = '<p class="ticket-description-empty">No description</p>';
     } else if (typeof renderMarkdown === 'function') {
       descEl.innerHTML = renderMarkdown(rawBody);
     } else {
@@ -141,44 +155,44 @@
     const reviews = await res.json();
     const section = document.getElementById('gate-reviews-section');
     const list = document.getElementById('gate-reviews-list');
-    
+
     if (reviews.length === 0) {
-      section.style.display = 'none';
+      section.classList.add('hidden');
       return;
     }
-    
-    section.style.display = 'block';
+
+    section.classList.remove('hidden');
     list.innerHTML = '';
-    
+
     for (const r of reviews) {
       const card = document.createElement('div');
       card.className = 'gate-review-card';
-      
-      const statusClass = r.status === 'pending' ? 'gate-pending' : 
+
+      const statusClass = r.status === 'pending' ? 'gate-pending' :
                           r.status === 'approved' || r.status === 'passed' ? 'gate-passed' : 'gate-failed';
-      const statusIcon = r.status === 'pending' ? '⏳' : 
-                         r.status === 'approved' ? '✅' : 
+      const statusIcon = r.status === 'pending' ? '⏳' :
+                         r.status === 'approved' ? '✅' :
                          r.status === 'passed' ? '✅' : '❌';
-      
+
       let actionsHtml = '';
       if (r.status === 'pending' && r.gate_type === 'manual') {
         actionsHtml = `
           <div class="gate-review-actions">
             <button class="btn primary small" onclick="approveGate(${r.id})">Approve</button>
             <div class="gate-reject-row">
-              <input type="text" id="reject-comment-${r.id}" placeholder="Rejection reason (required)…">
+              <input type="text" id="reject-comment-${r.id}" placeholder="Rejection reason (required)...">
               <button class="btn danger small" onclick="rejectGate(${r.id})">Reject</button>
             </div>
           </div>
         `;
       }
-      
+
       const typeLabel = r.gate_type === 'cli' ? 'CLI' : 'Manual';
       let outputHtml = '';
       if (r.output) {
         outputHtml = `<div class="gate-output"><pre>${escapeHtml(r.output)}</pre></div>`;
       }
-      
+
       card.innerHTML = `
         <div class="gate-review-header">
           <div>
@@ -217,14 +231,14 @@
       body: JSON.stringify({status: 'approved'}),
     });
     if (res.ok) {
-      if (typeof showToast === 'function') showToast('Gate approved', 'success');
+      showToast('Gate approved', 'success');
       loadGateReviews();
       loadComments();
       refreshTicketStatus();
     } else {
       const data = await res.json();
-      if (typeof showToast === 'function') showToast(data.error || 'Failed to approve', 'error');
-      else alert(data.error || 'Failed to approve');
+      showToast(data.error || 'Failed to approve', 'error');
+
     }
   }
 
@@ -232,8 +246,8 @@
     const input = document.getElementById(`reject-comment-${reviewId}`);
     const comment = (input.value || '').trim();
     if (!comment) {
-      if (typeof showToast === 'function') showToast('Rejection requires a comment.', 'warning');
-      else alert('Rejection requires a comment.');
+      showToast('Rejection requires a comment.', 'warning');
+
       input.focus();
       return;
     }
@@ -243,14 +257,14 @@
       body: JSON.stringify({status: 'rejected', comment}),
     });
     if (res.ok) {
-      if (typeof showToast === 'function') showToast('Gate rejected', 'success');
+      showToast('Gate rejected', 'success');
       loadGateReviews();
       loadComments();
       refreshTicketStatus();
     } else {
       const data = await res.json();
-      if (typeof showToast === 'function') showToast(data.error || 'Failed to reject', 'error');
-      else alert(data.error || 'Failed to reject');
+      showToast(data.error || 'Failed to reject', 'error');
+
     }
   }
 
@@ -260,10 +274,10 @@
     const section = document.getElementById('questions-section');
     const list = document.getElementById('questions-list');
     if (questions.length === 0) {
-      section.style.display = 'none';
+      section.classList.add('hidden');
       return;
     }
-    section.style.display = 'block';
+    section.classList.remove('hidden');
     list.innerHTML = '';
     for (const q of questions) {
       const card = document.createElement('div');
@@ -274,21 +288,21 @@
         optionsHtml = `<div class="question-options">` +
           q.options.map((opt, idx) => `
             <label class="question-option">
-              <input type="radio" name="${radioName}" value="${escapeHtml(opt)}" ${idx === 0 ? 'checked' : ''} onchange="document.getElementById('custom-${q.id}').style.display='none';">
+              <input type="radio" name="${radioName}" value="${escapeHtml(opt)}" ${idx === 0 ? 'checked' : ''} onchange="document.getElementById('custom-${q.id}').classList.add('hidden');">
               <span>${escapeHtml(opt)}</span>
             </label>
           `).join('') +
           `
             <label class="question-option">
-              <input type="radio" name="${radioName}" value="" onchange="document.getElementById('custom-${q.id}').style.display='block';">
+              <input type="radio" name="${radioName}" value="" onchange="document.getElementById('custom-${q.id}').classList.remove('hidden');">
               <span>Other (custom)</span>
             </label>
-            <input type="text" id="custom-${q.id}" placeholder="Enter custom answer…" style="display:none; margin-left:1.5rem; margin-top:0.25rem; margin-bottom:0.5rem; width:calc(100% - 1.5rem); padding:0.45rem 0.65rem; border:1px solid var(--border); border-radius:var(--radius); font:inherit; background:var(--bg);">
+            <input type="text" id="custom-${q.id}" class="question-custom-input hidden" placeholder="Enter custom answer...">
           ` +
           `</div>`;
       } else {
         optionsHtml = `
-          <textarea id="answer-${q.id}" placeholder="Your answer…" rows="3"></textarea>
+          <textarea id="answer-${q.id}" placeholder="Your answer..." rows="3"></textarea>
         `;
       }
       card.innerHTML = `
@@ -318,8 +332,8 @@
           const customInput = document.getElementById(`custom-${qid}`);
           const customVal = customInput ? customInput.value.trim() : '';
           if (!customVal) {
-            if (typeof showToast === 'function') showToast('Please enter a custom answer for the "Other" option.', 'warning');
-            else alert('Please enter a custom answer for the "Other" option.');
+            showToast('Please enter a custom answer for the "Other" option.', 'warning');
+
             if (customInput) customInput.focus();
             return;
           }
@@ -338,8 +352,8 @@
       }
     }
     if (answers.length === 0) {
-      if (typeof showToast === 'function') showToast('Please answer at least one question.', 'warning');
-      else alert('Please answer at least one question.');
+      showToast('Please answer at least one question.', 'warning');
+
       return;
     }
     const res = await fetch('/api/tickets/{{ ticket.id }}/answers', {
@@ -348,13 +362,13 @@
       body: JSON.stringify({ answers }),
     });
     if (res.ok) {
-      if (typeof showToast === 'function') showToast('Answers submitted', 'success');
+      showToast('Answers submitted', 'success');
       loadQuestions();
       loadComments();
     } else {
       const data = await res.json();
-      if (typeof showToast === 'function') showToast(data.error || 'Failed to submit answers', 'error');
-      else alert(data.error || 'Failed to submit answers');
+      showToast(data.error || 'Failed to submit answers', 'error');
+
     }
   }
 
@@ -395,12 +409,12 @@
     });
     if (res.ok) {
       e.target.reset();
-      if (typeof showToast === 'function') showToast('Comment added', 'success');
+      showToast('Comment added', 'success');
       loadComments();
     } else {
       const data = await res.json();
-      if (typeof showToast === 'function') showToast(data.error || 'Failed to add comment', 'error');
-      else alert(data.error || 'Failed to add comment');
+      showToast(data.error || 'Failed to add comment', 'error');
+
     }
   });
 
@@ -457,7 +471,7 @@
 
     const statusesWithAgents = _modelEffortData.statuses.filter(s => s.agent_id);
     if (statusesWithAgents.length === 0) {
-      container.innerHTML = '<span style="color:var(--text-muted);font-size:0.85rem;">No statuses with agents</span>';
+      container.innerHTML = '<span class="model-effort-empty">No statuses with agents</span>';
       return;
     }
 
@@ -473,8 +487,8 @@
       // Show summary - count active overrides
       const activeCount = _modelEffortData.overrides.filter(o => (o.model && o.model.trim()) || (o.thinking && o.thinking.trim())).length;
       let summary = activeCount > 0
-        ? `<span style="color:var(--primary);font-size:0.85rem;"><button class="btn small ghost" id="model-effort-expand">${activeCount} override${activeCount > 1 ? 's' : ''} active ▼</button></span>`
-        : `<span style="color:var(--text-muted);font-size:0.85rem;"><button class="btn small ghost" id="model-effort-expand">No overrides ▼</button></span>`;
+        ? `<span class="model-effort-active"><button class="btn small ghost" id="model-effort-expand">${activeCount} override${activeCount > 1 ? 's' : ''} active ▼</button></span>`
+        : `<span class="model-effort-empty"><button class="btn small ghost" id="model-effort-expand">No overrides ▼</button></span>`;
       container.innerHTML = summary;
       document.getElementById('model-effort-expand')?.addEventListener('click', () => {
         _modelEffortData.expanded = true;
@@ -490,7 +504,7 @@
       const hasOverride = (o.model && o.model.trim()) || (o.thinking && o.thinking.trim());
 
       // Determine cascaded model display
-      let modelDisplay = '—';
+      let modelDisplay = '-';
       let modelStyle = 'color:var(--text-muted);';
       if (o.model && o.model.trim()) {
         modelDisplay = '📦 ' + escapeHtml(o.model.trim());
@@ -501,13 +515,13 @@
       } else if (st.agent_name) {
         // Check agent-level
         const agent = _modelEffortData.statuses.find(s => s.id === st.id);
-        // We'll just show '—' for now since agents aren't fetched here; the enriched GET response has model_source
-        modelDisplay = '—';
+        // We'll just show '-' for now since agents aren't fetched here; the enriched GET response has model_source
+        modelDisplay = '-';
         modelStyle = 'color:var(--text-muted);';
       }
 
       // Determine cascaded thinking display
-      let thinkingDisplay = '—';
+      let thinkingDisplay = '-';
       let thinkingStyle = 'color:var(--text-muted);';
       if (o.thinking && o.thinking.trim()) {
         thinkingDisplay = '⚡ ' + escapeHtml(o.thinking.trim());
@@ -524,15 +538,15 @@
       html += `
         <div class="model-effort-row" data-status-id="${st.id}">
           <div class="model-effort-status-name">${escapeHtml(st.name)}</div>
-          <div class="model-effort-fields" style="display:flex;gap:0.35rem;align-items:center;flex-wrap:wrap;">
+          <div class="model-effort-fields">
             <div class="model-effort-field">
-              <select class="edit-input model-effort-model-select" data-status-id="${st.id}" style="font-size:0.8rem;padding:0.25rem 0.4rem;min-width:120px;">
+              <select class="edit-input model-effort-model-select inline-select-sm" data-status-id="${st.id}">
                 <option value="" ${!o.model ? 'selected' : ''}>default</option>
                 ${models.map(m => `<option value="${escapeHtml(m.id)}" ${o.model === m.id ? 'selected' : ''}>${escapeHtml(m.id)}</option>`).join('')}
               </select>
             </div>
             <div class="model-effort-field">
-              <select class="edit-input model-effort-thinking-select" data-status-id="${st.id}" style="font-size:0.8rem;padding:0.25rem 0.4rem;min-width:80px;">
+              <select class="edit-input model-effort-thinking-select inline-select-sm" data-status-id="${st.id}">
                 <option value="" ${!o.thinking ? 'selected' : ''}>default</option>
                 ${allThinkingLevels.map(t => `<option value="${escapeHtml(t)}" ${o.thinking === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
               </select>
@@ -543,7 +557,7 @@
       `;
     }
 
-    html += `<div style="margin-top:0.5rem;display:flex;gap:0.35rem;"><button class="btn small primary" id="model-effort-save">Save</button><button class="btn small ghost" id="model-effort-collapse">Collapse</button></div>`;
+    html += `<div class="model-effort-actions"><button class="btn small primary" id="model-effort-save">Save</button><button class="btn small ghost" id="model-effort-collapse">Collapse</button></div>`;
     container.innerHTML = html;
 
     // Attach event listeners
@@ -559,7 +573,7 @@
         await fetch(`/api/tickets/{{ ticket.id }}/status_overrides/${statusId}`, { method: 'DELETE' });
         await loadModelEffortData();
         renderModelEffortCard();
-        if (typeof showToast === 'function') showToast('Override cleared', 'success');
+        showToast('Override cleared', 'success');
       });
     });
   }
@@ -584,7 +598,7 @@
     await Promise.all(saves);
     await loadModelEffortData();
     renderModelEffortCard();
-    if (typeof showToast === 'function') showToast('Overrides saved', 'success');
+    showToast('Overrides saved', 'success');
   }
 
   async function initModelEffort() {
@@ -651,11 +665,11 @@
     const actions = document.getElementById('agent-runs-actions');
 
     if (runs.length === 0) {
-      section.style.display = 'none';
+      section.classList.add('hidden');
       return;
     }
 
-    section.style.display = 'block';
+    section.classList.remove('hidden');
     list.innerHTML = '';
 
     for (const run of runs) {
@@ -692,7 +706,7 @@
             ${exitInfo}
           </div>
           <div class="agent-run-meta">
-            <time>${run.started_at ? new Date(run.started_at).toLocaleString() : '—'}</time>
+            <time>${run.started_at ? new Date(run.started_at).toLocaleString() : '-'}</time>
             ${run.completed_at ? `<span class="muted">→ ${new Date(run.completed_at).toLocaleString()}</span>` : ''}
           </div>
         </div>
@@ -717,7 +731,7 @@
       pre.style.display = 'none';
       return;
     }
-    pre.textContent = 'Loading…';
+    pre.textContent = 'Loading...';
     pre.style.display = 'block';
     try {
       const res = await fetch('/api/agent_runs/' + runId + '/log');
@@ -736,18 +750,18 @@
     try {
       const res = await fetch('/api/agent_runs/' + runId + '/kill', { method: 'POST' });
       if (res.ok) {
-        if (typeof showToast === 'function') showToast('Agent run killed', 'success');
+        showToast('Agent run killed', 'success');
         loadAgentRuns();
         initRunAgentButton();
         loadComments();
       } else {
         const data = await res.json();
-        if (typeof showToast === 'function') showToast(data.error || 'Failed to kill agent', 'error');
-        else alert(data.error || 'Failed to kill agent');
+        showToast(data.error || 'Failed to kill agent', 'error');
+
       }
     } catch(e) {
-      if (typeof showToast === 'function') showToast('Network error: ' + e.message, 'error');
-      else alert('Network error: ' + e.message);
+      showToast('Network error: ' + e.message, 'error');
+
     }
   }
 
@@ -761,28 +775,28 @@
       const res = await fetch('/api/tickets/{{ ticket.id }}/spawn', { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
-        if (typeof showToast === 'function') showToast('Agent spawned', 'success');
+        showToast('Agent spawned', 'success');
         await Promise.all([loadAgentRuns(), initRunAgentButton(), loadComments()]);
       } else {
-        if (typeof showToast === 'function') showToast(data.error || 'Failed to spawn agent', 'error');
-        else alert(data.error || 'Failed to spawn agent');
+        showToast(data.error || 'Failed to spawn agent', 'error');
+
         btn.disabled = false;
         btn.textContent = restoreText;
       }
     } catch(e) {
-      if (typeof showToast === 'function') showToast('Network error: ' + e.message, 'error');
-      else alert('Network error: ' + e.message);
+      showToast('Network error: ' + e.message, 'error');
+
       btn.disabled = false;
       btn.textContent = restoreText;
     }
   }
 
   document.getElementById('run-agent-btn').addEventListener('click', function() {
-    handleSpawnClick(this, '⏳ Spawning…', '🤖 Run Agent');
+    handleSpawnClick(this, '⏳ Spawning...', '🤖 Run Agent');
   });
 
   document.getElementById('rerun-agent-btn').addEventListener('click', function() {
-    handleSpawnClick(this, '⏳ Re-spawning…', '🔄 Re-run Agent');
+    handleSpawnClick(this, '⏳ Re-spawning...', '🔄 Re-run Agent');
   });
 
   loadGateReviews();
@@ -801,16 +815,16 @@
       const res = await fetch('/api/tickets/{{ ticket.id }}/recurring');
       const parents = await res.json();
       if (!parents || parents.length === 0) {
-        section.style.display = 'none';
+        section.classList.add('hidden');
         return;
       }
-      section.style.display = 'block';
+      section.classList.remove('hidden');
       info.innerHTML = parents.map(p => `
-        <div style="margin-top:0.25rem;">
+        <div class="mt-025">
           <strong>${escapeHtml(p.title)}</strong>
           <span class="badge muted">${escapeHtml(p.human_readable || p.cron_expression)}</span>
           ${p.enabled ? '<span class="badge success">Active</span>' : '<span class="badge muted">Disabled</span>'}
-          <div style="font-size:0.85rem;color:var(--text-muted);margin-top:0.15rem;">Creates tickets in <strong>${escapeHtml(p.status_name)}</strong></div>
+          <div class="recurring-meta">Creates tickets in <strong>${escapeHtml(p.status_name)}</strong></div>
         </div>
       `).join('');
     } catch (e) {

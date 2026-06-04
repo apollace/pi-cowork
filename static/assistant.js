@@ -76,9 +76,8 @@
     inputEl.focus();
     if (window.innerWidth <= 640) {
       savedScrollY = window.scrollY;
-      document.body.style.position = 'fixed';
-      document.body.style.width = '100%';
-      document.body.style.top = -savedScrollY + 'px';
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
     }
   }
 
@@ -86,9 +85,8 @@
     panel.classList.remove('open');
     bubble.classList.remove('panel-open');
     if (window.innerWidth <= 640) {
-      document.body.style.position = '';
-      document.body.style.width = '';
-      document.body.style.top = '';
+      document.documentElement.style.overflow = '';
+      document.body.style.overflow = '';
       window.scrollTo(0, savedScrollY);
     }
   }

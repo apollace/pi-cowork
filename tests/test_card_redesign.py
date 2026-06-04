@@ -99,11 +99,11 @@ class TestCSSClasses:
         """The old .card-meta rule should be gone."""
         assert ".card-meta" not in css
 
-    def test_no_translateY_hover(self, css):
-        """Cards should not jump up on hover (translateY(-1px) removed)."""
+    def test_translateY_hover_present(self, css):
+        """Cards should have a subtle lift on hover (translateY(-1px) added as polish)."""
         card_hover_match = re.search(r'\.card:hover\s*\{([^}]*)\}', css)
         assert card_hover_match is not None
-        assert "translateY(-1px)" not in card_hover_match.group(1)
+        assert "translateY(-1px)" in card_hover_match.group(1)
 
     def test_no_card_in_animation(self, css):
         """Old card-in animation should be replaced by card-entrance."""

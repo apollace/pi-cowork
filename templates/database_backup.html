@@ -14,7 +14,7 @@
   </div>
 </div>
 
-<div class="form-card" style="margin-top: 1rem;">
+<div class="form-card mt-1">
   <h2>Backup List</h2>
   <div id="backup-list-container">
     <p class="muted">Loading…</p>
@@ -27,7 +27,7 @@
     try {
       const res = await fetch('/api/db-backup/list');
       if (!res.ok) {
-        container.innerHTML = '<p class="muted" style="color:var(--danger)">Failed to load backups</p>';
+        container.innerHTML = '<p class="muted text-danger">Failed to load backups</p>';
         return;
       }
       const backups = await res.json();
@@ -51,7 +51,7 @@
       html += '</tbody></table>';
       container.innerHTML = html;
     } catch (e) {
-      container.innerHTML = '<p class="muted" style="color:var(--danger)">Error loading backups</p>';
+      container.innerHTML = '<p class="muted text-danger">Error loading backups</p>';
     }
   }
 

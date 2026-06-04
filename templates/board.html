@@ -6,7 +6,7 @@
     <h1 id="board-title">Board</h1>
     <div class="board-meta" id="board-meta"></div>
   </div>
-  <div class="page-actions" style="display:flex;gap:0.5rem;align-items:center;">
+  <div class="page-actions">
     <a class="btn primary" id="new-ticket-btn" href="{{ url_for('new_ticket') }}">+ New Ticket</a>
     <button class="btn" id="manage-boards-btn" onclick="toggleBoardPanel()" title="Manage boards">
       <span>📁</span> Boards
@@ -22,7 +22,7 @@
     <button class="btn small" onclick="toggleBoardPanel()">✕</button>
   </div>
   <div class="slide-panel-body">
-    <button class="btn primary" style="margin-bottom:1rem;width:100%;" onclick="showCreateBoard()">+ New Board</button>
+    <button class="btn primary mb-1 w-full" onclick="showCreateBoard()">+ New Board</button>
     <div id="board-list"></div>
   </div>
 </div>
@@ -154,7 +154,7 @@
 
 <div class="tab-content" id="tab-recurring" style="display:none;">
   <div id="recurring-content">
-    <div style="display:flex;justify-content:flex-end;margin-bottom:1rem;">
+    <div class="flex justify-end mb-1">
       <button class="btn primary" onclick="showCreateRecurring()">+ New Recurring Task</button>
     </div>
     <div id="recurring-list"></div>
@@ -263,15 +263,15 @@
       initBoard();
     } else {
       const data = await res.json();
-      if (typeof showToast === 'function') showToast(data.error || 'Failed to create board', 'error');
-      else alert(data.error || 'Failed to create board');
+      showToast(data.error || 'Failed to create board', 'error');
+      
     }
   });
 
   async function showEditBoard(id) {
     const res = await fetch(`/api/boards/${id}`);
     const board = await res.json();
-    if (!res.ok) { if (typeof showToast === 'function') showToast('Board not found', 'error'); else alert('Board not found'); return; }
+    if (!res.ok) { showToast('Board not found', 'error');  return; }
     const wfRes = await fetch('/api/workflows');
     const workflows = await wfRes.json();
     const form = document.getElementById('edit-board-form');
@@ -314,8 +314,8 @@
       initBoard();
     } else {
       const data = await res.json();
-      if (typeof showToast === 'function') showToast(data.error || 'Failed to update board', 'error');
-      else alert(data.error || 'Failed to update board');
+      showToast(data.error || 'Failed to update board', 'error');
+      
     }
   });
 
@@ -331,8 +331,8 @@
       initBoard();
     } else {
       const data = await res.json();
-      if (typeof showToast === 'function') showToast(data.error || 'Failed to delete', 'error');
-      else alert(data.error || 'Failed to delete');
+      showToast(data.error || 'Failed to delete', 'error');
+      
     }
   }
 

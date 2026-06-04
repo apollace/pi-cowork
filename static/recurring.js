@@ -66,7 +66,7 @@ async function loadRecurringList() {
 // ── Create/Edit Modal ──
 function showCreateRecurring() {
   const boardId = getCurrentBoardId();
-  if (!boardId) { alert('Select a board first.'); return; }
+  if (!boardId) { showToast('Select a board first.', 'warning'); return; }
 
   // Fetch statuses for the board's workflow
   fetch(`/api/boards/${boardId}`).then(r => r.json()).then(board => {
@@ -187,7 +187,7 @@ function showRecurringForm(task, boardId, statuses) {
       loadRecurringList();
     } else {
       const data = await res.json();
-      alert(data.error || 'Failed to save recurring task');
+      showToast(data.error || 'Failed to save recurring task', 'error');
     }
   });
 }
@@ -246,7 +246,7 @@ async function toggleRecurring(id) {
     loadRecurringList();
   } else {
     const data = await res.json();
-    alert(data.error || 'Failed to toggle');
+    showToast(data.error || 'Failed to toggle', 'error');
   }
 }
 
@@ -255,13 +255,13 @@ async function triggerRecurring(id) {
   const res = await fetch(`/api/recurring/${id}/trigger`, { method: 'POST' });
   if (res.ok) {
     const data = await res.json();
-    alert(`Ticket #${data.ticket_id} created!`);
+    showToast(`Ticket #${data.ticket_id} created!`, 'success');
     loadRecurringList();
     // Trigger board refresh
     window.dispatchEvent(new CustomEvent('sse:ticket.created', { detail: { ticket_id: data.ticket_id } }));
   } else {
     const data = await res.json();
-    alert(data.error || 'Failed to trigger');
+    showToast(data.error || 'Failed to trigger', 'error');
   }
 }
 
@@ -272,6 +272,6 @@ async function deleteRecurring(id) {
     loadRecurringList();
   } else {
     const data = await res.json();
-    alert(data.error || 'Failed to delete');
+    showToast(data.error || 'Failed to delete', 'error');
   }
 }
