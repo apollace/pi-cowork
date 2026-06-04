@@ -24,6 +24,7 @@
     <span id="run-agent-container">
       <button id="run-agent-btn" class="btn run-agent" style="display:none;">🤖 Run Agent</button>
       <button id="rerun-agent-btn" class="btn rerun-agent" style="display:none;">🔄 Re-run Agent</button>
+      <button id="ask-agent-btn" class="btn ask-agent" style="display:none;" title="Ask the assigned agent a question (Q&amp;A mode)">💬 Ask Agent</button>
     </span>
   </div>
 </div>
@@ -606,10 +607,11 @@
     renderModelEffortCard();
   }
 
-  // ── Run Agent / Re-run Agent Button Logic ──
+  // ── Run Agent / Re-run Agent / Ask Agent Button Logic ──
   async function initRunAgentButton() {
     const btn = document.getElementById('run-agent-btn');
     const rerunBtn = document.getElementById('rerun-agent-btn');
+    const askBtn = document.getElementById('ask-agent-btn');
     if (!btn || !rerunBtn) return;
     try {
       const res = await fetch('/api/tickets/{{ ticket.id }}');
@@ -621,6 +623,7 @@
       const agentRunCount = data.agent_run_count || 0;
       const lastRun = data.last_agent_run;
       const hasPreviousRun = agentRunCount > 0;
+      const questionCount = data.question_count || 0;
 
       if (hasPreviousRun && !isTerminal && hasAgent && runningCount === 0) {
         btn.style.display = 'none';
@@ -651,6 +654,28 @@
         btn.disabled = true;
         btn.title = 'Cannot run agent: no agent assigned to current status';
         rerunBtn.style.display = 'none';
+      }
+
+      // Ask Agent button: show when ticket is not terminal, has an agent
+      // assigned to the current status, no unanswered questions, and no ask
+      // run currently in flight (any other agent run already blocks spawning
+      // via the parallel limit; we add an explicit in-flight check for UX).
+      if (askBtn) {
+        if (!isTerminal && hasAgent && questionCount === 0 && runningCount === 0) {
+          askBtn.style.display = 'inline-flex';
+          askBtn.disabled = false;
+          askBtn.title = 'Ask the assigned agent a question (Q&A mode)';
+        } else if (!isTerminal && hasAgent && questionCount > 0) {
+          askBtn.style.display = 'inline-flex';
+          askBtn.disabled = true;
+          askBtn.title = 'Cannot ask: unanswered questions exist';
+        } else if (!isTerminal && hasAgent && runningCount > 0) {
+          askBtn.style.display = 'inline-flex';
+          askBtn.disabled = true;
+          askBtn.title = 'Cannot ask: an agent is already running on this ticket';
+        } else {
+          askBtn.style.display = 'none';
+        }
       }
     } catch(e) {
       console.error('Failed to init Run Agent button', e);
@@ -686,6 +711,11 @@
         exitInfo = ` <span class="badge muted">exit code: ${run.exit_code}</span>`;
       }
 
+      // 💬 ask badge for ask-mode runs
+      const modeBadge = run.mode === 'ask'
+        ? ` <span class="badge ask-mode-badge" title="Ask mode: Q&A, no status changes">💬 ask</span>`
+        : '';
+
       let actionsHtml = '';
       if (run.status === 'running') {
         actionsHtml = `
@@ -703,6 +733,7 @@
           <div class="agent-run-info">
             <span class="agent-run-name">#${run.id} ${escapeHtml(run.agent_name)}</span>
             <span class="badge ${statusClass}">${statusIcon} ${run.status}</span>
+            ${modeBadge}
             ${exitInfo}
           </div>
           <div class="agent-run-meta">
@@ -930,6 +961,141 @@
       loadGateReviews(); loadQuestions(); loadComments();
       loadLabels(); loadAgentRuns(); initRunAgentButton();
     }, 100);
+  });
+</script>
+
+<!-- Ask Agent Modal -->
+<div id="ask-agent-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2>💬 Ask Agent</h2>
+    <form id="ask-agent-form" class="form-card">
+      <label>Agent
+        <select name="agent_id" id="ask-agent-select">
+          <option value="">— default (current status) —</option>
+        </select>
+      </label>
+      <label>Question *
+        <textarea name="question" id="ask-agent-question" rows="5" required
+                  placeholder="What do you want to ask?"></textarea>
+      </label>
+      <p class="muted ask-modal-help">
+        The agent will read the ticket and post a single comment with the
+        answer. It will <strong>not</strong> change the ticket status or
+        other fields.
+      </p>
+      <div class="form-actions">
+        <button type="submit" class="btn primary" id="ask-agent-submit">Send</button>
+        <button type="button" class="btn" onclick="hideAskAgentModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  // ── Ask Agent modal logic ──
+  function showAskAgentModal() {
+    const modal = document.getElementById('ask-agent-modal');
+    if (!modal) return;
+    // Reset form
+    const form = document.getElementById('ask-agent-form');
+    form.reset();
+    // Populate the agent <select> with workflow agents (using the
+    // current status's agent as the default selection).
+    populateAskAgentSelect();
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+    document.getElementById('ask-agent-question').focus();
+  }
+  function hideAskAgentModal() {
+    const modal = document.getElementById('ask-agent-modal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+  }
+  async function populateAskAgentSelect() {
+    const sel = document.getElementById('ask-agent-select');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— default (current status) —</option>';
+    // We need the workflow_id. Fetch the ticket to get it.
+    try {
+      const res = await fetch('/api/tickets/{{ ticket.id }}');
+      if (!res.ok) return;
+      const t = await res.json();
+      const wfRes = await fetch('/api/workflows');
+      if (!wfRes.ok) return;
+      const workflows = await wfRes.json();
+      const wf = workflows.find(w => w.id === t.workflow_id);
+      if (!wf) return;
+      const agentsRes = await fetch(`/api/agents?workflow_id=${wf.id}`);
+      if (!agentsRes.ok) return;
+      const agents = await agentsRes.json();
+      // Default to the current status's agent_id
+      const currentAgentId = t.status_agent_id || '';
+      for (const a of agents) {
+        const opt = document.createElement('option');
+        opt.value = a.id;
+        opt.textContent = a.name;
+        if (a.id === currentAgentId) opt.selected = true;
+        sel.appendChild(opt);
+      }
+    } catch (e) {
+      console.error('Failed to populate ask-agent select', e);
+    }
+  }
+
+  // Click on Ask Agent button
+  document.getElementById('ask-agent-btn').addEventListener('click', function() {
+    if (this.disabled) return;
+    showAskAgentModal();
+  });
+
+  // Submit the ask
+  document.getElementById('ask-agent-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const fd = new FormData(this);
+    const submitBtn = document.getElementById('ask-agent-submit');
+    submitBtn.disabled = true;
+    const originalText = submitBtn.textContent;
+    submitBtn.textContent = 'Sending...';
+    try {
+      const body = {
+        question: fd.get('question'),
+      };
+      const agentIdRaw = fd.get('agent_id');
+      if (agentIdRaw) body.agent_id = parseInt(agentIdRaw);
+      const res = await fetch('/api/tickets/{{ ticket.id }}/ask', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        hideAskAgentModal();
+        showToast(`Asked ${data.agent.name}`, 'success');
+        // Refresh agent runs and comments; SSE will also deliver updates.
+        await Promise.all([loadAgentRuns(), initRunAgentButton(), loadComments()]);
+      } else {
+        showToast(data.error || 'Failed to ask agent', 'error');
+      }
+    } catch (err) {
+      showToast('Network error: ' + err.message, 'error');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalText;
+    }
+  });
+
+  // Close on Escape
+  document.addEventListener('keydown', function(e) {
+    const modal = document.getElementById('ask-agent-modal');
+    if (!modal) return;
+    if (e.key === 'Escape' && modal.style.display !== 'none') {
+      hideAskAgentModal();
+    }
+  });
+  // Close on backdrop click
+  document.getElementById('ask-agent-modal').addEventListener('click', function(e) {
+    if (e.target === this) hideAskAgentModal();
   });
 </script>
 {% endblock %}

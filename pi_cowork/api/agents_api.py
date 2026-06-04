@@ -56,8 +56,14 @@ def api_create_agent():
     else:
         api_endpoints_json = None
 
+    # ask_system_prompt: optional override for the ask-mode system prompt.
+    # Empty string or null → NULL (use built-in default).
+    ask_system_prompt = data.get('ask_system_prompt')
+    if ask_system_prompt is not None:
+        ask_system_prompt = (str(ask_system_prompt)).strip() or None
+
     try:
-        cur = run_db("INSERT INTO agents (name, description, workflow_id, model, thinking, api_endpoints) VALUES (?, ?, ?, ?, ?, ?)", (name, description, workflow_id, model, thinking, api_endpoints_json))
+        cur = run_db("INSERT INTO agents (name, description, workflow_id, model, thinking, api_endpoints, ask_system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?)", (name, description, workflow_id, model, thinking, api_endpoints_json, ask_system_prompt))
         return jsonify({"id": cur.lastrowid}), 201
     except sqlite3.IntegrityError:
         return jsonify({"error": "Agent name already exists"}), 409
@@ -119,6 +125,16 @@ def api_update_agent(agent_id):
             # Explicitly set to null → use defaults
             updates.append("api_endpoints = ?")
             args.append(None)
+    # ask_system_prompt: optional override for the ask-mode system prompt.
+    # Empty string or null → NULL (use built-in default).
+    if 'ask_system_prompt' in data:
+        ask_system_prompt = data.get('ask_system_prompt')
+        updates.append("ask_system_prompt = ?")
+        if ask_system_prompt is None:
+            args.append(None)
+        else:
+            stripped = (str(ask_system_prompt)).strip()
+            args.append(stripped or None)
     if not updates:
         return jsonify({"error": "No fields to update"}), 400
     args.append(agent_id)

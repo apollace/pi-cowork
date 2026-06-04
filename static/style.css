@@ -3397,3 +3397,54 @@ textarea.edit-input { resize: vertical; min-height: 2.5rem; }
 .modal-large {
   max-width: 900px;
 }
+
+/* Ask Agent prompt fieldset (collapsible) */
+.ask-prompt-fieldset {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+}
+.ask-prompt-fieldset summary {
+  cursor: pointer;
+  font-weight: 500;
+  padding: 0.25rem 0;
+}
+.ask-prompt-fieldset summary:hover {
+  color: #2563eb;
+}
+.ask-prompt-fieldset textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 0.5rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 0.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  resize: vertical;
+}
+.ask-prompt-help {
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0.5rem 0;
+  line-height: 1.4;
+}
+
+/* Ask-mode badge in agent-runs list */
+.ask-mode-badge {
+  background: #a855f722;
+  color: #a855f7;
+  border: 1px solid #a855f755;
+}
+.ask-agent {
+  /* Subtle visual difference from the work-mode Run/Re-run buttons */
+  border-color: #a855f755;
+}
+.ask-agent:hover {
+  background: #a855f711;
+}
+.ask-modal-help {
+  font-size: 0.85rem;
+  margin: 0.5rem 0 1rem 0;
+  line-height: 1.4;
+}

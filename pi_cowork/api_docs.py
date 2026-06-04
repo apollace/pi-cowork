@@ -126,6 +126,16 @@ ENDPOINT_REGISTRY = [
             "- POST {base_url}/api/tickets/{ticket_id}/spawn → manually re-trigger agent for ticket",
         ],
     },
+    {
+        "key": "tickets_ask_post",
+        "category": "Agent Runs",
+        "method": "POST",
+        "path_template": "/api/tickets/{ticket_id}/ask",
+        "label": "ask the assigned agent a question (Q&A mode — does not change status)",
+        "doc_lines": [
+            "- POST {base_url}/api/tickets/{ticket_id}/ask → ask the assigned agent a question; the answer arrives as a comment. Body: { agent_id?, question }. When agent_id is omitted, defaults to the agent assigned to the current status. The agent is spawned in ask mode: it can read the ticket and post a comment with the answer, but MUST NOT change the ticket status, title, or body.",
+        ],
+    },
     # ── Tickets (global list/create) ──
     {
         "key": "tickets_list",
