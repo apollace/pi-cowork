@@ -382,8 +382,29 @@ async function initBoard() {
     const questionBadge = ticket.question_count ? `<span class="badge question">❓ ${ticket.question_count}</span>` : '';
     const recurringBadge = (ticket.recurring_parents && ticket.recurring_parents.length > 0)
       ? `<span class="badge recurring" title="Created by recurring task: ${escapeHtml(ticket.recurring_parents[0].title)}">🔄 Recurring</span>` : '';
-    const branchBadge = ticket.branch
-      ? `<span class="badge branch" title="Git branch">📁 ${escapeHtml(ticket.branch)}</span>` : '';
+    let branchBadge = '';
+    if (ticket.branch) {
+      const autoPattern = new RegExp(`^ticket-${ticket.id}-[a-z0-9-]+$`);
+      const isAuto = autoPattern.test(ticket.branch);
+      const displayText = isAuto ? `#${ticket.id}` : escapeHtml(ticket.branch);
+      const textClass = isAuto ? '' : 'card-branch-text';
+      branchBadge = `
+        <span class="card-branch-pill" title="Git branch: ${escapeHtml(ticket.branch)}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="6" y1="3" x2="6" y2="15"></line>
+            <circle cx="18" cy="6" r="3"></circle>
+            <circle cx="6" cy="18" r="3"></circle>
+            <path d="M18 9a9 9 0 0 1-9 9"></path>
+          </svg>
+          <span class="${textClass}">${displayText}</span>
+          <button type="button" class="card-branch-copy" data-branch="${escapeHtml(ticket.branch)}" aria-label="Copy branch name">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+        </span>`;
+    }
     const labelPills = (ticket.labels || []).map(l =>
       `<span class="badge label-pill" style="background:${escapeHtml(l.color)}33;color:${escapeHtml(l.color)};border:1px solid ${escapeHtml(l.color)}55;">${escapeHtml(l.name)}</span>`
     ).join('');
@@ -424,6 +445,19 @@ async function initBoard() {
         e.preventDefault();
         e.stopPropagation();
         moveTicket(ticket.id, parseInt(e.target.value));
+      });
+    }
+
+    // Attach copy listener for the branch copy button
+    const branchCopyBtn = card.querySelector('.card-branch-copy');
+    if (branchCopyBtn) {
+      branchCopyBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const branch = branchCopyBtn.getAttribute('data-branch');
+        navigator.clipboard.writeText(branch).then(() => {
+          window.showToast('Branch copied', 'success');
+        });
       });
     }
 

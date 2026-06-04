@@ -718,6 +718,42 @@ body {
   color: var(--primary);
 }
 
+.card-branch-pill {
+  background: #F1F5F9;
+  border-radius: 6px;
+  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-branch-text {
+  font-size: 11px;
+  font-weight: 500;
+  color: #475569;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-branch-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: #64748B;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.card-branch-copy:hover {
+  color: #0F172A;
+}
+
 .card-link {
   text-decoration: none;
   color: inherit;
