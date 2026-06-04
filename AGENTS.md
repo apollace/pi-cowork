@@ -303,50 +303,6 @@ If the board's `working_directory` is empty or unset, no spawn happens and the t
 
 If `pi` fails to launch or exits non-zero, an error comment is added.
 
-## Agent Ask Function (Q&A mode)
-
-Ticket detail pages expose an **Ask Agent** button (💬) next to the Run/Re-run buttons. It lets a human post a question to the assigned agent without changing the ticket status; the answer arrives as a single comment. The agent uses the same session dir as work runs so prior turn memory is preserved.
-
-### Endpoint
-
-`POST /api/tickets/<id>/ask` with body `{ "agent_id"?: int, "question": str }`:
-- `agent_id` is optional — defaults to the current status's assigned agent. Must belong to the ticket's workflow.
-- `question` is required (non-empty after strip).
-- Returns 200 with `{ success, agent: {id, name}, spawned, queued }` (same shape as `/spawn`).
-- Returns 409 if no agent is assigned (and no `agent_id` given), the explicit `agent_id` belongs to a different workflow, or another ask run is already in flight on the ticket.
-- Terminal-status tickets are accepted (Ticket #118): the agent in ask mode never changes the ticket status, so asking on a Closed/Dropped ticket still produces a useful comment thread.
-- Returns 400 if `question` is missing or empty.
-- Returns 404 if the ticket does not exist.
-
-### Per-agent ask system prompt
-
-`agents.ask_system_prompt TEXT` (nullable) overrides the system prompt used in ask mode. NULL falls back to `DEFAULT_ASK_SYSTEM_PROMPT` in `pi_cowork/agents.py`, which forbids status changes and asks the agent to reply with a single comment. Configured in the workflow page's agent modal under a collapsible “Ask Agent System Prompt” section.
-
-### `agent_runs.mode`
-
-`agent_runs.mode TEXT NOT NULL DEFAULT 'work'` distinguishes work runs from ask runs. The column is populated automatically for new ask runs and defaults to `'work'` for any existing or new work-spawn row (full backward compatibility). The `/api/tickets/<id>/agent_runs` endpoint returns it; the ticket detail UI shows a 💬 `ask` badge in the agent-runs list for `mode='ask'` rows.
-
-### Prompt construction
-
-Ask runs use a **lean** version of the work prompt: same context (body, comments, API docs, knowledge, board, git, warm/cold framing) but `Your goal:` and `Next status you MUST set` are dropped, and the context message ends with:
-
-```
-
-You were asked:
-<the human question, verbatim>
-
-```
-
-The system prompt is replaced (or appended) with the per-agent `ask_system_prompt` (or the built-in default), keeping the two behavioral directives and any board long-term vision. All other spawn infrastructure (limits, queue, watcher, session dir, model/thinking resolution) is unchanged.
-
-### UI
-
-The **Ask Agent** button on the ticket detail page is hidden only when the workflow has zero agents (no useful modal). The button is **disabled** when an agent is already running on the ticket (Ticket #118). All other conditions — terminal status, open questions, missing current-status agent — keep the button enabled (the modal lets the user pick an agent explicitly).
-
-Every board kanban card (Ticket #118) also has a small 💬 button in its `.card-footer` (`.card-ask-btn` class). The button is rendered only when the workflow has at least one agent. It is disabled when an agent is already running on the ticket. Clicking the button navigates to `/ticket/<id>#ask-agent`; the ticket detail page detects the hash and auto-opens the Ask modal once `initRunAgentButton()` has finished populating the button state.
-
-Clicking the Ask button opens a modal with an agent selector (defaults to the current status's agent) and a question textarea. On success the modal closes, a toast confirms which agent was asked, and agent-runs + comments refresh via SSE. A single ask run is in flight at a time; the second concurrent ask returns 409 with a clear error.
-
 ## API (JSON)
 
 ### Workflows
@@ -410,9 +366,8 @@ Clicking the Ask button opens a modal with an agent selector (defaults to the cu
 ### Agent Runs
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/api/tickets/<id>/agent_runs` | GET | List agent runs for a ticket (each row has a `mode` field: `'work'` or `'ask'`) |
+| `/api/tickets/<id>/agent_runs` | GET | List agent runs for a ticket |
 | `/api/agent_runs/<id>/log` | GET | Fetch raw log file |
-| `/api/tickets/<id>/ask` | POST | Ask the assigned agent a question (Q&A mode — answer arrives as a comment; agent does not change ticket status). Body: `{ agent_id?, question }` |
 
 ### Ticket Status Overrides
 | Route | Method | Description |
@@ -450,7 +405,6 @@ Clicking the Ask button opens a modal with an agent selector (defaults to the cu
 - `model` (string, nullable) — optional `--model` override for `pi`; `NULL` means use pi default
 - `thinking` (string, nullable) — optional `--thinking` level for `pi`; one of: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`; `NULL` means use pi default
 - `api_endpoints` (array of strings or null) — list of endpoint keys from `ENDPOINT_REGISTRY` to include in agent prompt; `NULL` uses defaults (`ticket_put`, `ticket_comments_post`, `ticket_questions_post`)
-- `ask_system_prompt` (text, nullable) — per-agent override for the ask-mode system prompt; `NULL` falls back to `DEFAULT_ASK_SYSTEM_PROMPT` in `pi_cowork/agents.py` (read-only Q&A; forbids status / title / body / priority changes)
 - `workflow_id` (integer) — required
 
 **Status fields:**

@@ -28,21 +28,6 @@ try:
 except ImportError:
     ensure_ticket_branch = None
 
-# Default ask-mode system prompt used when an agent has no custom
-# ``ask_system_prompt`` configured. The goal is to redirect the agent away
-# from "do work and move status" toward "answer a human question with a
-# single comment".  The human's question itself is appended to the context
-# message (not the system prompt) so the recency-bias pattern matches the
-# work prompt.
-DEFAULT_ASK_SYSTEM_PROMPT = (
-    "You are in ASK MODE on a ticket. The human has asked you a question. "
-    "Investigate using the ticket body, comments, knowledge entries, and any tools available. "
-    "Do NOT change the ticket status. "
-    "Do NOT modify ticket fields (title, body, priority). "
-    "When done, add a single comment to the ticket with your answer. "
-    "Keep the answer focused and concise."
-)
-
 logger = logging.getLogger(__name__)
 
 _spawn_lock = threading.Lock()
@@ -350,7 +335,7 @@ def spawn_agent_for_ticket(ticket_id, status_id):
                 try_spawn_or_queue(row_to_dict(full_ticket), status, agent)
 
 
-def try_spawn_or_queue(ticket, status, agent, old_status_id=None, ask_question=None, ask_system_prompt=None):
+def try_spawn_or_queue(ticket, status, agent, old_status_id=None):
     # Bug 2 fix: Clean up any stale queue entries for this ticket before
     # attempting a direct spawn. Without this, an agent spawned directly
     # would leave behind a "Queued" label that persists forever.
@@ -358,22 +343,15 @@ def try_spawn_or_queue(ticket, status, agent, old_status_id=None, ask_question=N
         "DELETE FROM agent_queue WHERE ticket_id = ? AND started_at IS NULL",
         (ticket['id'],)
     )
-    # Block agent spawn while gate reviews are pending (applies to both
-    # work and ask modes — an ask run shouldn't fire while the ticket is
-    # stuck behind a quality gate either).
+    # Block agent spawn while gate reviews are pending
     if has_pending_gate_reviews(ticket['id']):
         logger.info("Skipping agent spawn for ticket %d — pending gate reviews exist", ticket['id'])
         return
-    # Block work-spawn while unanswered questions exist. ASK-mode spawns
-    # (Ticket #118) are deliberately NOT blocked by this guard: the two
-    # flows are independent, and the ask agent never changes the ticket
-    # status so its answer still lands as a useful comment even if other
-    # questions are still open.
-    if ask_question is None:
-        question_count = count_unanswered_questions(ticket['id'])
-        if question_count > 0:
-            _add_question_wait_comment(ticket['id'], question_count)
-            return
+    # Block agent spawn while unanswered questions exist
+    question_count = count_unanswered_questions(ticket['id'])
+    if question_count > 0:
+        _add_question_wait_comment(ticket['id'], question_count)
+        return
     cleanup_runs()
     with _spawn_lock:
         if count_running() >= get_config('max_parallel'):
@@ -381,33 +359,21 @@ def try_spawn_or_queue(ticket, status, agent, old_status_id=None, ask_question=N
         elif count_hourly() >= get_config('max_per_hour'):
             queue_agent(ticket, status, agent, 'rate', old_status_id=old_status_id)
         else:
-            spawn_agent(ticket, status, agent, old_status_id=old_status_id, ask_question=ask_question, ask_system_prompt=ask_system_prompt)
+            spawn_agent(ticket, status, agent, old_status_id=old_status_id)
 
 
-def spawn_agent(ticket, status, agent, old_status_id=None, ask_question=None, ask_system_prompt=None):
+def spawn_agent(ticket, status, agent, old_status_id=None):
     """Fire-and-forget subprocess running pi CLI for this ticket + status.
 
     Returns True if an agent_run was created, False if the spawn was skipped
     (e.g. due to unanswered questions).
-
-    When ``ask_question`` is provided, the spawn is an ASK run: the context
-    message drops the status goal and transition block, the system prompt is
-    replaced (or appended) with an ask-mode directive, and the resulting
-    ``agent_runs`` row is tagged with ``mode='ask'``. The agent session dir
-    is shared with work runs so memory is preserved across turns.
     """
     ticket_id = ticket['id']
-    is_ask = ask_question is not None
-
-    # Block work-spawn if unanswered questions exist. ASK-mode spawns
-    # (Ticket #118) bypass this guard: the ask agent never changes the
-    # ticket status, and asking while questions are still open is a
-    # supported flow.
-    if not is_ask:
-        question_count = count_unanswered_questions(ticket_id)
-        if question_count > 0:
-            _add_question_wait_comment(ticket_id, question_count)
-            return False
+    # Block spawn if unanswered questions exist
+    question_count = count_unanswered_questions(ticket_id)
+    if question_count > 0:
+        _add_question_wait_comment(ticket_id, question_count)
+        return False
 
     now = datetime.now(timezone.utc)
     board_id = ticket.get('board_id')
@@ -508,16 +474,7 @@ def spawn_agent(ticket, status, agent, old_status_id=None, ask_question=None, as
             lines.append(f"- [{ke['id']}] {ke['title']} ({scope}): {preview}")
         knowledge_block = "\n".join(lines)
 
-    # Ask mode: drop status goal and transitions entirely. The lean context
-    # message keeps everything else (body, comments, API docs, knowledge,
-    # board name, git, warm/cold framing) so the agent has the same read-only
-    # context as a work run, but ends with a short "You were asked:" header
-    # and the verbatim human question.
-    if is_ask:
-        transitions_line = ""
-        goal_line = ""
-        done_instruction = "When done: add a comment to the ticket summarizing what you did, then you're finished."
-    elif transitions_line:
+    if transitions_line:
         done_instruction = "When done: first add a comment to the ticket summarizing what you did, then update the ticket status to exactly one of the statuses listed above (or leave it where it is if you asked questions via the questions endpoint)."
     else:
         done_instruction = "When done: add a comment to the ticket summarizing what you did, then you're finished."
@@ -545,23 +502,7 @@ def spawn_agent(ticket, status, agent, old_status_id=None, ask_question=None, as
             change_line = f'Still in "{status["name"]}".'
             goal_instruction = f"Continue your goal: {goal_line}"
 
-        if is_ask:
-            # Ask mode: skip the status/goal/transition line entirely;
-            # end with the human question instead.
-            context_msg = f"""[Update] Ticket #{ticket_id}: {ticket['title']}
-{board_ctx}{git_info}
-{change_line}
-
-New comments since last update:
-{new_comments_block}
-
-API:
-{api_docs}
-{knowledge_block}
-You were asked:
-{ask_question}"""
-        else:
-            context_msg = f"""[Update] Ticket #{ticket_id}: {ticket['title']}
+        context_msg = f"""[Update] Ticket #{ticket_id}: {ticket['title']}
 {board_ctx}{git_info}
 {change_line}
 
@@ -583,15 +524,7 @@ API:
             old_status = query_db("SELECT name FROM statuses WHERE id = ?", (old_status_id,), one=True)
             if old_status:
                 change_note = f"\nNote: This ticket was moved from \"{old_status['name']}\" to \"{status['name']}\" before you were spawned.\n"
-        if is_ask:
-            context_msg = f"""Ticket #{ticket_id}: {ticket['title']}
-{board_ctx}{git_info}{change_note}\nDescription:
-{ticket['body'] or '(no description)'}\nComments:
-{all_comments_block}\nAPI:
-{api_docs}\n{knowledge_block}\nYou were asked:
-{ask_question}"""
-        else:
-            context_msg = f"""Ticket #{ticket_id}: {ticket['title']}
+        context_msg = f"""Ticket #{ticket_id}: {ticket['title']}
 {board_ctx}{git_info}{change_note}\nDescription:
 {ticket['body'] or '(no description)'}\nComments:
 {all_comments_block}\nAPI:
@@ -600,18 +533,7 @@ Your goal: {goal_line}
 {transitions_line}
 {done_instruction}"""
 
-    # ── System prompt construction ──
-    # Work mode: agent description + two behavioral directives.
-    # Ask mode: agent-specific (or built-in default) ask system prompt + same
-    # two directives, plus the board long-term vision if present.
-    if is_ask:
-        ask_prompt = (ask_system_prompt or agent.get('ask_system_prompt') or '').strip() or DEFAULT_ASK_SYSTEM_PROMPT
-        system_prompt = f"""{ask_prompt}
-
-Your task and allowed actions change with each prompt. Always follow the instructions at the end of the prompt, not your general expertise.
-After completing your task, write a comment on the ticket summarizing what you did."""
-    else:
-        system_prompt = f"""{agent['description']}
+    system_prompt = f"""{agent['description']}
 
 Your task and allowed actions change with each prompt. Always follow the instructions at the end of the prompt, not your general expertise.
 After completing your task, write a comment on the ticket summarizing what you did."""
@@ -650,10 +572,9 @@ After completing your task, write a comment on the ticket summarizing what you d
     cmd += [context_msg]
 
     db = get_db()
-    run_mode = 'ask' if is_ask else 'work'
     cur = db.execute(
-        "INSERT INTO agent_runs (ticket_id, agent_id, started_at, status, mode) VALUES (?, ?, ?, ?, ?)",
-        (ticket_id, agent['id'], now.isoformat(), 'running', run_mode)
+        "INSERT INTO agent_runs (ticket_id, agent_id, started_at, status) VALUES (?, ?, ?, ?)",
+        (ticket_id, agent['id'], now.isoformat(), 'running')
     )
     db.commit()
     run_id = cur.lastrowid
@@ -678,13 +599,7 @@ After completing your task, write a comment on the ticket summarizing what you d
         db.execute("UPDATE agent_runs SET pid = ? WHERE id = ?", (proc.pid, run_id))
         db.commit()
         run_db("UPDATE tickets SET agent_last_spawned_at = ? WHERE id = ?", (now.isoformat(), ticket_id))
-        if is_ask:
-            preview = (ask_question or '').strip()
-            if len(preview) > 80:
-                preview = preview[:80].rstrip() + '…'
-            add_comment(ticket_id, f"💬 Asked agent '{agent['name']}': \"{preview}\"")
-        else:
-            add_comment(ticket_id, f"🤖 Agent '{agent['name']}' {'resumed' if is_warm else 'started'} for status '{status['name']}'.")
+        add_comment(ticket_id, f"🤖 Agent '{agent['name']}' {'resumed' if is_warm else 'started'} for status '{status['name']}'.")
         _start_log_reader(proc.stdout, log_f)
         _start_watcher(proc, run_id, ticket_id, agent['name'], log_f)
         bus.publish(AGENT_SPAWNED, ticket_id=ticket_id, agent_name=agent['name'], run_id=run_id)

@@ -78,16 +78,6 @@
         <legend>API Endpoints</legend>
         <div id="api-endpoints-checkboxes">Loading…</div>
       </fieldset>
-      <details class="ask-prompt-fieldset">
-        <summary>Ask Agent System Prompt <span class="muted">(optional override)</span></summary>
-        <p class="muted ask-prompt-help">
-          Used when a human asks the agent a question via the ticket's
-          <strong>Ask Agent</strong> button. Leave blank to use the built-in
-          default (read-only Q&amp;A; cannot change ticket status or fields).
-        </p>
-        <textarea name="ask_system_prompt" id="agent-ask-system-prompt" rows="6"
-                  placeholder="Default: built-in Q&A prompt."></textarea>
-      </details>
       <div class="form-actions">
         <button type="submit" class="btn primary">Save</button>
         <button type="button" class="btn" onclick="hideAgentModal()">Cancel</button>
@@ -725,7 +715,6 @@ async function showAgentCreate(workflowId) {
   form.elements.workflow_id.value = workflowId;
   form.elements.name.value = '';
   form.elements.description.value = '';
-  form.elements.ask_system_prompt.value = '';
   document.getElementById('agent-modal-title').textContent = 'New Agent';
   await loadPiModels();
   const agentModelSelect = document.getElementById('agent-model-select');
@@ -745,7 +734,6 @@ async function showAgentEdit(agentId, workflowId) {
   form.elements.workflow_id.value = workflowId;
   form.elements.name.value = agent.name;
   form.elements.description.value = agent.description;
-  form.elements.ask_system_prompt.value = agent.ask_system_prompt || '';
   await loadPiModels();
   populateModelSelect(document.getElementById('agent-model-select'), agent.model || '');
   populateThinkingSelect(document.getElementById('agent-thinking-select'), agent.thinking || '', getModelThinkingLevels(agent.model || ''));
@@ -781,14 +769,6 @@ document.getElementById('agent-form').addEventListener('submit', async (e) => {
     // On create, send values (empty string gets stored as null)
     if (model) body.model = model;
     if (thinking) body.thinking = thinking;
-  }
-  // ask_system_prompt: on update, always send (empty = clear); on create,
-  // only send if non-empty (avoids overwriting default with empty string).
-  const askSystemPromptRaw = fd.get('ask_system_prompt');
-  if (id) {
-    body.ask_system_prompt = askSystemPromptRaw != null ? askSystemPromptRaw : null;
-  } else if (askSystemPromptRaw && askSystemPromptRaw.trim()) {
-    body.ask_system_prompt = askSystemPromptRaw;
   }
   // Collect selected endpoint keys from checkboxes
   const checked = document.querySelectorAll('#api-endpoints-checkboxes .ep-checkbox:checked');

@@ -85,12 +85,12 @@ class TestDrainQueueFullContext:
         from pi_cowork import agents as agents_module
         original_spawn = agents_module.spawn_agent
 
-        def capture_spawn(ticket, status, agent, old_status_id=None, ask_question=None, ask_system_prompt=None):
+        def capture_spawn(ticket, status, agent, old_status_id=None):
             captured_args['ticket'] = ticket
             captured_args['status'] = status
             captured_args['agent'] = agent
             captured_args['old_status_id'] = old_status_id
-            return original_spawn(ticket, status, agent, old_status_id=old_status_id, ask_question=ask_question, ask_system_prompt=ask_system_prompt)
+            return original_spawn(ticket, status, agent, old_status_id=old_status_id)
 
         with patch('pi_cowork.agents.spawn_agent', side_effect=capture_spawn):
             with patch('app.subprocess.Popen', return_value=MagicMock(pid=9998)):
@@ -267,12 +267,12 @@ class TestDrainQueueOldStatusId:
         from pi_cowork import agents as agents_module
         original_spawn = agents_module.spawn_agent
 
-        def capture_spawn(ticket, status, agent, old_status_id=None, ask_question=None, ask_system_prompt=None):
+        def capture_spawn(ticket, status, agent, old_status_id=None):
             captured_args['ticket'] = ticket
             captured_args['status'] = status
             captured_args['agent'] = agent
             captured_args['old_status_id'] = old_status_id
-            return original_spawn(ticket, status, agent, old_status_id=old_status_id, ask_question=ask_question, ask_system_prompt=ask_system_prompt)
+            return original_spawn(ticket, status, agent, old_status_id=old_status_id)
 
         with patch('pi_cowork.agents.spawn_agent', side_effect=capture_spawn):
             with patch('app.subprocess.Popen', return_value=MagicMock(pid=9998)):
@@ -635,12 +635,12 @@ class TestRecurringTaskSpawnsAgent:
         from pi_cowork import agents as agents_module
         original_spawn = agents_module.spawn_agent
 
-        def capture_spawn(ticket, status, agent, old_status_id=None, ask_question=None, ask_system_prompt=None):
+        def capture_spawn(ticket, status, agent, old_status_id=None):
             captured_args['ticket'] = ticket
             captured_args['status'] = status
             captured_args['agent'] = agent
             captured_args['old_status_id'] = old_status_id
-            return original_spawn(ticket, status, agent, old_status_id=old_status_id, ask_question=ask_question, ask_system_prompt=ask_system_prompt)
+            return original_spawn(ticket, status, agent, old_status_id=old_status_id)
 
         with patch('app.subprocess.Popen', return_value=MagicMock(pid=9997)):
             with patch('pi_cowork.agents._is_our_process', return_value=False):

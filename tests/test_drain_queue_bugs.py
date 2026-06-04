@@ -104,13 +104,13 @@ def test_drain_queue_respects_spawn_lock(client, default_workflow, default_board
     from pi_cowork import agents as agents_module
     original_spawn = agents_module.spawn_agent
 
-    def counting_spawn(ticket, status, agent, old_status_id=None, ask_question=None, ask_system_prompt=None):
+    def counting_spawn(ticket, status, agent, old_status_id=None):
         nonlocal spawn_count
         with spawn_lock:
             spawn_count += 1
         # Simulate work so concurrent calls overlap
         time.sleep(0.05)
-        return original_spawn(ticket, status, agent, old_status_id=old_status_id, ask_question=ask_question, ask_system_prompt=ask_system_prompt)
+        return original_spawn(ticket, status, agent, old_status_id=old_status_id)
 
     # First ticket takes the slot
     with patch('app.subprocess.Popen', return_value=MagicMock(pid=9999)):

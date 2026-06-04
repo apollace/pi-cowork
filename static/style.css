@@ -701,36 +701,6 @@ body {
   color: var(--primary);
 }
 
-.card-ask-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 999px;
-  border: 1px solid #a855f755;
-  background: transparent;
-  color: #a855f7;
-  font-size: 0.8rem;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0;
-  margin-left: auto;
-  transition: background .15s, border-color .15s, color .15s, opacity .15s;
-}
-.card-ask-btn:hover:not(:disabled) {
-  background: #a855f711;
-  border-color: #a855f7;
-  color: #a855f7;
-}
-.card-ask-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  color: var(--text-muted);
-  border-color: var(--border);
-  background: transparent;
-}
-
 .card-link {
   text-decoration: none;
   color: inherit;
@@ -3426,55 +3396,4 @@ textarea.edit-input { resize: vertical; min-height: 2.5rem; }
 }
 .modal-large {
   max-width: 900px;
-}
-
-/* Ask Agent prompt fieldset (collapsible) */
-.ask-prompt-fieldset {
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 0.5rem 0.75rem;
-  margin: 0.5rem 0;
-}
-.ask-prompt-fieldset summary {
-  cursor: pointer;
-  font-weight: 500;
-  padding: 0.25rem 0;
-}
-.ask-prompt-fieldset summary:hover {
-  color: #2563eb;
-}
-.ask-prompt-fieldset textarea {
-  width: 100%;
-  box-sizing: border-box;
-  margin-top: 0.5rem;
-  font-family: inherit;
-  font-size: 0.9rem;
-  padding: 0.5rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  resize: vertical;
-}
-.ask-prompt-help {
-  font-size: 0.85rem;
-  margin: 0.25rem 0 0.5rem 0;
-  line-height: 1.4;
-}
-
-/* Ask-mode badge in agent-runs list */
-.ask-mode-badge {
-  background: #a855f722;
-  color: #a855f7;
-  border: 1px solid #a855f755;
-}
-.ask-agent {
-  /* Subtle visual difference from the work-mode Run/Re-run buttons */
-  border-color: #a855f755;
-}
-.ask-agent:hover {
-  background: #a855f711;
-}
-.ask-modal-help {
-  font-size: 0.85rem;
-  margin: 0.5rem 0 1rem 0;
-  line-height: 1.4;
 }
