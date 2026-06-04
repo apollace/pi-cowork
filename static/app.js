@@ -388,29 +388,32 @@ async function initBoard() {
       `<span class="badge label-pill" style="background:${escapeHtml(l.color)}33;color:${escapeHtml(l.color)};border:1px solid ${escapeHtml(l.color)}55;">${escapeHtml(l.name)}</span>`
     ).join('');
     card.innerHTML = `
-      <a class="card-link" href="/ticket/${ticket.id}">
-        <div class="card-header">
-          <div style="display:flex;align-items:center;gap:0.4rem;">
-            <span class="card-id">#${ticket.id}</span>
-            ${priorityLabel}
+      <div class="card-indicator"></div>
+      <div class="card-inner">
+        <a class="card-link" href="/ticket/${ticket.id}">
+          <div class="card-header">
+            <div style="display:flex;align-items:center;gap:0.4rem;">
+              <span class="card-id">#${ticket.id}</span>
+              ${priorityLabel}
+            </div>
           </div>
-        </div>
-        <div class="card-body">
-          <div class="card-title">${escapeHtml(ticket.title)}</div>
-          <div class="card-labels" id="card-labels-${ticket.id}">
-            ${labelPills}
-            <button type="button" class="card-label-add" id="card-label-btn-${ticket.id}" onclick="event.preventDefault(); event.stopPropagation(); toggleCardLabels(${ticket.id});">+</button>
+          <div class="card-body">
+            <div class="card-title">${escapeHtml(ticket.title)}</div>
+            <div class="card-labels" id="card-labels-${ticket.id}">
+              ${labelPills}
+              <button type="button" class="card-label-add" id="card-label-btn-${ticket.id}" onclick="event.preventDefault(); event.stopPropagation(); toggleCardLabels(${ticket.id});">+</button>
+            </div>
           </div>
+        </a>
+        <div class="card-footer">
+          ${statusSelect}
+          ${hasAgent}
+          ${queuedBadge}
+          ${gateBadge}
+          ${questionBadge}
+          ${recurringBadge}
+          ${branchBadge}
         </div>
-      </a>
-      <div class="card-footer">
-        ${statusSelect}
-        ${hasAgent}
-        ${queuedBadge}
-        ${gateBadge}
-        ${questionBadge}
-        ${recurringBadge}
-        ${branchBadge}
       </div>
     `;
 

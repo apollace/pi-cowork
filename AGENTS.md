@@ -753,11 +753,12 @@ Board cards were redesigned from a flat layout to a three-zone layout with prior
 
 ### Card Layout
 - **Three-zone structure**: `.card-header` (ID + priority pill) → `.card-body` (title + labels, inside `.card-link`) → `.card-footer` (status select + badges, outside `.card-link` to avoid navigation conflict)
-- Card padding removed; zones use their own padding with gaps
+- All card content is wrapped in `.card-inner` (`padding: 16px; flex: 1;`)
+- A `.card-indicator` div (4px wide, flush left edge) shows priority color via `background` instead of border
 - `.card-footer` uses `border-top: 1px solid var(--border-secondary)` for visual separation
 
 ### Priority System
-- **Accent border**: Card root gets `card-priority-*` class (e.g., `.card-priority-Critical`) → `border-left: 3px solid <color>` on `.card`
+- **Accent indicator**: Card root gets `card-priority-*` class (e.g., `.card-priority-Critical`) → `.card-priority-* .card-indicator { background: <color> }`
 - **Label pill**: `.card-priority-label.p-*` shows priority as a colored pill in the header (e.g., `.card-priority-label.p-Critical`)
 - Priority colors: Critical `#dc2626`, High `#d97706`, Medium `#2563eb`, Low `#6b7280`
 - CSS classes and JS `priorityColors` map use identical color values
@@ -772,18 +773,20 @@ Board cards were redesigned from a flat layout to a three-zone layout with prior
 
 ### Animations
 - `card-entrance` keyframe animation replaces old `card-in` (adds subtle `translateY(4px)` fade-in)
-- Hover: `border-color`, `box-shadow`, and `transform: translateY(-1px)` transitions for a subtle lift
+- Hover: `box-shadow` and `transform: translateY(-1px)` transitions for a subtle lift (no border-color change)
 
 ### Typography and Spacing
-- `.card-header`: flex row, space-between alignment, compact padding
-- `.card-body`: title + labels, standard text sizing
-- `.card-footer`: compact top padding, `--border-secondary` separator
+- `.card`: `background: #FFFFFF; border: none; border-radius: 12px; box-shadow: 0px 1px 3px rgba(16,24,40,0.1); display: flex; overflow: hidden;`
+- `.card-header`: flex row, space-between alignment, no zone padding
+- `.card-body`: title + labels, standard text sizing, no zone padding
+- `.card-footer`: compact top padding (`padding-top: 0.5rem`), `--border-secondary` separator
 
 ### What Was Removed
 - `.card-status-pill` (read-only text pill) — replaced by `.card-status-select` styled inline dropdown
 - `.card-actions` — status is now an inline select in `.card-footer`
 - `.card-meta` — replaced by zone-specific classes
 - Inline `priorityDot` with inline styles → replaced by `.card-priority-label.p-*` pill
+- Left border priority accent (`border-left: 3px solid`) → replaced by `.card-indicator` div (`width: 4px; background: <color>`)
 
 ### Utility CSS Classes
 - Prefer shared utility classes over inline `style="..."` attributes. Key utilities in `style.css`: `.hidden` (`display: none !important`), `.mt-05`/`.mt-025`/`.mt-1`, `.mb-05`/`.mb-075`/`.mb-1`, `.cursor-pointer`, `.text-danger`, `.flex`, `.justify-end`, `.w-full`, `.inline-form`, `.toolbar-flex`, `.meta-gap`, `.input-width-sm`, `.inline-select-sm`, `.question-custom-input`, `.model-effort-fields`, `.model-effort-actions`, `.recurring-meta`, `.agent-log-hidden`, `.ticket-description-empty`.
