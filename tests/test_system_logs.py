@@ -1113,19 +1113,14 @@ class TestSystemLogsCSSVariables:
         )
 
     def test_surface_variable_used_for_backgrounds(self, client):
-        """Key CSS elements should use var(--surface) for their backgrounds."""
+        """Key CSS elements should use var(--surface) for their backgrounds (now in shared style.css)."""
         import re
-        template_path = os.path.join(
+        css_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
-            'templates', 'system_logs.html'
+            'static', 'style.css'
         )
-        with open(template_path) as f:
-            content = f.read()
-
-        # Extract the <style> block content
-        style_match = re.search(r'<style>(.*?)</style>', content, re.DOTALL)
-        assert style_match, "No <style> block found in system_logs.html"
-        style_content = style_match.group(1)
+        with open(css_path) as f:
+            css_content = f.read()
 
         # These 4 elements must use var(--surface) for background
         required = [
@@ -1136,17 +1131,15 @@ class TestSystemLogsCSSVariables:
         ]
         for selector in required:
             pattern = rf'{re.escape(selector)}\s*\{{[^}}]*background:\s*var\(--surface\)'
-            assert re.search(pattern, style_content, re.DOTALL), (
+            assert re.search(pattern, css_content, re.DOTALL), (
                 f"{selector} must use var(--surface) for background "
                 f"(used for card/panel backgrounds in the system logs page)"
             )
 
-    def test_detail_popup_renders_with_surface_bg(self, client):
-        """GET /system-logs should render a detail popup with var(--surface) background."""
+    def test_detail_popup_renders_without_deprecated_var(self, client):
+        """GET /system-logs should not contain deprecated var(--card)."""
         res = client.get('/system-logs')
         assert res.status_code == 200
         html = res.data.decode('utf-8')
-        # The .details-popup rule should use var(--surface)
-        assert 'background: var(--surface)' in html
         # Should NOT contain var(--card)
         assert 'var(--card)' not in html

@@ -178,8 +178,8 @@
       }
     } else {
       const data = await res.json();
-      if (typeof showToast === 'function') showToast(data.error || 'Something went wrong', 'error');
-      else alert(data.error || 'Something went wrong');
+      showToast(data.error || 'Something went wrong', 'error');
+      
     }
   });
 

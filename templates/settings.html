@@ -127,7 +127,7 @@
           <span>Notification dismissal retention (days)</span>
           <input type="number" id="cfg-notification-dismissal-retention" min="1" max="3650" />
         </label>
-        <div class="form-row" style="margin-top:0.5rem;">
+        <div class="form-row mt-05">
           <span></span>
           <button class="btn danger" id="btn-purge-terminal-logs">Purge terminal ticket logs</button>
           <span id="purge-feedback" class="feedback"></span>
@@ -136,7 +136,7 @@
     </div>
   </div>
 
-  <div class="form-actions" style="margin-top: 1rem;">
+  <div class="form-actions mt-1">
     <button class="btn primary" id="cfg-save">Save</button>
     <a class="btn" href="{{ url_for('board') }}">Cancel</a>
     <span id="cfg-feedback" class="feedback"></span>
@@ -561,7 +561,7 @@
       if (_editingPromptId === r.id) {
         html += `
           <div class="saved-prompts-row saved-prompts-row-edit">
-            <div class="saved-prompts-row-info" style="flex-direction:column;gap:0.35rem;">
+            <div class="saved-prompts-row-info">
               <input type="text" id="sp-edit-name-${r.id}" class="edit-input" value="${escapeHtml(r.name)}" />
               <textarea id="sp-edit-text-${r.id}" class="edit-input" rows="2">${escapeHtml(r.prompt_text)}</textarea>
             </div>

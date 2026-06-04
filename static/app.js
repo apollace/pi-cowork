@@ -225,8 +225,7 @@ async function initBoard() {
       } catch(e) { /* silently ignore */ }
       renderRunningPanel(runningRuns);
     } catch (e) {
-      if (typeof showToast === 'function') showToast('Failed to load board: ' + e.message, 'error');
-      else alert('Failed to load board: ' + e.message);
+      showToast('Failed to load board: ' + e.message, 'error');
       return;
     } finally {
       if (skeleton) skeleton.style.display = 'none';
@@ -291,11 +290,11 @@ async function initBoard() {
             refresh();
           } else {
             this.disabled = false;
-            alert(data.error || 'Failed to kill agent');
+            showToast(data.error || 'Failed to kill agent', 'error');
           }
         } catch (err) {
           this.disabled = false;
-          alert('Error: ' + err.message);
+          showToast('Error: ' + err.message, 'error');
         }
       });
       panel.appendChild(card);
@@ -310,8 +309,7 @@ async function initBoard() {
     });
     if (!res.ok) {
       const data = await res.json();
-      if (typeof showToast === 'function') showToast(data.error || 'Failed to move ticket', 'error');
-      else alert(data.error || 'Failed to move ticket');
+      showToast(data.error || 'Failed to move ticket', 'error');
     }
     await refresh();
   }

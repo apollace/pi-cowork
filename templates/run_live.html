@@ -49,12 +49,12 @@
       } else {
         killBtn.textContent = '🛑 Kill Agent';
         killBtn.disabled = false;
-        alert(data.error || 'Failed to kill agent');
+        showToast(data.error || 'Failed to kill agent', 'error');
       }
     } catch (e) {
       killBtn.textContent = '🛑 Kill Agent';
       killBtn.disabled = false;
-      alert('Error: ' + e.message);
+      showToast('Error: ' + e.message, 'error');
     }
   });
 

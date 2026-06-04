@@ -772,7 +772,7 @@ Board cards were redesigned from a flat layout to a three-zone layout with prior
 
 ### Animations
 - `card-entrance` keyframe animation replaces old `card-in` (adds subtle `translateY(4px)` fade-in)
-- Hover: only `border-color` and `box-shadow` transitions; no `transform: translateY(-1px)`
+- Hover: `border-color`, `box-shadow`, and `transform: translateY(-1px)` transitions for a subtle lift
 
 ### Typography and Spacing
 - `.card-header`: flex row, space-between alignment, compact padding
@@ -783,8 +783,12 @@ Board cards were redesigned from a flat layout to a three-zone layout with prior
 - `.card-status-pill` (read-only text pill) — replaced by `.card-status-select` styled inline dropdown
 - `.card-actions` — status is now an inline select in `.card-footer`
 - `.card-meta` — replaced by zone-specific classes
-- `translateY(-1px)` hover transform on `.card`
 - Inline `priorityDot` with inline styles → replaced by `.card-priority-label.p-*` pill
+
+### Utility CSS Classes
+- Prefer shared utility classes over inline `style="..."` attributes. Key utilities in `style.css`: `.hidden` (`display: none !important`), `.mt-05`/`.mt-025`/`.mt-1`, `.mb-05`/`.mb-075`/`.mb-1`, `.cursor-pointer`, `.text-danger`, `.flex`, `.justify-end`, `.w-full`, `.inline-form`, `.toolbar-flex`, `.meta-gap`, `.input-width-sm`, `.inline-select-sm`, `.question-custom-input`, `.model-effort-fields`, `.model-effort-actions`, `.recurring-meta`, `.agent-log-hidden`, `.ticket-description-empty`.
+- Sections that toggle visibility dynamically should use the `.hidden` class (added/removed via `classList`) rather than inline `style.display`, unless the JS also sets a specific non-default display value like `inline-flex`.
+- Skeleton loading placeholders use `.skeleton`, `.skeleton-text`, `.skeleton-card`. Both the board page and the ticket detail page now show skeletons while async sections load.
 
 ## UX Design Guidelines (Ticket #81)
 
