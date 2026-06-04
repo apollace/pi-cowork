@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS agents (
     model TEXT,
     thinking TEXT,
     api_endpoints TEXT,
+    ask_system_prompt TEXT,
     workflow_id INTEGER NOT NULL REFERENCES workflows(id),
     UNIQUE(name, workflow_id)
 );
@@ -97,7 +98,8 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     completed_at TEXT,
     status TEXT CHECK(status IN ('running','completed','failed')) DEFAULT 'running',
     exit_code INTEGER,
-    log_path TEXT
+    log_path TEXT,
+    mode TEXT NOT NULL DEFAULT 'work'
 );
 
 -- Queue for blocked spawns
