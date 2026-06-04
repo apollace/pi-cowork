@@ -234,6 +234,217 @@ async function initBoard() {
     render();
   }
 
+  async function syncTickets() {
+    if (!currentBoardId) return;
+    try {
+      const [tRes, rRes] = await Promise.all([
+        fetch(`/api/tickets?board_id=${currentBoardId}&include_terminal=${showTerminal.checked}`),
+        fetch(`/api/running_agent_runs?board_id=${currentBoardId}`),
+      ]);
+      const newTickets = await tRes.json();
+      const runningRuns = rRes.ok ? await rRes.json() : [];
+      diffAndUpdateBoard(newTickets);
+      renderRunningPanel(runningRuns);
+    } catch (e) {
+      // Silently ignore sync failures to avoid toast spam on rapid SSE events
+    }
+  }
+
+  function getCardsContainer(statusId) {
+    const group = board.querySelector(`.group[data-status-id="${statusId}"]`);
+    return group ? group.querySelector('.cards') : null;
+  }
+
+  function removeCard(ticketId) {
+    const card = document.getElementById(`ticket-card-${ticketId}`);
+    if (card) {
+      if (_activePopoverTicketId === ticketId) {
+        closeActivePopover();
+      }
+      card.remove();
+    }
+  }
+
+  function appendCardToColumn(ticket) {
+    const container = getCardsContainer(ticket.status_id);
+    if (!container) return;
+    const card = buildCard(ticket);
+    container.appendChild(card);
+  }
+
+  function moveCardToColumn(ticket, oldStatusId) {
+    const card = document.getElementById(`ticket-card-${ticket.id}`);
+    if (!card) return;
+    const newContainer = getCardsContainer(ticket.status_id);
+    if (!newContainer) {
+      card.remove();
+      return;
+    }
+    newContainer.appendChild(card);
+  }
+
+  function updateCardInPlace(ticket, cardEl) {
+    // Update priority class
+    const priorityClass = ticket.priority ? `card-priority-${ticket.priority}` : '';
+    cardEl.className = `card ${priorityClass}`.trim();
+
+    // Update priority label
+    const priorityLabelEl = cardEl.querySelector('.card-priority-label');
+    if (priorityLabelEl) {
+      if (ticket.priority) {
+        priorityLabelEl.className = `card-priority-label p-${ticket.priority}`;
+        priorityLabelEl.textContent = `● ${ticket.priority}`;
+        priorityLabelEl.style.display = '';
+      } else {
+        priorityLabelEl.style.display = 'none';
+      }
+    }
+
+    // Update title
+    const titleEl = cardEl.querySelector('.card-title');
+    if (titleEl) {
+      titleEl.textContent = ticket.title;
+    }
+
+    // Update labels
+    const labelsDiv = cardEl.querySelector(`#card-labels-${ticket.id}`);
+    if (labelsDiv) {
+      const labelPills = (ticket.labels || []).map(l =>
+        `<span class="badge label-pill" style="background:${escapeHtml(l.color)}33;color:${escapeHtml(l.color)};border:1px solid ${escapeHtml(l.color)}55;">${escapeHtml(l.name)}</span>`
+      ).join('');
+      labelsDiv.innerHTML = labelPills + `<button type="button" class="card-label-add" id="card-label-btn-${ticket.id}" onclick="event.preventDefault(); event.stopPropagation(); toggleCardLabels(${ticket.id});">+</button>`;
+    }
+
+    // Update status select and footer badges
+    const footer = cardEl.querySelector('.card-footer');
+    if (footer) {
+      const statusOptions = statuses.map(s =>
+        `<option value="${s.id}"${s.id === ticket.status_id ? ' selected' : ''}>${escapeHtml(s.name)}</option>`
+      ).join('');
+      const statusSelectHTML = `<select class="card-status-select" data-id="${ticket.id}">${statusOptions}</select>`;
+      const hasAgent = ticket.agent_name ? `<span class="badge agent">🤖 ${escapeHtml(ticket.agent_name)}</span>` : '';
+      const queuedBadge = ticket.queued ? `<span class="badge queued" title="${escapeHtml(ticket.queue_reason || '')} limit">⏳ Queued</span>` : '';
+      const gateBadge = ticket.gate_pending ? `<span class="badge gate">🚧 Gate</span>` : '';
+      const questionBadge = ticket.question_count ? `<span class="badge question">❓ ${ticket.question_count}</span>` : '';
+      const recurringBadge = (ticket.recurring_parents && ticket.recurring_parents.length > 0)
+        ? `<span class="badge recurring" title="Created by recurring task: ${escapeHtml(ticket.recurring_parents[0].title)}">🔄 Recurring</span>` : '';
+
+      let branchBadge = '';
+      if (ticket.branch) {
+        const autoPattern = new RegExp(`^ticket-${ticket.id}-[a-z0-9-]+$`);
+        const isAuto = autoPattern.test(ticket.branch);
+        const displayText = isAuto ? `#${ticket.id}` : escapeHtml(ticket.branch);
+        const textClass = isAuto ? '' : 'card-branch-text';
+        branchBadge = `
+          <span class="card-branch-pill" title="Git branch: ${escapeHtml(ticket.branch)}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="6" y1="3" x2="6" y2="15"></line>
+              <circle cx="18" cy="6" r="3"></circle>
+              <circle cx="6" cy="18" r="3"></circle>
+              <path d="M18 9a9 9 0 0 1-9 9"></path>
+            </svg>
+            <span class="${textClass}">${displayText}</span>
+            <button type="button" class="card-branch-copy" data-branch="${escapeHtml(ticket.branch)}" aria-label="Copy branch name">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+          </span>`;
+      }
+
+      footer.innerHTML = statusSelectHTML + hasAgent + queuedBadge + gateBadge + questionBadge + recurringBadge + branchBadge;
+
+      const statusSelectEl = footer.querySelector('.card-status-select');
+      if (statusSelectEl) {
+        statusSelectEl.addEventListener('change', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          moveTicket(ticket.id, parseInt(e.target.value));
+        });
+      }
+
+      const branchCopyBtn = footer.querySelector('.card-branch-copy');
+      if (branchCopyBtn) {
+        branchCopyBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const branch = branchCopyBtn.getAttribute('data-branch');
+          navigator.clipboard.writeText(branch).then(() => {
+            window.showToast('Branch copied', 'success');
+          });
+        });
+      }
+    }
+  }
+
+  function updateGroupCounts(allTickets) {
+    const visibleTickets = allTickets.filter(matchesFilters);
+    for (const status of statuses) {
+      const group = board.querySelector(`.group[data-status-id="${status.id}"]`);
+      if (!group) continue;
+      const count = visibleTickets.filter(t => t.status_id === status.id).length;
+      const countEl = group.querySelector('.group-count');
+      if (countEl) countEl.textContent = count;
+    }
+  }
+
+  function diffAndUpdateBoard(newTickets) {
+    const oldMap = new Map(tickets.map(t => [t.id, t]));
+    const newMap = new Map(newTickets.map(t => [t.id, t]));
+
+    // Removed tickets
+    for (const [id, oldTicket] of oldMap) {
+      if (!newMap.has(id)) {
+        removeCard(id);
+      }
+    }
+
+    // New or updated tickets
+    for (const newTicket of newTickets) {
+      const oldTicket = oldMap.get(newTicket.id);
+      const shouldBeVisible = matchesFilters(newTicket);
+
+      if (!oldTicket) {
+        // Brand new ticket
+        if (shouldBeVisible) {
+          appendCardToColumn(newTicket);
+        }
+      } else {
+        const wasVisible = matchesFilters(oldTicket);
+        if (!wasVisible && shouldBeVisible) {
+          appendCardToColumn(newTicket);
+        } else if (wasVisible && !shouldBeVisible) {
+          removeCard(newTicket.id);
+        } else if (wasVisible && shouldBeVisible) {
+          const cardEl = document.getElementById(`ticket-card-${newTicket.id}`);
+          if (!cardEl) continue;
+          if (oldTicket.status_id !== newTicket.status_id) {
+            moveCardToColumn(newTicket, oldTicket.status_id);
+          }
+          // Check if any displayed property changed
+          if (
+            oldTicket.priority !== newTicket.priority ||
+            oldTicket.title !== newTicket.title ||
+            oldTicket.agent_name !== newTicket.agent_name ||
+            oldTicket.queued !== newTicket.queued ||
+            oldTicket.queue_reason !== newTicket.queue_reason ||
+            oldTicket.gate_pending !== newTicket.gate_pending ||
+            oldTicket.question_count !== newTicket.question_count ||
+            oldTicket.branch !== newTicket.branch ||
+            JSON.stringify(oldTicket.labels || []) !== JSON.stringify(newTicket.labels || []) ||
+            JSON.stringify(oldTicket.recurring_parents || []) !== JSON.stringify(newTicket.recurring_parents || [])
+          ) {
+            updateCardInPlace(newTicket, cardEl);
+          }
+        }
+      }
+    }
+
+    updateGroupCounts(newTickets);
+    tickets = newTickets;
+  }
+
   function formatElapsed(isoString) {
     const start = new Date(isoString);
     const now = new Date();
@@ -257,10 +468,34 @@ async function initBoard() {
       return;
     }
     panel.style.display = 'flex';
-    panel.innerHTML = '';
+
+    // Map existing cards by run ID for diffing
+    const existingCards = new Map();
+    panel.querySelectorAll('.running-card').forEach(card => {
+      const runId = card.dataset.runId;
+      if (runId) existingCards.set(runId, card);
+    });
+
+    const newRunIds = new Set(runs.map(r => String(r.id)));
+
+    // Remove cards for runs that no longer exist
+    for (const [runId, card] of existingCards) {
+      if (!newRunIds.has(runId)) {
+        card.remove();
+      }
+    }
+
+    // Add or update cards
     for (const run of runs) {
-      const card = document.createElement('div');
-      card.className = 'running-card';
+      const runIdStr = String(run.id);
+      let card = existingCards.get(runIdStr);
+      if (!card) {
+        card = document.createElement('div');
+        card.className = 'running-card';
+        card.dataset.runId = runIdStr;
+        panel.appendChild(card);
+      }
+      // Update content (elapsed time always changes, so rebuild innerHTML)
       card.innerHTML = `
         <a href="/agent_run/${run.id}/live" style="text-decoration:none;color:inherit;display:inline-flex;align-items:center;gap:0.4rem;">
           <span class="pulse-indicator"></span>
@@ -287,7 +522,7 @@ async function initBoard() {
           if (res.ok && data.success) {
             this.textContent = '✓';
             this.classList.add('killed');
-            refresh();
+            syncTickets();
           } else {
             this.disabled = false;
             showToast(data.error || 'Failed to kill agent', 'error');
@@ -297,7 +532,6 @@ async function initBoard() {
           showToast('Error: ' + err.message, 'error');
         }
       });
-      panel.appendChild(card);
     }
   }
 
@@ -311,7 +545,8 @@ async function initBoard() {
       const data = await res.json();
       showToast(data.error || 'Failed to move ticket', 'error');
     }
-    await refresh();
+    // Let SSE sync update the board; trigger a lightweight sync after a short delay as fallback
+    setTimeout(syncTickets, 300);
   }
 
   // Track active popover picker and its ticket for cleanup
@@ -366,6 +601,7 @@ async function initBoard() {
 
   function buildCard(ticket) {
     const card = document.createElement('div');
+    card.id = 'ticket-card-' + ticket.id;
     const priorityClass = ticket.priority ? ` card-priority-${ticket.priority}` : '';
     card.className = `card${priorityClass}`;
     const priorityColors = { Critical: '#dc2626', High: '#d97706', Medium: '#2563eb', Low: '#6b7280' };
@@ -696,7 +932,17 @@ async function initBoard() {
     }, delay || 500);
   }
 
-  // Board-relevant SSE events trigger a debounced refresh
+  let _syncDebounce = null;
+  function debounceSync(delay) {
+    clearTimeout(_syncDebounce);
+    _syncDebounce = setTimeout(function() {
+      if (document.visibilityState === 'visible') {
+        syncTickets();
+      }
+    }, delay || 500);
+  }
+
+  // Board-relevant SSE events trigger a debounced sync (surgical DOM updates)
   const boardEvents = [
     'ticket.created', 'ticket.status_changed', 'ticket.updated',
     'comment.added', 'agent.spawned', 'agent.completed', 'agent.failed',
@@ -705,11 +951,11 @@ async function initBoard() {
   ];
   boardEvents.forEach(function(type) {
     window.addEventListener('sse:' + type, function(e) {
-      debounceRefresh(500);
+      debounceSync(500);
     });
   });
 
-  // Re-sync on SSE reconnect
+  // Re-sync on SSE reconnect — full refresh to re-sync state
   window.addEventListener('sse:open', function() {
     debounceRefresh(100);
   });
