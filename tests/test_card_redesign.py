@@ -78,6 +78,12 @@ class TestCSSClasses:
         assert "-webkit-appearance: none" in css
         assert "-moz-appearance: none" in css
 
+    def test_card_indicator_class(self, css):
+        assert ".card-indicator" in css
+
+    def test_card_inner_class(self, css):
+        assert ".card-inner" in css
+
     def test_card_label_add_class(self, css):
         assert ".card-label-add" in css
 
@@ -164,6 +170,14 @@ class TestJSOutput:
         """Label add button should use .card-label-add class."""
         assert "card-label-add" in js
 
+    def test_buildCard_has_card_indicator(self, js):
+        """Card should have a .card-indicator div as first child."""
+        assert "card-indicator" in js
+
+    def test_buildCard_has_card_inner(self, js):
+        """Card content should be wrapped in .card-inner div."""
+        assert "card-inner" in js
+
     def test_no_priority_dot_inline(self, js):
         """Inline priority-dot style should be gone from buildCard."""
         assert "priorityDot" not in js
@@ -201,6 +215,12 @@ class TestAgentsMD:
         """AGENTS.md should document the styled inline select for status changes."""
         assert "card-status-select" in agents
 
+    def test_card_indicator_documented(self, agents):
+        assert "card-indicator" in agents
+
+    def test_card_inner_documented(self, agents):
+        assert "card-inner" in agents
+
 
 # ── Integration render test ───────────────────────────────────────────────
 
@@ -214,10 +234,10 @@ class TestIntegration:
         }
         for p in css_priorities:
             match = re.search(
-                rf'\.card-priority-{p}\s*\{{[^}}]*border-left-color:\s*([^;]+);',
+                rf'\.card-priority-{p}\s+\.card-indicator\s*\{{[^}}]*background:\s*([^;]+);',
                 css,
             )
-            assert match, f"Missing CSS rule for .card-priority-{p}"
+            assert match, f"Missing CSS rule for .card-priority-{p} .card-indicator"
             css_priorities[p] = match.group(1).strip()
 
         js_priority_match = re.search(
