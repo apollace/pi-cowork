@@ -130,13 +130,155 @@
     }
   }
 
+  function formatDuration(startMs) {
+    const elapsed = Math.floor((Date.now() - startMs) / 1000);
+    const m = Math.floor(elapsed / 60);
+    const s = elapsed % 60;
+    return m + ':' + (s < 10 ? '0' + s : s);
+  }
+
+  function createStreamPlaceholder() {
+    const msg = document.createElement('div');
+    msg.className = 'assistant-message assistant-message-assistant assistant-temporary';
+
+    const header = document.createElement('div');
+    header.className = 'assistant-stream-header';
+
+    const thinking = document.createElement('span');
+    thinking.className = 'thinking-indicator';
+    thinking.textContent = 'Thinking';
+
+    const timer = document.createElement('span');
+    timer.className = 'assistant-timer';
+    timer.textContent = '0:00';
+
+    const stopBtn = document.createElement('button');
+    stopBtn.className = 'assistant-stop-btn';
+    stopBtn.textContent = 'Stop';
+    stopBtn.title = 'Stop generation';
+
+    header.appendChild(thinking);
+    header.appendChild(timer);
+    header.appendChild(stopBtn);
+
+    const body = document.createElement('div');
+    body.className = 'assistant-stream-body';
+
+    msg.appendChild(header);
+    msg.appendChild(body);
+
+    messagesEl.appendChild(msg);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    return {
+      msg: msg,
+      body: body,
+      timer: timer,
+      stopBtn: stopBtn,
+      startTime: Date.now(),
+      timerInterval: null,
+      rawText: '',
+      thinkingText: '',
+      error: null,
+      stopped: false,
+    };
+  }
+
+  function handleStreamEvent(placeholder, eventName, payload) {
+    const type = payload.type;
+    if (type === 'text_delta') {
+      const chunk = payload.chunk || '';
+      placeholder.rawText += chunk;
+      const span = document.createElement('span');
+      span.textContent = chunk;
+      placeholder.body.appendChild(span);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    } else if (type === 'thinking_delta') {
+      const chunk = payload.chunk || '';
+      placeholder.thinkingText += chunk;
+      let block = placeholder.msg.querySelector('.assistant-thinking-block');
+      if (!block) {
+        block = document.createElement('div');
+        block.className = 'assistant-thinking-block';
+        const label = document.createElement('div');
+        label.className = 'assistant-thinking-label';
+        label.textContent = 'Thinking';
+        block.appendChild(label);
+        const content = document.createElement('div');
+        content.className = 'assistant-thinking-content';
+        block.appendChild(content);
+        placeholder.msg.insertBefore(block, placeholder.body);
+      }
+      block.querySelector('.assistant-thinking-content').textContent = placeholder.thinkingText;
+    } else if (type === 'tool_start') {
+      let badge = placeholder.msg.querySelector('.assistant-tool-badge[data-name="' + (payload.name || '') + '"]');
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'assistant-tool-badge';
+        badge.dataset.name = payload.name || '';
+        badge.textContent = (payload.name || 'tool') + '…';
+        placeholder.msg.querySelector('.assistant-stream-header').appendChild(badge);
+      }
+    } else if (type === 'tool_end') {
+      const badge = placeholder.msg.querySelector('.assistant-tool-badge[data-name="' + (payload.name || '') + '"]');
+      if (badge) {
+        badge.textContent = (payload.name || 'tool') + ' ✅';
+      }
+    } else if (type === 'done') {
+      // Final text is accumulated in rawText; payload.full_text is available if needed
+    } else if (type === 'error') {
+      placeholder.error = payload.error || 'Unknown error';
+    } else if (type === 'stopped') {
+      placeholder.stopped = true;
+    }
+  }
+
+  function finalizePlaceholder(placeholder) {
+    placeholder.msg.classList.remove('assistant-temporary');
+    const thinking = placeholder.msg.querySelector('.thinking-indicator');
+    if (thinking) thinking.remove();
+    const stopBtn = placeholder.msg.querySelector('.assistant-stop-btn');
+    if (stopBtn) stopBtn.remove();
+
+    if (placeholder.error) {
+      placeholder.msg.classList.add('assistant-error');
+      placeholder.body.innerHTML = window.renderMarkdown ? window.renderMarkdown('Error: ' + placeholder.error) : 'Error: ' + placeholder.error;
+    } else {
+      if (window.renderMarkdown) {
+        placeholder.body.innerHTML = window.renderMarkdown(placeholder.rawText);
+      } else {
+        placeholder.body.textContent = placeholder.rawText;
+      }
+    }
+  }
+
   async function sendMessage() {
     const text = inputEl.value.trim();
     if (!text) return;
     inputEl.value = '';
     appendMessage('user', text);
-    const temp = appendMessage('assistant', 'Thinking…', true);
+
+    const placeholder = createStreamPlaceholder();
+    placeholder.timerInterval = setInterval(function () {
+      placeholder.timer.textContent = formatDuration(placeholder.startTime);
+    }, 1000);
+
     sendBtn.disabled = true;
+    bubble.classList.add('assistant-bubble-active');
+
+    placeholder.stopBtn.onclick = async function () {
+      try {
+        await fetch('/api/assistant/stop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+      } catch (e) {
+        console.error('Stop failed', e);
+      }
+    };
+
+    let buffer = '';
 
     try {
       const res = await fetch('/api/assistant/chat', {
@@ -144,21 +286,59 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text, page_url: window.location.pathname }),
       });
-      const data = await res.json();
-      temp.classList.remove('assistant-temporary');
-      if (data.error) {
-        temp.textContent = 'Error: ' + data.error;
-        temp.classList.add('assistant-error');
-      } else {
-        temp.textContent = data.response;
+      if (!res.ok) {
+        const data = await res.json().catch(function () { return { error: 'Request failed' }; });
+        throw new Error(data.error || 'Request failed');
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
+
+        let start = 0;
+        while (true) {
+          const sep = buffer.indexOf('\n\n', start);
+          if (sep === -1) break;
+          const block = buffer.slice(start, sep);
+          start = sep + 2;
+
+          const lines = block.split('\n');
+          let eventName = 'message';
+          const dataLines = [];
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (line.startsWith('event:')) {
+              eventName = line.slice(6).trim();
+            } else if (line.startsWith('data:')) {
+              dataLines.push(line.slice(5));
+            }
+          }
+          if (!dataLines.length) continue;
+
+          let payload;
+          try {
+            payload = JSON.parse(dataLines.join('\n'));
+          } catch (e) {
+            console.error('SSE JSON parse error', e, dataLines);
+            continue;
+          }
+          handleStreamEvent(placeholder, eventName, payload);
+        }
+        buffer = buffer.slice(start);
       }
     } catch (e) {
-      temp.classList.remove('assistant-temporary');
-      temp.textContent = 'Error: ' + e.message;
-      temp.classList.add('assistant-error');
+      placeholder.error = e.message;
     } finally {
+      clearInterval(placeholder.timerInterval);
       sendBtn.disabled = false;
       inputEl.focus();
+      bubble.classList.remove('assistant-bubble-active');
+      finalizePlaceholder(placeholder);
     }
   }
 

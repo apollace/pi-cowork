@@ -1,5 +1,20 @@
+import io
 import json
+import os
 from unittest.mock import patch, MagicMock
+
+
+def _make_mock_popen(ndjson='', stderr='', returncode=0):
+    """Return a side-effect function that creates a mock Popen with NDJSON stdout."""
+    def _fake(*args, **kwargs):
+        proc = MagicMock()
+        proc.stdout = io.StringIO(ndjson)
+        proc.stderr = io.StringIO(stderr)
+        proc.pid = 12345
+        proc.poll.return_value = None
+        proc.wait.return_value = returncode
+        return proc
+    return _fake
 
 
 def test_create_agent_invalid_model(client, default_workflow):
@@ -470,11 +485,11 @@ def test_import_export_roundtrip_with_model_thinking(client):
 
 def test_assistant_chat_no_thinking_flag_when_config_empty(client):
     """When assistant_config has default thinking (medium from DB), --thinking should be included."""
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='Resp', stderr='', returncode=0)
+    with patch('pi_cowork.assistant.subprocess.Popen') as mock_popen:
+        mock_popen.side_effect = _make_mock_popen(ndjson='{"type":"done"}\n')
         res = client.post('/api/assistant/chat', json={'message': 'Hi'})
         assert res.status_code == 200
-        cmd = mock_run.call_args[0][0]
+        cmd = mock_popen.call_args[0][0]
         # The DB default for assistant_config.thinking is 'medium'
         # So --thinking medium should be present
         assert '--thinking' in cmd
@@ -483,11 +498,11 @@ def test_assistant_chat_no_thinking_flag_when_config_empty(client):
 
 def test_assistant_chat_omits_model_when_not_set(client):
     """When assistant_config has no model, --model should be omitted."""
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='Resp', stderr='', returncode=0)
+    with patch('pi_cowork.assistant.subprocess.Popen') as mock_popen:
+        mock_popen.side_effect = _make_mock_popen(ndjson='{"type":"done"}\n')
         res = client.post('/api/assistant/chat', json={'message': 'Hi'})
         assert res.status_code == 200
-        cmd = mock_run.call_args[0][0]
+        cmd = mock_popen.call_args[0][0]
         assert '--model' not in cmd
 
 
@@ -498,10 +513,10 @@ def test_assistant_chat_omits_thinking_and_model_when_cleared(client):
     res = client.put('/api/assistant/config', json={'thinking': '', 'model': ''})
     assert res.status_code == 200
 
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='Resp', stderr='', returncode=0)
+    with patch('pi_cowork.assistant.subprocess.Popen') as mock_popen:
+        mock_popen.side_effect = _make_mock_popen(ndjson='{"type":"done"}\n')
         res = client.post('/api/assistant/chat', json={'message': 'Hi'})
         assert res.status_code == 200
-        cmd = mock_run.call_args[0][0]
+        cmd = mock_popen.call_args[0][0]
         assert '--thinking' not in cmd
         assert '--model' not in cmd

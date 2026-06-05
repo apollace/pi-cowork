@@ -3,11 +3,14 @@
 import json
 import logging
 import os
+import queue
+import signal
 import subprocess
 import threading
+import time
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, current_app, jsonify, request
 
 from pi_cowork import config
 from pi_cowork.db import query_db, run_db, row_to_dict
@@ -21,6 +24,63 @@ assistant_bp = Blueprint('assistant', __name__)
 # board_id (None for global) -> threading.Lock
 _assistant_locks = {}
 _locks_master = threading.Lock()
+
+# Active assistant runs for streaming (latest-wins model)
+_ASSISTANT_RUNS = {}
+_assistant_runs_lock = threading.Lock()
+
+
+class _AssistantRun:
+    def __init__(self, proc, scope):
+        self.proc = proc
+        self.scope = scope
+        self.cancelled = False
+        self.accumulated_text = []
+        self.accumulated_thinking = []
+        self.start_time = time.monotonic()
+
+
+def _stop_assistant_run(scope, timeout=5):
+    """Signal an active assistant run to stop. Returns True if a run existed."""
+    with _assistant_runs_lock:
+        run = _ASSISTANT_RUNS.get(scope)
+    if not run:
+        return False
+    run.cancelled = True
+    proc = run.proc
+    if proc.poll() is None:
+        try:
+            os.kill(proc.pid, signal.SIGTERM)
+        except (ProcessLookupError, OSError):
+            pass
+
+    def _kill_later():
+        time.sleep(timeout)
+        try:
+            if proc.poll() is None:
+                os.kill(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, OSError):
+            pass
+
+    threading.Thread(target=_kill_later, daemon=True).start()
+    return True
+
+
+def _reader_thread(proc, q):
+    """Read NDJSON lines from proc.stdout and push parsed events to queue."""
+    try:
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                logger.warning("Assistant NDJSON parse error: %s", line)
+                continue
+            q.put(event)
+    finally:
+        q.put({"type": "_stdout_closed"})
 
 
 def _get_lock(board_id):
@@ -124,7 +184,6 @@ def _get_assistant_system_prompt(cfg, board_id=None):
 
 @assistant_bp.route('/api/assistant/chat', methods=['POST'])
 def api_assistant_chat():
-    from flask import current_app
     data = request.get_json(silent=True) or {}
     message = (data.get('message') or '').strip()
     if not message:
@@ -140,17 +199,19 @@ def api_assistant_chat():
         if not board:
             return jsonify({"error": "board not found"}), 404
 
-    with _get_lock(board_id):
+    scope = board_id
+
+    with _get_lock(scope):
         cfg = _get_assistant_config()
 
-        if board_id is not None:
+        if scope is not None:
             run_db(
                 "INSERT INTO assistant_messages (board_id, role, content) VALUES (?, ?, ?)",
-                (board_id, 'user', message)
+                (scope, 'user', message)
             )
             rows = query_db(
                 "SELECT role, content FROM assistant_messages WHERE board_id = ? ORDER BY created_at, id",
-                (board_id,)
+                (scope,)
             )
         else:
             run_db(
@@ -174,14 +235,18 @@ def api_assistant_chat():
 
         thinking = cfg.get('thinking')
         model = cfg.get('model')
-        work_dir = _assistant_work_dir(board_id)
-        session_dir = _assistant_session_dir(board_id)
+        work_dir = _assistant_work_dir(scope)
+        session_dir = _assistant_session_dir(scope)
         system_prompt = _get_assistant_system_prompt(cfg, board_id=board_id)
+
+        # Stop any existing run for this scope (latest-wins)
+        _stop_assistant_run(scope)
 
         cmd = [
             "pi",
             "--system-prompt", system_prompt,
             "--print",
+            "--mode", "json",
             "--session-dir", session_dir,
         ]
         if thinking:
@@ -190,28 +255,124 @@ def api_assistant_chat():
             cmd += ["--model", model]
         cmd += [context_text]
 
+        proc = subprocess.Popen(
+            cmd,
+            cwd=work_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+        q = queue.Queue()
+        run = _AssistantRun(proc, scope)
+        threading.Thread(target=_reader_thread, args=(proc, q), daemon=True).start()
+
+        with _assistant_runs_lock:
+            _ASSISTANT_RUNS[scope] = run
+
+    _app = current_app._get_current_object()
+
+    def _generator():
+        last_keepalive = time.monotonic()
         try:
-            result = subprocess.run(cmd, cwd=work_dir, capture_output=True, text=True, timeout=300)
-            response_text = result.stdout.strip()
-            if not response_text and result.returncode != 0:
-                response_text = f"Assistant error (exit code {result.returncode}): {result.stderr.strip()}"
-        except subprocess.TimeoutExpired:
-            response_text = "Assistant timed out after 300 seconds."
-        except Exception as e:
-            response_text = f"Assistant failed to run: {e}"
+            while True:
+                try:
+                    event = q.get(timeout=0.5)
+                except queue.Empty:
+                    if proc.poll() is not None:
+                        try:
+                            event = q.get(timeout=0.2)
+                        except queue.Empty:
+                            returncode = proc.wait()
+                            stderr_text = proc.stderr.read().strip() if hasattr(proc.stderr, 'read') else ''
+                            if run.cancelled:
+                                event = {"type": "stopped"}
+                            elif returncode != 0:
+                                event = {"type": "error", "error": stderr_text or f"exit code {returncode}"}
+                            else:
+                                event = {"type": "done"}
+                    else:
+                        now = time.monotonic()
+                        if now - last_keepalive >= 25:
+                            last_keepalive = now
+                            yield ": keepalive\n\n"
+                        continue
 
-        if board_id is not None:
-            run_db(
-                "INSERT INTO assistant_messages (board_id, role, content) VALUES (?, ?, ?)",
-                (board_id, 'assistant', response_text)
-            )
-        else:
-            run_db(
-                "INSERT INTO assistant_messages (role, content) VALUES (?, ?)",
-                ('assistant', response_text)
-            )
+                if event.get("type") == "_stdout_closed":
+                    returncode = proc.wait()
+                    stderr_text = proc.stderr.read().strip() if hasattr(proc.stderr, 'read') else ''
+                    if run.cancelled:
+                        event = {"type": "stopped"}
+                    elif returncode != 0:
+                        event = {"type": "error", "error": stderr_text or f"exit code {returncode}"}
+                    else:
+                        event = {"type": "done"}
 
-    return jsonify({"response": response_text})
+                if event.get("type") == "text_delta":
+                    run.accumulated_text.append(event.get("chunk", ""))
+                    yield f"data: {json.dumps(event)}\n\n"
+                elif event.get("type") == "thinking_delta":
+                    run.accumulated_thinking.append(event.get("chunk", ""))
+                    yield f"event: thinking\ndata: {json.dumps(event)}\n\n"
+                elif event.get("type") == "toolcall_start":
+                    yield f"event: status\ndata: {json.dumps({'type': 'tool_start', 'name': event.get('name', '')})}\n\n"
+                elif event.get("type") == "toolcall_end":
+                    yield f"event: status\ndata: {json.dumps({'type': 'tool_end', 'name': event.get('name', '')})}\n\n"
+                elif event.get("type") == "done":
+                    event["full_text"] = "".join(run.accumulated_text)
+                    yield f"event: done\ndata: {json.dumps(event)}\n\n"
+                    break
+                elif event.get("type") == "error":
+                    yield f"event: error\ndata: {json.dumps(event)}\n\n"
+                    break
+                elif event.get("type") == "stopped":
+                    event["partial"] = "".join(run.accumulated_text)
+                    yield f"event: stopped\ndata: {json.dumps(event)}\n\n"
+                    break
+        finally:
+            if proc.poll() is None:
+                try:
+                    os.kill(proc.pid, signal.SIGTERM)
+                except (ProcessLookupError, OSError):
+                    pass
+            full_text = "".join(run.accumulated_text)
+            if full_text:
+                with _app.app_context():
+                    if scope is not None:
+                        run_db(
+                            "INSERT INTO assistant_messages (board_id, role, content) VALUES (?, ?, ?)",
+                            (scope, "assistant", full_text)
+                        )
+                    else:
+                        run_db(
+                            "INSERT INTO assistant_messages (role, content) VALUES (?, ?)",
+                            ("assistant", full_text)
+                        )
+            with _assistant_runs_lock:
+                if _ASSISTANT_RUNS.get(scope) is run:
+                    del _ASSISTANT_RUNS[scope]
+
+    # In test mode, materialise the generator so side effects (DB writes in
+    # finally) run before the test client returns.  Production keeps true
+    # streaming.
+    if request.environ.get('SERVER_NAME') == 'localhost' or current_app.config.get('TESTING'):
+        body = b"".join(chunk.encode("utf-8") for chunk in _generator())
+        return Response(body, mimetype="text/event-stream")
+    return Response(_generator(), mimetype="text/event-stream")
+
+
+@assistant_bp.route('/api/assistant/stop', methods=['POST'])
+def api_assistant_stop():
+    data = request.get_json(silent=True) or {}
+    board_id = data.get('board_id')
+    if board_id is not None:
+        try:
+            board_id = int(board_id)
+        except (ValueError, TypeError):
+            return jsonify({"error": "board_id must be an integer"}), 400
+    scope = board_id
+    stopped = _stop_assistant_run(scope)
+    return jsonify({"success": stopped})
 
 
 @assistant_bp.route('/api/assistant/history', methods=['GET'])
