@@ -698,10 +698,15 @@
         `;
       }
 
+      const statusNameBadge = run.status_name
+        ? `<span class="badge muted">${escapeHtml(run.status_name)}</span>`
+        : '';
+
       card.innerHTML = `
         <div class="agent-run-header">
           <div class="agent-run-info">
             <span class="agent-run-name">#${run.id} ${escapeHtml(run.agent_name)}</span>
+            ${statusNameBadge}
             <span class="badge ${statusClass}">${statusIcon} ${run.status}</span>
             ${exitInfo}
           </div>
