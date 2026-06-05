@@ -623,6 +623,41 @@ body {
   gap: 0.5rem;
 }
 
+/* ── Desktop: horizontal Kanban board ──
+   Below 769px the base rules above keep the stacked, full-width accordion
+   (the correct pattern on mobile). At desktop widths the statuses become
+   side-by-side columns you scroll horizontally, with cards scrolling
+   vertically inside each column. */
+@media (min-width: 769px) {
+  .board {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0.85rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 0.75rem; /* breathing room for the horizontal scrollbar */
+  }
+  .board > .group {
+    flex: 0 0 300px;
+    width: 300px;
+    max-height: calc(100vh - 13rem);
+    display: flex;
+    flex-direction: column;
+  }
+  .board > .group .cards {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 0;
+  }
+  /* A collapsed column shrinks to a slim header pill instead of an empty
+     full-width column. */
+  .board > .group.collapsed {
+    flex: 0 0 auto;
+    width: auto;
+    max-width: 300px;
+  }
+}
+
 .add-btn {
   background: none;
   border: none;
@@ -2900,42 +2935,6 @@ textarea.edit-input { resize: vertical; min-height: 2.5rem; }
 }
 
 /* ── Filter Pills (active filters summary) ── */
-.filter-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  align-items: center;
-}
-.filter-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.2rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-  border: none;
-  transition: opacity .15s;
-}
-.filter-pill:hover { opacity: 0.8; }
-.filter-pill .filter-pill-remove {
-  font-size: 0.9rem;
-  line-height: 1;
-  opacity: 0.7;
-}
-.filter-pill .filter-pill-remove:hover { opacity: 1; }
-.filter-clear-all {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 0.8rem;
-  cursor: pointer;
-  padding: 0.2rem 0.4rem;
-  text-decoration: underline;
-}
-.filter-clear-all:hover { color: var(--text); }
-
 /* ── Priority Toggle Buttons ── */
 .priority-toggles {
   display: flex;
