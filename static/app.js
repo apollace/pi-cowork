@@ -68,7 +68,6 @@ async function initBoard() {
   const searchInput = document.getElementById('ticket-search');
   const labelFiltersContainer = document.getElementById('label-filters');
   const priorityToggles = document.querySelectorAll('.priority-toggle');
-  const filterSummary = document.getElementById('filter-summary');
   const filterDropdownBtn = document.getElementById('filter-dropdown-btn');
   const filterDropdownPanel = document.getElementById('filter-dropdown-panel');
   const filterBadge = document.getElementById('filter-badge');
@@ -710,7 +709,7 @@ async function initBoard() {
     }
     if (seen.size === 0) {
       labelFiltersContainer.innerHTML = '';
-      renderFilterSummary();
+      updateFilterBadge();
       return;
     }
     labelFiltersContainer.innerHTML = '';
@@ -730,7 +729,7 @@ async function initBoard() {
       });
       labelFiltersContainer.appendChild(label);
     }
-    renderFilterSummary();
+    updateFilterBadge();
   }
 
   function matchesFilters(ticket) {
@@ -808,49 +807,6 @@ async function initBoard() {
     return group;
   }
 
-  function renderFilterSummary() {
-    if (!filterSummary) return;
-    filterSummary.innerHTML = '';
-    const activeFilters = [];
-    if (filterState.searchQuery.trim()) {
-      activeFilters.push({ type: 'search', value: filterState.searchQuery.trim(), label: '"' + filterState.searchQuery.trim() + '"', clearFn: () => { filterState.searchQuery = ''; if (searchInput) searchInput.value = ''; } });
-    }
-    for (const p of filterState.selectedPriorities) {
-      activeFilters.push({ type: 'priority', value: p, label: p, color: { Critical: '#dc2626', High: '#d97706', Medium: '#2563eb', Low: '#6b7280' }[p], clearFn: () => { filterState.selectedPriorities.delete(p); updatePriorityToggles(); } });
-    }
-    for (const l of filterState.selectedLabels) {
-      const label = workflowLabels.find(ll => ll.name === l);
-      const color = label ? label.color : '#6b7280';
-      activeFilters.push({ type: 'label', value: l, label: l, color: color, clearFn: () => { filterState.selectedLabels.delete(l); updateLabelFilters(); } });
-    }
-    updateFilterBadge();
-    if (activeFilters.length === 0) { filterSummary.innerHTML = ''; return; }
-    for (const f of activeFilters) {
-      const pill = document.createElement('button');
-      pill.className = 'filter-pill';
-      const bg = f.color || '#2563eb';
-      pill.style.cssText = `background:${bg}22;color:${bg};border:1px solid ${bg}55;`;
-      pill.innerHTML = `${escapeHtml(f.label)} <span class="filter-pill-remove">✕</span>`;
-      pill.onclick = () => { f.clearFn(); saveBoardPrefs(); render(); };
-      filterSummary.appendChild(pill);
-    }
-    if (activeFilters.length > 1) {
-      const clearAll = document.createElement('button');
-      clearAll.className = 'filter-clear-all';
-      clearAll.textContent = 'Clear all';
-      clearAll.onclick = () => {
-        filterState.searchQuery = '';
-        filterState.selectedPriorities.clear();
-        filterState.selectedLabels.clear();
-        if (searchInput) searchInput.value = '';
-        updatePriorityToggles();
-        toggleFilterDropdown(true);
-        saveBoardPrefs();
-        render();
-      };
-      filterSummary.appendChild(clearAll);
-    }
-  }
 
   function updatePriorityToggles() {
     priorityToggles.forEach(btn => {
@@ -879,7 +835,7 @@ async function initBoard() {
       if (status.is_terminal && !showTerminal.checked) continue;
       board.appendChild(buildGroup(status, visibleTickets));
     }
-    renderFilterSummary();
+    updateFilterBadge();
   }
 
   showTerminal.addEventListener('change', () => {
