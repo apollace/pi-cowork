@@ -573,8 +573,8 @@ After completing your task, write a comment on the ticket summarizing what you d
 
     db = get_db()
     cur = db.execute(
-        "INSERT INTO agent_runs (ticket_id, agent_id, started_at, status) VALUES (?, ?, ?, ?)",
-        (ticket_id, agent['id'], now.isoformat(), 'running')
+        "INSERT INTO agent_runs (ticket_id, agent_id, status_id, started_at, status) VALUES (?, ?, ?, ?, ?)",
+        (ticket_id, agent['id'], status['id'], now.isoformat(), 'running')
     )
     db.commit()
     run_id = cur.lastrowid

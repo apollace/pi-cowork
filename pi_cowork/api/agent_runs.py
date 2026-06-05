@@ -18,9 +18,10 @@ agent_runs_bp = Blueprint('agent_runs', __name__)
 @agent_runs_bp.route('/api/tickets/<int:ticket_id>/agent_runs', methods=['GET'])
 def api_ticket_agent_runs(ticket_id):
     rows = query_db("""
-        SELECT ar.*, a.name AS agent_name
+        SELECT ar.*, a.name AS agent_name, s.name AS status_name
         FROM agent_runs ar
         JOIN agents a ON ar.agent_id = a.id
+        LEFT JOIN statuses s ON ar.status_id = s.id
         WHERE ar.ticket_id = ?
         ORDER BY ar.started_at DESC
     """, (ticket_id,))
@@ -51,7 +52,7 @@ def api_running_agent_runs():
         FROM agent_runs ar
         JOIN agents a ON ar.agent_id = a.id
         JOIN tickets t ON ar.ticket_id = t.id
-        JOIN statuses s ON t.status_id = s.id
+        LEFT JOIN statuses s ON ar.status_id = s.id
         WHERE ar.status = 'running' AND t.board_id = ?
         ORDER BY ar.started_at DESC
     """, (board_id,))
@@ -206,7 +207,7 @@ def agent_run_live(run_id):
         FROM agent_runs ar
         JOIN agents a ON ar.agent_id = a.id
         JOIN tickets t ON ar.ticket_id = t.id
-        JOIN statuses s ON t.status_id = s.id
+        LEFT JOIN statuses s ON ar.status_id = s.id
         WHERE ar.id = ?
     """, (run_id,), one=True)
     if not row:

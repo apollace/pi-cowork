@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ticket_id INTEGER NOT NULL,
     agent_id INTEGER NOT NULL,
+    status_id INTEGER,
     pid INTEGER,
     started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at TEXT,

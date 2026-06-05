@@ -320,6 +320,10 @@ def _migrate(db):
             'CREATE INDEX IF NOT EXISTS idx_questions_ticket_id_created_at ON questions(ticket_id, created_at)'),
         ('seed_notification_dismissal_retention_days',
          "INSERT OR IGNORE INTO settings (key, value) VALUES ('notification_dismissal_retention_days', '7')"),
+        # Ticket #84 — Store ticket status_id in agent_runs
+        ('add_agent_runs_status_id',
+         'ALTER TABLE agent_runs ADD COLUMN status_id INTEGER'),
+
     ]
     for name, sql in migrations:
         already_applied = db.execute(
