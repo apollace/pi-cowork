@@ -78,7 +78,7 @@ def api_export_workflow(workflow_id):
 
 
 @import_export_bp.route("/api/workflows/import", methods=["POST"])
-def api_import_workflow():
+def api_import_workflow():  # noqa: C901
     data = request.get_json()
     if not data:
         return jsonify({"error": "No JSON body provided"}), 400
@@ -157,7 +157,8 @@ def api_import_workflow():
             model = s.get("model") or None
             thinking = s.get("thinking") or None
             cur = db.execute(
-                "INSERT INTO statuses (name, sort_order, is_default, is_terminal, agent_id, goal, model, thinking, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO statuses (name, sort_order, is_default, is_terminal, "
+                "agent_id, goal, model, thinking, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (name, sort_order, is_default, is_terminal, agent_id, goal, model, thinking, workflow_id),
             )
             status_id_map[name] = cur.lastrowid
@@ -188,7 +189,8 @@ def api_import_workflow():
             sort_order = int(g.get("sort_order", 0))
             enabled = 1 if g.get("enabled", True) else 0
             db.execute(
-                "INSERT INTO quality_gates (from_status_id, to_status_id, gate_type, name, config, sort_order, enabled, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO quality_gates (from_status_id, to_status_id, gate_type, name, "
+                "config, sort_order, enabled, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     status_id_map[from_status_name],
                     status_id_map[to_status_name],

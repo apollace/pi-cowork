@@ -130,7 +130,7 @@ class TestSSEGenerator:
         """After generator close(), bus subscribers should be removed."""
         initial_counts = {ev: len(bus.subscribers(ev)) for ev in EVENT_NAMES}
 
-        t, results = self._start_generator(board_id=None, max_frames=1)
+        t, _results = self._start_generator(board_id=None, max_frames=1)
 
         bus.publish(TICKET_CREATED, ticket_id=1, board_id=1, title="Trigger", status_id=1)
         t.join(timeout=3)

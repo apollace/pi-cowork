@@ -49,7 +49,8 @@ def api_create_status():
             return jsonify({"error": f"model must be one of: {', '.join(valid_models)}"}), 400
     try:
         cur = run_db(
-            "INSERT INTO statuses (name, sort_order, is_default, is_terminal, agent_id, goal, model, thinking, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO statuses (name, sort_order, is_default, is_terminal, "
+            "agent_id, goal, model, thinking, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (name, int(sort_order), is_default, is_terminal, agent_id, goal, model, thinking, workflow_id),
         )
         add_log(
@@ -116,7 +117,7 @@ def api_update_status(status_id):
         return jsonify({"error": "No fields to update"}), 400
     args.append(status_id)
     try:
-        run_db(f"UPDATE statuses SET {', '.join(updates)} WHERE id = ?", tuple(args))
+        run_db(f"UPDATE statuses SET {', '.join(updates)} WHERE id = ?", tuple(args))  # noqa: S608
     except sqlite3.IntegrityError:
         return jsonify({"error": "Status name already exists"}), 409
     add_log(

@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 def _git(cmd, cwd, check=False):
     """Run a git command and return CompletedProcess."""
     try:
-        return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=check)
+        return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=check)  # noqa: S603
     except Exception as e:
 
         class _FakeResult:

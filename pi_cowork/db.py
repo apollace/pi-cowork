@@ -366,11 +366,13 @@ def _migrate(db):
         # Ticket #98 — Notification dismissals TTL and periodic cleanup
         (
             "idx_notification_dismissals_dismissed_at",
-            "CREATE INDEX IF NOT EXISTS idx_notification_dismissals_dismissed_at ON notification_dismissals(dismissed_at)",
+            "CREATE INDEX IF NOT EXISTS idx_notification_dismissals_dismissed_at "
+            "ON notification_dismissals(dismissed_at)",
         ),
         (
             "idx_gate_reviews_ticket_id_status_created_at",
-            "CREATE INDEX IF NOT EXISTS idx_gate_reviews_ticket_id_status_created_at ON gate_reviews(ticket_id, status, created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_gate_reviews_ticket_id_status_created_at "
+            "ON gate_reviews(ticket_id, status, created_at)",
         ),
         (
             "idx_questions_ticket_id_created_at",

@@ -33,8 +33,9 @@ def _check_same_origin():
                 parsed = urlparse(header_val)
                 if parsed.netloc == host:
                     return None  # same origin — OK
-            except Exception:
-                pass
+            except Exception:  # noqa: S112
+                # Ignore malformed header values
+                continue
     return jsonify({"error": "Forbidden: cross-origin requests are not allowed"}), 403
 
 

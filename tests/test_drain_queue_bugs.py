@@ -148,7 +148,7 @@ def test_drain_queue_respects_spawn_lock(client, default_workflow, default_board
 
     # Drain should only spawn one for ticket2 (within lock)
     with (
-        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)) as mock_popen,
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)) as _,
         patch("pi_cowork.agents._is_our_process", return_value=False),
         client.application.app_context(),
     ):
@@ -551,7 +551,7 @@ def test_stuck_queue_recovery(client, default_workflow, default_board, monkeypat
 
     # Simulate drain loop recovery (e.g., after the bug 1 fix prevented permanent death)
     with (
-        patch("app.subprocess.Popen", return_value=MagicMock(pid=9998)) as mock_popen,
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9998)) as _,
         patch("pi_cowork.agents._is_our_process", return_value=False),
         client.application.app_context(),
     ):

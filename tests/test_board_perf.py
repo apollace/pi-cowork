@@ -192,7 +192,7 @@ class TestWalMode:
 class TestDatabaseIndexes:
     """Verify performance indexes exist after migration."""
 
-    EXPECTED_INDEXES = [
+    EXPECTED_INDEXES = (
         "idx_tickets_board_id",
         "idx_comments_ticket_id",
         "idx_agent_runs_ticket_id_status",
@@ -202,7 +202,7 @@ class TestDatabaseIndexes:
         "idx_ticket_labels_ticket_id",
         "idx_recurring_instances_ticket_id",
         "idx_labels_workflow_id",
-    ]
+    )
 
     def test_indexes_exist(self, client):
         """All expected performance indexes should exist."""

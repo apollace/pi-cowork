@@ -62,7 +62,7 @@ def _git_dir_exists():
 
 
 def _run_git(args, cwd=None):
-    result = subprocess.run(["git"] + args, cwd=cwd or config.PROJECT_ROOT, capture_output=True, text=True)
+    result = subprocess.run(["git", *args], cwd=cwd or config.PROJECT_ROOT, capture_output=True, text=True)  # noqa: S603, S607
     return result
 
 
@@ -77,7 +77,7 @@ def _get_git_info():
 # ---------------------------------------------------------------------------
 
 
-def register_update_routes(app):
+def register_update_routes(app):  # noqa: C901
     """Register update page routes on *app*."""
 
     @app.route("/update")

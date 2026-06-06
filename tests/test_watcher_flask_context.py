@@ -58,7 +58,7 @@ def test_watcher_in_daemon_thread_without_request_context(client, default_workfl
     (no Flask request context). This was the core bug — current_app raised
     RuntimeError inside the watcher thread."""
     # Set up agent, status, ticket, and create a running agent run
-    aid, sid, tid = _setup_agent_and_ticket(client, default_workflow, default_board, "DaemonCtx")
+    aid, _sid, tid = _setup_agent_and_ticket(client, default_workflow, default_board, "DaemonCtx")
 
     # Create a run entry directly in the DB
     with client.application.app_context():
@@ -81,8 +81,8 @@ def test_watcher_in_daemon_thread_without_request_context(client, default_workfl
     import os
     import tempfile
 
-    log_fd, log_path = tempfile.mkstemp(suffix=".log")
-    log_f = open(log_path, "w")
+    _log_fd, log_path = tempfile.mkstemp(suffix=".log")
+    log_f = open(log_path, "w")  # noqa: SIM115
 
     # Run _watch_agent in a daemon thread (simulating the real production path)
     result = {"completed": threading.Event(), "exception": None}
@@ -120,7 +120,7 @@ def test_watcher_in_daemon_thread_without_request_context(client, default_workfl
 def test_watcher_in_daemon_thread_marks_failed_on_nonzero_exit(client, default_workflow, default_board):
     """Regression: _watch_agent in a daemon thread must publish AGENT_FAILED
     event and mark the run as failed when exit code is non-zero."""
-    aid, sid, tid = _setup_agent_and_ticket(client, default_workflow, default_board, "DaemonFail")
+    aid, _sid, tid = _setup_agent_and_ticket(client, default_workflow, default_board, "DaemonFail")
 
     with client.application.app_context():
         from datetime import datetime
@@ -141,8 +141,8 @@ def test_watcher_in_daemon_thread_marks_failed_on_nonzero_exit(client, default_w
     import os
     import tempfile
 
-    log_fd, log_path = tempfile.mkstemp(suffix=".log")
-    log_f = open(log_path, "w")
+    _log_fd, log_path = tempfile.mkstemp(suffix=".log")
+    log_f = open(log_path, "w")  # noqa: SIM115
 
     result = {"completed": threading.Event(), "exception": None}
 
@@ -189,7 +189,7 @@ def test_watcher_in_daemon_thread_marks_failed_on_nonzero_exit(client, default_w
 def test_watcher_in_daemon_thread_publishes_completed_event(client, default_workflow, default_board):
     """Regression: _watch_agent in a daemon thread must publish AGENT_COMPLETED
     event so that audit log and event-driven drain queue processing work."""
-    aid, sid, tid = _setup_agent_and_ticket(client, default_workflow, default_board, "DaemonEvt")
+    aid, _sid, tid = _setup_agent_and_ticket(client, default_workflow, default_board, "DaemonEvt")
 
     with client.application.app_context():
         from datetime import datetime
@@ -210,8 +210,8 @@ def test_watcher_in_daemon_thread_publishes_completed_event(client, default_work
     import os
     import tempfile
 
-    log_fd, log_path = tempfile.mkstemp(suffix=".log")
-    log_f = open(log_path, "w")
+    _log_fd, log_path = tempfile.mkstemp(suffix=".log")
+    log_f = open(log_path, "w")  # noqa: SIM115
 
     result = {"completed": threading.Event(), "exception": None}
 
@@ -246,7 +246,7 @@ def test_watcher_in_daemon_thread_publishes_completed_event(client, default_work
 def test_watcher_exception_still_marks_failed_in_daemon_thread(client, default_workflow, default_board):
     """Regression: if an exception occurs in _watch_agent (e.g., proc.wait()
     raises), the watcher should still mark the run as 'failed' in the DB."""
-    aid, sid, tid = _setup_agent_and_ticket(client, default_workflow, default_board, "DaemonExc")
+    aid, _sid, tid = _setup_agent_and_ticket(client, default_workflow, default_board, "DaemonExc")
 
     with client.application.app_context():
         from datetime import datetime
@@ -267,8 +267,8 @@ def test_watcher_exception_still_marks_failed_in_daemon_thread(client, default_w
     import os
     import tempfile
 
-    log_fd, log_path = tempfile.mkstemp(suffix=".log")
-    log_f = open(log_path, "w")
+    _log_fd, log_path = tempfile.mkstemp(suffix=".log")
+    log_f = open(log_path, "w")  # noqa: SIM115
 
     result = {"completed": threading.Event(), "exception": None}
 

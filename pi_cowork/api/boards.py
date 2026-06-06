@@ -120,7 +120,7 @@ def api_update_board(board_id):
         return jsonify({"error": "No fields to update"}), 400
     args.append(board_id)
     try:
-        run_db(f"UPDATE boards SET {', '.join(updates)} WHERE id = ?", tuple(args))
+        run_db(f"UPDATE boards SET {', '.join(updates)} WHERE id = ?", tuple(args))  # noqa: S608
     except sqlite3.IntegrityError:
         return jsonify({"error": "Board name already exists"}), 409
     add_log(

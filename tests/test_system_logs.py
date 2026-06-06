@@ -224,7 +224,7 @@ class TestAddLog:
 class TestGetSystemLogs:
     def _seed_logs(self, client, count=10):
         """Seed some logs for testing."""
-        board_data, wf_id = _create_workflow_and_board(client)
+        board_data, _wf_id = _create_workflow_and_board(client)
         ticket_id = _create_ticket(client, board_data["id"])
         for i in range(count):
             level = ["INFO", "WARNING", "ERROR", "CRITICAL"][i % 4]
@@ -258,7 +258,7 @@ class TestGetSystemLogs:
 
     def test_filter_by_ticket_id(self, client):
         """Filtering by ticket_id should return only matching rows."""
-        board_data, wf_id = _create_workflow_and_board(client)
+        board_data, _wf_id = _create_workflow_and_board(client)
         tid1 = _create_ticket(client, board_data["id"])
         tid2 = _create_ticket(client, board_data["id"])
         add_log("INFO", "db_change", "For ticket 1", ticket_id=tid1)
@@ -505,7 +505,7 @@ class TestSystemLogsAPI:
 class TestHTTPRequestLogging:
     def test_post_request_is_logged(self, client):
         """POST requests should be logged in system_logs."""
-        board_data, wf_id = _create_workflow_and_board(client)
+        board_data, _wf_id = _create_workflow_and_board(client)
         res = client.post("/api/tickets", json={"title": "Log test ticket", "board_id": board_data["id"]})
         assert res.status_code == 201
 
@@ -521,7 +521,7 @@ class TestHTTPRequestLogging:
 
     def test_put_request_is_logged(self, client):
         """PUT requests should be logged."""
-        board_data, wf_id = _create_workflow_and_board(client)
+        _board_data, _wf_id = _create_workflow_and_board(client)
         res = client.put("/api/settings/test_key", json={"value": "test_value"})
         assert res.status_code == 200
 
@@ -593,7 +593,7 @@ class TestHTTPRequestLogging:
 
     def test_http_log_includes_details(self, client):
         """HTTP request logs should contain method, URL, status, bodies."""
-        board_data, wf_id = _create_workflow_and_board(client)
+        board_data, _wf_id = _create_workflow_and_board(client)
         client.post("/api/tickets", json={"title": "Details test", "board_id": board_data["id"]})
 
         from pi_cowork.db import get_db
@@ -611,7 +611,7 @@ class TestHTTPRequestLogging:
 
     def test_ticket_id_extracted_from_url(self, client):
         """HTTP logs should extract ticket_id from /api/tickets/<id>/... URLs."""
-        board_data, wf_id = _create_workflow_and_board(client)
+        board_data, _wf_id = _create_workflow_and_board(client)
         ticket_id = _create_ticket(client, board_data["id"])
         # PUT on that ticket
         client.put(f"/api/tickets/{ticket_id}", json={"title": "Updated"})
@@ -619,7 +619,7 @@ class TestHTTPRequestLogging:
 
         db = get_db()
         rows = db.execute(
-            f"SELECT * FROM system_logs WHERE action_type = 'http_request' AND ticket_id = {ticket_id}"
+            f"SELECT * FROM system_logs WHERE action_type = 'http_request' AND ticket_id = {ticket_id}"  # noqa: S608
         ).fetchall()
         assert len(rows) >= 1
 
@@ -632,7 +632,7 @@ class TestHTTPRequestLogging:
 class TestDBChangeLogging:
     def test_create_ticket_logged(self, client):
         """Creating a ticket should log INSERT tickets."""
-        board_data, wf_id = _create_workflow_and_board(client)
+        board_data, _wf_id = _create_workflow_and_board(client)
         res = client.post("/api/tickets", json={"title": "Created ticket", "board_id": board_data["id"]})
         assert res.status_code == 201
         from pi_cowork.db import get_db
@@ -645,7 +645,7 @@ class TestDBChangeLogging:
 
     def test_update_ticket_logged(self, client):
         """Updating a ticket should log UPDATE tickets."""
-        board_data, wf_id = _create_workflow_and_board(client)
+        board_data, _wf_id = _create_workflow_and_board(client)
         ticket_id = _create_ticket(client, board_data["id"])
         res = client.put(f"/api/tickets/{ticket_id}", json={"title": "Updated"})
         assert res.status_code == 200
@@ -653,13 +653,13 @@ class TestDBChangeLogging:
 
         db = get_db()
         rows = db.execute(
-            f"SELECT * FROM system_logs WHERE action_type = 'db_change' AND message LIKE 'UPDATE tickets/{ticket_id}'"
+            f"SELECT * FROM system_logs WHERE action_type = 'db_change' AND message LIKE 'UPDATE tickets/{ticket_id}'"  # noqa: S608
         ).fetchall()
         assert len(rows) >= 1
 
     def test_create_comment_logged(self, client):
         """Adding a comment should log INSERT comments."""
-        board_data, wf_id = _create_workflow_and_board(client)
+        board_data, _wf_id = _create_workflow_and_board(client)
         ticket_id = _create_ticket(client, board_data["id"])
         res = client.post(f"/api/tickets/{ticket_id}/comments", json={"body": "Test comment"})
         assert res.status_code == 201
@@ -718,7 +718,7 @@ class TestDBChangeLogging:
 class TestAgentEventLogging:
     def test_agent_spawned_logged(self, client):
         """AGENT_SPAWNED event should create a log entry."""
-        board_data, wf_id = _create_workflow_and_board(client)
+        board_data, _wf_id = _create_workflow_and_board(client)
         ticket_id = _create_ticket(client, board_data["id"])
         from pi_cowork.events import AGENT_SPAWNED, bus
 
@@ -870,7 +870,7 @@ class TestSameOriginCheck:
 class TestSensitiveDataRedaction:
     def test_password_redacted_from_request_body(self, client):
         """Passwords in request bodies should be redacted."""
-        board_data, wf_id = _create_workflow_and_board(client)
+        board_data, _wf_id = _create_workflow_and_board(client)
         client.post(
             "/api/tickets",
             json={
@@ -1023,7 +1023,7 @@ class TestSlowAPIRequestWarning:
 
         monkeypatch.setattr(sl_mod, "SLOW_REQUEST_THRESHOLD", 0.0)
 
-        board_data, wf_id = _create_workflow_and_board(client)
+        board_data, _wf_id = _create_workflow_and_board(client)
         # This POST creates a ticket and should trigger slow detection
         client.post("/api/tickets", json={"title": "Slow POST test", "board_id": board_data["id"]})
 
@@ -1070,7 +1070,7 @@ class TestSlowAPIRequestWarning:
 
         monkeypatch.setattr(sl_mod, "SLOW_REQUEST_THRESHOLD", 0.0)
 
-        board_data, wf_id = _create_workflow_and_board(client)
+        board_data, _wf_id = _create_workflow_and_board(client)
         client.post("/api/tickets", json={"title": "Slow POST both logs", "board_id": board_data["id"]})
 
         db = get_db()
@@ -1137,7 +1137,7 @@ class TestSlowAPIRequestWarning:
 
         monkeypatch.setattr(sl_mod, "SLOW_REQUEST_THRESHOLD", 0.0)
 
-        board_data, wf_id = _create_workflow_and_board(client)
+        board_data, _wf_id = _create_workflow_and_board(client)
         ticket_id = _create_ticket(client, board_data["id"])
 
         # PUT to the ticket endpoint — should trigger slow with correct ticket_id
@@ -1145,7 +1145,7 @@ class TestSlowAPIRequestWarning:
 
         db = get_db()
         rows = db.execute(
-            "SELECT * FROM system_logs WHERE action_type = 'http_request' "
+            "SELECT * FROM system_logs WHERE action_type = 'http_request' "  # noqa: S608
             f"AND message LIKE 'SLOW API%' AND ticket_id = {ticket_id}"
         ).fetchall()
         assert len(rows) >= 1

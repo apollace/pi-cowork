@@ -10,8 +10,25 @@ For module-internal functions like ``_is_our_process`` that moved to
 ``pi_cowork.agents``, tests must patch the correct module path.
 """
 
+import datetime
+import os
+import shutil
+import signal
+import subprocess
+import threading
+import time
+
 from pi_cowork import config, create_app
 from pi_cowork.config import get_config
+
+# Backwards-compat re-exports for tests that patch app.<module> directly
+datetime = datetime
+subprocess = subprocess
+os = os
+signal = signal
+shutil = shutil
+threading = threading
+time = time
 
 app = create_app()
 

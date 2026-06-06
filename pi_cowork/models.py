@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_comments(ticket_id):
-    rows = query_db(
+    rows = query_db(  # noqa: S608
         "SELECT id, body, created_at FROM comments WHERE ticket_id = ? ORDER BY created_at, id", (ticket_id,)
     )
     return [row_to_dict(r) for r in rows]
@@ -43,8 +43,8 @@ def get_comment_counts(ticket_ids):
     if not ticket_ids:
         return {}
     placeholders = ",".join("?" * len(ticket_ids))
-    rows = query_db(
-        f"SELECT ticket_id, COUNT(*) AS c FROM comments WHERE ticket_id IN ({placeholders}) GROUP BY ticket_id",
+    rows = query_db(  # noqa: S608
+        f"SELECT ticket_id, COUNT(*) AS c FROM comments WHERE ticket_id IN ({placeholders}) GROUP BY ticket_id",  # noqa: S608
         tuple(ticket_ids),
     )
     return {r["ticket_id"]: r["c"] for r in rows}
@@ -58,14 +58,12 @@ def get_ticket_labels_batch(ticket_ids):
     if not ticket_ids:
         return {}
     placeholders = ",".join("?" * len(ticket_ids))
-    rows = query_db(
-        f"""SELECT tl.ticket_id, l.id, l.name, l.color
+    sql = f"""SELECT tl.ticket_id, l.id, l.name, l.color
             FROM ticket_labels tl
             JOIN labels l ON tl.label_id = l.id
             WHERE tl.ticket_id IN ({placeholders})
-            ORDER BY l.name""",
-        tuple(ticket_ids),
-    )
+            ORDER BY l.name"""  # noqa: S608
+    rows = query_db(sql, tuple(ticket_ids))
     result = {}
     for r in rows:
         result.setdefault(r["ticket_id"], []).append({"id": r["id"], "name": r["name"], "color": r["color"]})
@@ -80,14 +78,12 @@ def get_recurring_parents_batch(ticket_ids):
     if not ticket_ids:
         return {}
     placeholders = ",".join("?" * len(ticket_ids))
-    rows = query_db(
-        f"""SELECT ri.ticket_id, rt.*, s.name AS status_name
+    sql = f"""SELECT ri.ticket_id, rt.*, s.name AS status_name
             FROM recurring_instances ri
             JOIN recurring_tasks rt ON rt.id = ri.recurring_task_id
             JOIN statuses s ON rt.status_id = s.id
-            WHERE ri.ticket_id IN ({placeholders})""",
-        tuple(ticket_ids),
-    )
+            WHERE ri.ticket_id IN ({placeholders})"""  # noqa: S608
+    rows = query_db(sql, tuple(ticket_ids))
     result = {}
     for r in rows:
         d = row_to_dict(r)
@@ -103,7 +99,7 @@ def get_recurring_parents_batch(ticket_ids):
 
 def get_ticket_status_overrides(ticket_id):
     """Get all status overrides for a ticket."""
-    rows = query_db(
+    rows = query_db(  # noqa: S608
         """SELECT tso.*, s.name AS status_name
            FROM ticket_status_overrides tso
            JOIN statuses s ON tso.status_id = s.id
@@ -146,7 +142,7 @@ def delete_ticket_status_override(ticket_id, status_id):
 
 
 def get_questions(ticket_id):
-    rows = query_db(
+    rows = query_db(  # noqa: S608
         "SELECT id, ticket_id, body, options, created_at FROM questions WHERE ticket_id = ? ORDER BY created_at, id",
         (ticket_id,),
     )
@@ -225,7 +221,7 @@ def get_board_with_workflow(board_id):
 
 
 def get_statuses(workflow_id):
-    rows = query_db(
+    rows = query_db(  # noqa: S608
         """
         SELECT s.*, a.name AS agent_name
         FROM statuses s
@@ -273,7 +269,7 @@ def get_agent(agent_id):
 
 
 def get_transitions_from(status_id):
-    rows = query_db(
+    rows = query_db(  # noqa: S608
         """SELECT t.*, s.name AS to_status_name
            FROM transitions t JOIN statuses s ON t.to_status_id = s.id
            WHERE t.from_status_id = ?""",
@@ -288,7 +284,7 @@ def get_transitions_from(status_id):
 
 
 def get_quality_gates(from_status_id, to_status_id):
-    rows = query_db(
+    rows = query_db(  # noqa: S608
         "SELECT * FROM quality_gates WHERE from_status_id = ? AND to_status_id = ? AND enabled = 1 ORDER BY sort_order",
         (from_status_id, to_status_id),
     )
@@ -296,7 +292,7 @@ def get_quality_gates(from_status_id, to_status_id):
 
 
 def get_all_quality_gates(workflow_id):
-    rows = query_db(
+    rows = query_db(  # noqa: S608
         """SELECT qg.*, fs.name AS from_status_name, ts.name AS to_status_name
            FROM quality_gates qg
            JOIN statuses fs ON qg.from_status_id = fs.id
@@ -309,7 +305,7 @@ def get_all_quality_gates(workflow_id):
 
 
 def get_pending_gate_reviews(ticket_id):
-    rows = query_db(
+    rows = query_db(  # noqa: S608
         """SELECT gr.*, qg.gate_type, qg.name AS gate_name, qg.config AS gate_config,
                   fs.name AS from_status_name, ts.name AS to_status_name
            FROM gate_reviews gr
@@ -333,7 +329,7 @@ def has_pending_gate_reviews(ticket_id):
 def run_cli_gate(command, working_directory):
     """Run a CLI gate command and return (passed, output)."""
     try:
-        result = subprocess.run(command, shell=True, cwd=working_directory, capture_output=True, text=True, timeout=60)
+        result = subprocess.run(command, shell=True, cwd=working_directory, capture_output=True, text=True, timeout=60)  # noqa: S602
         output = result.stdout.strip() if result.stdout else ""
         if result.returncode != 0:
             err = result.stderr.strip() if result.stderr else ""
@@ -352,7 +348,7 @@ def run_cli_gate(command, working_directory):
 
 
 def get_ticket_labels(ticket_id):
-    rows = query_db(
+    rows = query_db(  # noqa: S608
         """
         SELECT l.id, l.name, l.color
         FROM labels l
@@ -383,7 +379,8 @@ def set_ticket_labels(ticket_id, workflow_id, label_ids):
     if label_ids:
         placeholders = ",".join("?" * len(label_ids))
         valid = query_db(
-            f"SELECT id FROM labels WHERE workflow_id = ? AND id IN ({placeholders})", (workflow_id, *label_ids)
+            f"SELECT id FROM labels WHERE workflow_id = ? AND id IN ({placeholders})",
+            (workflow_id, *label_ids),  # noqa: S608
         )
         valid_ids = {r["id"] for r in valid}
         for lid in valid_ids:
@@ -408,7 +405,8 @@ def set_setting(key, value):
 
     now = datetime.now(UTC).isoformat()
     run_db(
-        "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+        "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
         (key, value, now),
     )
 
@@ -438,7 +436,7 @@ def compute_next_trigger(cron_expression, after=None):
 
 
 def get_recurring_tasks(board_id):
-    rows = query_db(
+    rows = query_db(  # noqa: S608
         """SELECT rt.*, s.name AS status_name
            FROM recurring_tasks rt
            JOIN statuses s ON rt.status_id = s.id
@@ -509,7 +507,7 @@ def create_recurring_task(board_id, title, body, status_id, cron_expression, sta
     return get_recurring_task(cur.lastrowid), None
 
 
-def update_recurring_task(
+def update_recurring_task(  # noqa: C901
     task_id, title=None, body=None, status_id=None, cron_expression=None, start_at=None, end_at=None
 ):
     """Update a recurring task. Returns (task_dict, error)."""
@@ -584,7 +582,7 @@ def update_recurring_task(
 
     updates.append("updated_at = CURRENT_TIMESTAMP")
     args.append(task_id)
-    run_db(f"UPDATE recurring_tasks SET {', '.join(updates)} WHERE id = ?", tuple(args))
+    run_db(f"UPDATE recurring_tasks SET {', '.join(updates)} WHERE id = ?", tuple(args))  # noqa: S608
     return get_recurring_task(task_id), None
 
 
@@ -625,7 +623,8 @@ def toggle_recurring_task(task_id):
         )
     else:
         run_db(
-            "UPDATE recurring_tasks SET enabled = 0, next_trigger_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            "UPDATE recurring_tasks SET enabled = 0, next_trigger_at = NULL, "
+            "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (task_id,),
         )
     return get_recurring_task(task_id), None
@@ -633,7 +632,7 @@ def toggle_recurring_task(task_id):
 
 def get_recurring_parents(ticket_id):
     """Get parent recurring tasks of a ticket."""
-    rows = query_db(
+    rows = query_db(  # noqa: S608
         """SELECT rt.*, s.name AS status_name
            FROM recurring_tasks rt
            JOIN recurring_instances ri ON rt.id = ri.recurring_task_id
@@ -667,7 +666,8 @@ def process_recurring_tasks():
             end_dt = _parse_dt(task["end_at"])
             if end_dt and datetime.now(UTC) >= end_dt:
                 run_db(
-                    "UPDATE recurring_tasks SET enabled = 0, next_trigger_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    "UPDATE recurring_tasks SET enabled = 0, next_trigger_at = NULL, "
+                    "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                     (task["id"],),
                 )
                 continue
@@ -721,7 +721,8 @@ def process_recurring_tasks():
         # Actually trigger from the just-fired time
         next_trigger = compute_next_trigger(task["cron_expression"], after=_parse_dt(task["next_trigger_at"]))
         run_db(
-            "UPDATE recurring_tasks SET last_triggered_at = ?, next_trigger_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            "UPDATE recurring_tasks SET last_triggered_at = ?, next_trigger_at = ?, "
+            "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (task["next_trigger_at"], next_trigger, task["id"]),
         )
 
@@ -730,7 +731,8 @@ def process_recurring_tasks():
             end_dt = _parse_dt(task["end_at"])
             if end_dt and _parse_dt(next_trigger) and _parse_dt(next_trigger) >= end_dt:
                 run_db(
-                    "UPDATE recurring_tasks SET enabled = 0, next_trigger_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    "UPDATE recurring_tasks SET enabled = 0, next_trigger_at = NULL, "
+                    "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                     (task["id"],),
                 )
                 add_comment(ticket_id, "🔚 Recurring task auto-disabled: end date reached.")
@@ -765,7 +767,8 @@ def _parse_dt(val):
 def dismiss_notification(ticket_id, notification_type):
     """Insert or replace a dismissal row for (ticket_id, notification_type)."""
     run_db(
-        "INSERT OR REPLACE INTO notification_dismissals (ticket_id, notification_type, dismissed_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+        "INSERT OR REPLACE INTO notification_dismissals "
+        "(ticket_id, notification_type, dismissed_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
         (ticket_id, notification_type),
     )
 
@@ -929,22 +932,22 @@ def get_knowledge_entries(board_id=None, search=None, category=None, auto_contex
     if tags:
         tag_names = tags if isinstance(tags, list) else [tags]
         placeholders = ",".join("?" * len(tag_names))
-        conditions.append(f"""ke.id IN (
+        conditions.append(
+            f"""ke.id IN (
             SELECT ket.entry_id FROM knowledge_entry_tags ket
             JOIN knowledge_tags kt ON ket.tag_id = kt.id
             WHERE kt.name IN ({placeholders})
-        )""")
+        )"""  # noqa: S608
+        )
         args.extend(tag_names)
 
     where = " AND ".join(conditions) if conditions else "1=1"
-    rows = query_db(
-        f"""SELECT ke.*, b.name AS board_name
+    sql = f"""SELECT ke.*, b.name AS board_name
            FROM knowledge_entries ke
            LEFT JOIN boards b ON ke.board_id = b.id
            WHERE {where}
-           ORDER BY ke.sort_order, ke.updated_at DESC""",
-        tuple(args),
-    )
+           ORDER BY ke.sort_order, ke.updated_at DESC"""  # noqa: S608
+    rows = query_db(sql, tuple(args))
     result = []
     for r in rows:
         entry = row_to_dict(r)
@@ -999,14 +1002,12 @@ def search_knowledge(query, board_id=None):
         args.extend([f"%{query}%", f"%{query}%"])
 
     where = " AND ".join(conditions) if conditions else "1=1"
-    rows = query_db(
-        f"""SELECT ke.*, b.name AS board_name
+    sql = f"""SELECT ke.*, b.name AS board_name
            FROM knowledge_entries ke
            LEFT JOIN boards b ON ke.board_id = b.id
            WHERE {where}
-           ORDER BY ke.sort_order, ke.updated_at DESC""",
-        tuple(args),
-    )
+           ORDER BY ke.sort_order, ke.updated_at DESC"""  # noqa: S608
+    rows = query_db(sql, tuple(args))
     result = []
     for r in rows:
         entry = row_to_dict(r)
@@ -1100,7 +1101,7 @@ def update_knowledge_entry(
     if updates:
         updates.append("updated_at = CURRENT_TIMESTAMP")
         args.append(entry_id)
-        run_db(f"UPDATE knowledge_entries SET {', '.join(updates)} WHERE id = ?", tuple(args))
+        run_db(f"UPDATE knowledge_entries SET {', '.join(updates)} WHERE id = ?", tuple(args))  # noqa: S608
 
     # Handle tags update
     if tags is not None:
@@ -1134,7 +1135,7 @@ def delete_knowledge_entry(entry_id):
 
 def get_knowledge_versions(entry_id):
     """Get all versions of a knowledge entry."""
-    rows = query_db(
+    rows = query_db(  # noqa: S608
         "SELECT * FROM knowledge_versions WHERE entry_id = ? ORDER BY created_at DESC, id DESC", (entry_id,)
     )
     return [row_to_dict(r) for r in rows]
@@ -1179,7 +1180,7 @@ def get_auto_context_entries(board_id=None):
                FROM knowledge_entries ke
                LEFT JOIN boards b ON ke.board_id = b.id
                WHERE ke.auto_context = 1 AND ke.board_id IS NULL
-               ORDER BY ke.sort_order, ke.updated_at DESC"""
+               ORDER BY ke.sort_order, ke.updated_at DESC"""  # noqa: S608
         )
     return [row_to_dict(r) for r in rows]
 
@@ -1230,10 +1231,8 @@ def _set_entry_tags(entry_id, tags):
             cur = run_db("INSERT INTO knowledge_tags (name) VALUES (?)", (tag_name,))
             tag_id = cur.lastrowid
         # Link entry to tag
-        try:
+        with contextlib.suppress(Exception):
             run_db("INSERT INTO knowledge_entry_tags (entry_id, tag_id) VALUES (?, ?)", (entry_id, tag_id))
-        except Exception:
-            pass  # Duplicate, ignore
 
 
 def get_all_tags():

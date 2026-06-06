@@ -70,7 +70,7 @@ def api_update_workflow(workflow_id):
         return jsonify({"error": "No fields to update"}), 400
     args.append(workflow_id)
     try:
-        run_db(f"UPDATE workflows SET {', '.join(updates)} WHERE id = ?", tuple(args))
+        run_db(f"UPDATE workflows SET {', '.join(updates)} WHERE id = ?", tuple(args))  # noqa: S608
     except sqlite3.IntegrityError:
         return jsonify({"error": "Workflow name already exists"}), 409
     add_log(

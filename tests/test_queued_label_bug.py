@@ -435,7 +435,7 @@ def test_queue_entry_replaced_on_requeue(client, default_workflow, default_board
             "SELECT * FROM agent_queue WHERE ticket_id = ? AND started_at IS NULL", (tid2,), one=True
         )
         assert entries_before is not None
-        reason_before = entries_before["reason"]
+        _ = entries_before["reason"]
 
     # Queue again (different reason: parallel, set max_parallel=0)
     _set_limits(client, max_parallel=0, max_per_hour=10)

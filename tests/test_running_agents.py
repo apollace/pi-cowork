@@ -1,3 +1,4 @@
+import datetime
 import json
 from datetime import UTC
 from unittest.mock import MagicMock, patch
@@ -241,7 +242,7 @@ def test_kill_agent_run_409_not_running(client, default_workflow, default_board)
     with client.application.app_context():
         app_module.run_db(
             "UPDATE agent_runs SET status = 'completed', completed_at = ? WHERE id = ?",
-            (app_module.datetime.now(UTC).isoformat(), run_id),
+            (datetime.datetime.now(UTC).isoformat(), run_id),
         )
 
     res = client.post(f"/api/agent_runs/{run_id}/kill")

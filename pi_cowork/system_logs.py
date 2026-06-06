@@ -134,7 +134,8 @@ def add_log(level, action_type, message, details=None, ticket_id=None):
 
             db = get_db()
             db.execute(
-                "INSERT INTO system_logs (timestamp, level, action_type, message, details, ticket_id) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO system_logs (timestamp, level, action_type, message, "
+                "details, ticket_id) VALUES (?, ?, ?, ?, ?, ?)",
                 (timestamp, level, action_type, message, details_json, ticket_id),
             )
             db.commit()
@@ -147,7 +148,8 @@ def add_log(level, action_type, message, details=None, ticket_id=None):
         conn = _get_standalone_db()
         try:
             conn.execute(
-                "INSERT INTO system_logs (timestamp, level, action_type, message, details, ticket_id) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO system_logs (timestamp, level, action_type, message, "
+                "details, ticket_id) VALUES (?, ?, ?, ?, ?, ?)",
                 (timestamp, level, action_type, message, details_json, ticket_id),
             )
             conn.commit()
@@ -192,7 +194,7 @@ def get_system_log(log_id):
             db.close()
 
 
-def get_system_logs(
+def get_system_logs(  # noqa: C901
     page=1,
     per_page=50,
     level=None,
@@ -221,7 +223,7 @@ def get_system_logs(
         from flask import has_app_context
 
         if has_app_context():
-            from pi_cowork.db import get_db, row_to_dict
+            from pi_cowork.db import get_db
 
             use_flask = True
             db = get_db()
@@ -262,7 +264,7 @@ def get_system_logs(
             where = "WHERE " + " AND ".join(conditions)
 
         # Total count
-        count_row = db.execute(f"SELECT COUNT(*) as cnt FROM system_logs {where}", tuple(params)).fetchone()
+        count_row = db.execute(f"SELECT COUNT(*) as cnt FROM system_logs {where}", tuple(params)).fetchone()  # noqa: S608
         total = count_row["cnt"] if count_row else 0
 
         total_pages = max(1, (total + per_page - 1) // per_page)
@@ -279,7 +281,7 @@ def get_system_logs(
             )
 
         rows = db.execute(
-            f"{select_sql} {where} ORDER BY timestamp DESC LIMIT ? OFFSET ?", tuple(params) + (per_page, offset)
+            f"{select_sql} {where} ORDER BY timestamp DESC LIMIT ? OFFSET ?", (*tuple(params), per_page, offset)
         ).fetchall()
 
         logs = []

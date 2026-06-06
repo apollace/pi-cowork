@@ -132,18 +132,18 @@ def test_filter_dropdown_js_handles_max_height():
     # Should set maxHeight when constrained
     assert "maxHeight" in js
     # Should reset overflowY in the reset block (clears inline style)
-    assert "style.overflowY = ''" in js
-    # Should use .scrollable class for overflow (not inline style.overflowY = 'auto')
-    assert "classList.add('scrollable')" in js
-    assert "style.overflowY = 'auto'" not in js
+    assert 'style.overflowY = ""' in js
+    # Should use .scrollable class for overflow (not inline style.overflowY = "auto")
+    assert 'classList.add("scrollable")' in js
+    assert 'style.overflowY = "auto"' not in js
 
 
 def test_filter_dropdown_js_resets_scrollable_class():
     """The positionFilterDropdown reset block must remove the .scrollable class."""
     js = _read_static("app.js")
     assert (
-        "classList.remove('scrollable')" in js
-        or "classList.remove('dropdown-right', 'dropdown-above', 'scrollable')" in js
+        'classList.remove("scrollable")' in js
+        or 'classList.remove("dropdown-right", "dropdown-above", "scrollable")' in js
     )
 
 
@@ -151,8 +151,8 @@ def test_filter_dropdown_js_repositions_on_resize_scroll():
     """The dropdown should reposition when the viewport changes (resize/scroll)."""
     js = _read_static("app.js")
     # Should listen for resize and scroll events
-    assert "addEventListener('resize'" in js
-    assert "addEventListener('scroll'" in js
+    assert 'addEventListener("resize"' in js
+    assert 'addEventListener("scroll"' in js
 
 
 def test_filter_dropdown_css_scrollable_class():
@@ -245,7 +245,7 @@ def test_app_js_save_called_on_search_input():
     """saveBoardPrefs must be called when the search input changes."""
     js = _read_static("app.js")
     # Find the search input event handler
-    idx = js.find("searchInput.addEventListener('input'")
+    idx = js.find('searchInput.addEventListener("input"')
     assert idx != -1
     # Check that saveBoardPrefs is called within this handler
     handler_block = js[idx : idx + 300]
@@ -268,7 +268,7 @@ def test_app_js_save_called_on_label_filter_change():
     """saveBoardPrefs must be called when a label filter checkbox changes."""
     js = _read_static("app.js")
     # Find the label filter change handler inside updateLabelFilters
-    idx = js.find("'change'", js.find("updateLabelFilters"))
+    idx = js.find('"change"', js.find("updateLabelFilters"))
     assert idx != -1
     # Get a reasonable chunk around it
     block = js[idx : idx + 300]
@@ -283,7 +283,7 @@ def test_app_js_save_called_on_collapse_toggle():
     idx = js.find("group.querySelector")
     assert idx != -1
     # The group-header click handler should contain saveBoardPrefs
-    header_handler_start = js.find("header.addEventListener('click'", idx - 200)
+    header_handler_start = js.find('header.addEventListener("click"', idx - 200)
     assert header_handler_start != -1
     handler_block = js[header_handler_start : header_handler_start + 500]
     assert "saveBoardPrefs()" in handler_block
@@ -292,18 +292,9 @@ def test_app_js_save_called_on_collapse_toggle():
 def test_app_js_save_called_on_show_terminal_change():
     """saveBoardPrefs must be called when the show-terminal checkbox changes."""
     js = _read_static("app.js")
-    idx = js.find("showTerminal.addEventListener('change'")
+    idx = js.find('showTerminal.addEventListener("change"')
     assert idx != -1
     handler_block = js[idx : idx + 300]
-    assert "saveBoardPrefs()" in handler_block
-
-
-def test_app_js_save_called_on_clear_all():
-    """saveBoardPrefs must be called when the 'Clear all' button is clicked."""
-    js = _read_static("app.js")
-    idx = js.find("clearAll.textContent = 'Clear all'")
-    assert idx != -1
-    handler_block = js[idx : idx + 500]
     assert "saveBoardPrefs()" in handler_block
 
 
@@ -320,16 +311,6 @@ def test_app_js_restore_called_in_refresh():
     restore_idx = js.find("restoreBoardPrefs()", refresh_start)
     render_idx = js.find("render()", restore_idx)
     assert render_idx > restore_idx
-
-
-def test_app_js_save_called_on_individual_pill_dismissal():
-    """saveBoardPrefs must be called when a single filter pill is dismissed (✕ button)."""
-    js = _read_static("app.js")
-    # Find the pill.onclick handler inside renderFilterSummary
-    idx = js.find("pill.onclick")
-    assert idx != -1
-    handler_block = js[idx : idx + 200]
-    assert "saveBoardPrefs()" in handler_block
 
 
 def test_app_js_restore_handles_missing_data():

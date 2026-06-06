@@ -150,7 +150,8 @@ def api_trigger_recurring(task_id):
 
     next_trigger = compute_next_trigger(task["cron_expression"], after=now)
     run_db(
-        "UPDATE recurring_tasks SET last_triggered_at = ?, next_trigger_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        "UPDATE recurring_tasks SET last_triggered_at = ?, next_trigger_at = ?, "
+        "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (now.isoformat(), next_trigger, task_id),
     )
 

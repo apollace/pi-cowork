@@ -58,7 +58,8 @@ def api_create_agent():
 
     try:
         cur = run_db(
-            "INSERT INTO agents (name, description, workflow_id, model, thinking, api_endpoints) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO agents (name, description, workflow_id, model, thinking, "
+            "api_endpoints) VALUES (?, ?, ?, ?, ?, ?)",
             (name, description, workflow_id, model, thinking, api_endpoints_json),
         )
         return jsonify({"id": cur.lastrowid}), 201
@@ -126,7 +127,7 @@ def api_update_agent(agent_id):
         return jsonify({"error": "No fields to update"}), 400
     args.append(agent_id)
     try:
-        run_db(f"UPDATE agents SET {', '.join(updates)} WHERE id = ?", tuple(args))
+        run_db(f"UPDATE agents SET {', '.join(updates)} WHERE id = ?", tuple(args))  # noqa: S608
     except sqlite3.IntegrityError:
         return jsonify({"error": "Agent name already exists"}), 409
     return jsonify({"success": True})

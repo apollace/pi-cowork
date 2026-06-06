@@ -360,7 +360,7 @@ def try_spawn_or_queue(ticket, status, agent, old_status_id=None):
             spawn_agent(ticket, status, agent, old_status_id=old_status_id)
 
 
-def spawn_agent(ticket, status, agent, old_status_id=None):
+def spawn_agent(ticket, status, agent, old_status_id=None):  # noqa: C901
     """Fire-and-forget subprocess running pi CLI for this ticket + status.
 
     Returns True if an agent_run was created, False if the spawn was skipped
@@ -602,14 +602,14 @@ After completing your task, write a comment on the ticket summarizing what you d
     db.execute("UPDATE agent_runs SET log_path = ? WHERE id = ?", (log_path, run_id))
     db.commit()
 
-    log_f = open(log_path, "w")
+    log_f = open(log_path, "w")  # noqa: SIM115
     log_f.write(f"=== SYSTEM PROMPT ===\n{system_prompt}\n\n")
     log_f.write(f"=== CONTEXT MESSAGE ===\n{context_msg}\n\n")
     log_f.write("=== AGENT OUTPUT ===\n")
     log_f.flush()
 
     try:
-        proc = subprocess.Popen(
+        proc = subprocess.Popen(  # noqa: S603
             cmd, cwd=board_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True
         )
         db.execute("UPDATE agent_runs SET pid = ? WHERE id = ?", (proc.pid, run_id))

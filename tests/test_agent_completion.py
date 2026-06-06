@@ -51,7 +51,7 @@ def test_watcher_thread_updates_db_on_success(client, default_workflow, default_
 
     watched_event = threading.Event()
 
-    original_start_watcher = app_module._start_watcher
+    _ = app_module._start_watcher
 
     def tracking_watcher(proc, run_id, ticket_id, agent_name, log_f):
         # Run the real _watch_agent synchronously for test determinism
@@ -240,7 +240,7 @@ def test_cleanup_marks_null_pid_as_failed(client, default_workflow, default_boar
             "workflow_id": default_workflow["id"],
         },
     )
-    id1 = json.loads(s1.data)["id"]
+    _ = json.loads(s1.data)["id"]
 
     ticket = client.post(
         "/api/tickets",

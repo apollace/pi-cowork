@@ -34,7 +34,7 @@ def _fake_log_reader(pipe, log_f):
         log_f.close()
 
 
-HUMAN_ACTION_SECRET_FOR_TESTS = "test-human-action-secret-12345678901234567890123456789012"
+HUMAN_ACTION_SECRET_FOR_TESTS = "test-human-action-secret-12345678901234567890123456789012"  # noqa: S105
 
 
 @pytest.fixture(autouse=True)

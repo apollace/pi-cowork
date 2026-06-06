@@ -116,21 +116,21 @@ def api_tickets():
     # Scoped queue lookups: only unstarted entries for this board's tickets
     placeholders = ",".join("?" * len(ticket_ids))
     queue_rows = query_db(
-        f"SELECT ticket_id, reason FROM agent_queue WHERE started_at IS NULL AND ticket_id IN ({placeholders})",
+        f"SELECT ticket_id, reason FROM agent_queue WHERE started_at IS NULL AND ticket_id IN ({placeholders})",  # noqa: S608
         tuple(ticket_ids),
     )
     queue_map = {row["ticket_id"]: row["reason"] for row in queue_rows}
 
     # Scoped gate_pending lookups: only pending reviews for this board's tickets
     gate_pending_rows = query_db(
-        f"SELECT DISTINCT ticket_id FROM gate_reviews WHERE status = 'pending' AND ticket_id IN ({placeholders})",
+        f"SELECT DISTINCT ticket_id FROM gate_reviews WHERE status = 'pending' AND ticket_id IN ({placeholders})",  # noqa: S608
         tuple(ticket_ids),
     )
     gate_pending_set = {row["ticket_id"] for row in gate_pending_rows}
 
     # Scoped question counts for this board's tickets
     qrows = query_db(
-        f"SELECT ticket_id, COUNT(*) AS c FROM questions WHERE ticket_id IN ({placeholders}) GROUP BY ticket_id",
+        f"SELECT ticket_id, COUNT(*) AS c FROM questions WHERE ticket_id IN ({placeholders}) GROUP BY ticket_id",  # noqa: S608
         tuple(ticket_ids),
     )
     question_counts = {r["ticket_id"]: r["c"] for r in qrows}
@@ -152,7 +152,8 @@ def api_tickets():
 def api_ticket(ticket_id):
     row = query_db(
         """
-        SELECT t.*, s.name AS status_name, s.is_terminal AS is_terminal, s.agent_id AS status_agent_id, a.name AS agent_name, b.name AS board_name, b.workflow_id, w.git_enabled
+        SELECT t.*, s.name AS status_name, s.is_terminal AS is_terminal, s.agent_id AS status_agent_id,
+        a.name AS agent_name, b.name AS board_name, b.workflow_id, w.git_enabled
         FROM tickets t
         JOIN statuses s ON t.status_id = s.id
         LEFT JOIN agents a ON s.agent_id = a.id
@@ -273,7 +274,7 @@ def api_create_ticket():
 
 
 @tickets_bp.route("/api/tickets/<int:ticket_id>", methods=["PUT"])
-def api_update_ticket(ticket_id):
+def api_update_ticket(ticket_id):  # noqa: C901
     ticket = query_db(
         """
         SELECT t.*, b.workflow_id, b.name AS board_name, w.name AS workflow_name, b.working_directory, w.git_enabled
@@ -347,7 +348,9 @@ def api_update_ticket(ticket_id):
             now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
             for gate in gates:
                 run_db(
-                    "INSERT INTO gate_reviews (ticket_id, gate_id, from_status_id, to_status_id, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)",
+                    "INSERT INTO gate_reviews "
+                    "(ticket_id, gate_id, from_status_id, to_status_id, status, created_at) "
+                    "VALUES (?, ?, ?, ?, 'pending', ?)",
                     (ticket_id, gate["id"], old_status_id, new_status_id, now),
                 )
 
@@ -361,7 +364,8 @@ def api_update_ticket(ticket_id):
                     command = config_json.get("command", "")
                     passed, output = run_cli_gate(command, board_dir)
                     review = query_db(
-                        "SELECT id FROM gate_reviews WHERE ticket_id = ? AND gate_id = ? AND status = 'pending' LIMIT 1",
+                        "SELECT id FROM gate_reviews WHERE ticket_id = ? AND gate_id = ? "
+                        "AND status = 'pending' LIMIT 1",
                         (ticket_id, gate["id"]),
                         one=True,
                     )
@@ -395,7 +399,7 @@ def api_update_ticket(ticket_id):
                 updates.append("updated_at = CURRENT_TIMESTAMP")
                 args.append(ticket_id)
                 if updates:
-                    run_db(f"UPDATE tickets SET {', '.join(updates)} WHERE id = ?", tuple(args))
+                    run_db(f"UPDATE tickets SET {', '.join(updates)} WHERE id = ?", tuple(args))  # noqa: S608
                     add_log(
                         "INFO",
                         "db_change",
@@ -423,15 +427,17 @@ def api_update_ticket(ticket_id):
 
     if new_status_id != old_status_id:
         run_db(
-            "DELETE FROM gate_reviews WHERE ticket_id = ? AND status = 'pending' AND (from_status_id != ? OR to_status_id != ?)",
+            "DELETE FROM gate_reviews WHERE ticket_id = ? AND status = 'pending' "
+            "AND (from_status_id != ? OR to_status_id != ?)",
             (ticket_id, old_status_id, new_status_id),
         )
         run_db(
-            "DELETE FROM gate_reviews WHERE ticket_id = ? AND from_status_id = ? AND to_status_id = ? AND status = 'pending'",
+            "DELETE FROM gate_reviews WHERE ticket_id = ? AND from_status_id = ? "
+            "AND to_status_id = ? AND status = 'pending'",
             (ticket_id, old_status_id, new_status_id),
         )
 
-    run_db(f"UPDATE tickets SET {', '.join(updates)} WHERE id = ?", tuple(args))
+    run_db(f"UPDATE tickets SET {', '.join(updates)} WHERE id = ?", tuple(args))  # noqa: S608
     add_log(
         "INFO",
         "db_change",
@@ -461,7 +467,8 @@ def api_update_ticket(ticket_id):
                 run_db("DELETE FROM questions WHERE ticket_id = ?", (ticket_id,))
                 add_comment(
                     ticket_id,
-                    "🔔 All pending notifications (gate reviews and questions) cleared — ticket is now in a terminal state.",
+                    "🔔 All pending notifications (gate reviews and questions) cleared — "
+                    "ticket is now in a terminal state.",
                 )
 
             if status.get("agent_id"):

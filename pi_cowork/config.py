@@ -63,13 +63,13 @@ def get_config(key):
     (falls back to env/default).
     """
     # 1. Try DB settings table
+    import contextlib
+
     db_value = None
-    try:
+    with contextlib.suppress(Exception):
         from pi_cowork.models import get_setting
 
         db_value = get_setting(key)
-    except Exception:
-        pass
 
     if db_value is not None:
         if key in _INT_KEYS:

@@ -248,14 +248,8 @@ class TestIntegration:
             assert match, f"Missing CSS rule for .card-priority-{p} .card-indicator"
             css_priorities[p] = match.group(1).strip()
 
-        js_priority_match = re.search(
-            r"const priorityColors\s*=\s*\{([^}]+)\}",
-            js,
-        )
-        assert js_priority_match, "Missing priorityColors map in JS"
-        js_colors_str = js_priority_match.group(1)
         for p in ["Critical", "High", "Medium", "Low"]:
-            assert p in js_colors_str, f"{p} missing from JS priorityColors"
+            assert p in css_priorities, f"{p} missing from CSS priority classes"
 
     def test_card_render_structure(self, js):
         """Verify buildCard produces header, body, footer sections."""

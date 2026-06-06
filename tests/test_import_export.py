@@ -26,7 +26,7 @@ def test_import_workflow(client):
         "version": "1.0",
         "name": "Imported Test Workflow",
         "description": "A test import",
-        "agents": [{"name": "Tester", "description": "Test agent", "working_directory": "/tmp/test"}],
+        "agents": [{"name": "Tester", "description": "Test agent", "working_directory": "/tmp/test"}],  # noqa: S108
         "statuses": [
             {
                 "name": "Start",
@@ -66,7 +66,7 @@ def test_import_workflow_duplicate_name(client):
     workflow_json = {
         "version": "1.0",
         "name": "Duplicate Workflow",
-        "agents": [{"name": "Agent1", "description": "d1", "working_directory": "/tmp/d1"}],
+        "agents": [{"name": "Agent1", "description": "d1", "working_directory": "/tmp/d1"}],  # noqa: S108
         "statuses": [
             {"name": "S1", "sort_order": 1, "is_default": True, "is_terminal": False, "agent_name": None, "goal": None}
         ],
@@ -139,7 +139,7 @@ def test_import_export_roundtrip(client):
         "version": "1.0",
         "name": "Roundtrip Workflow",
         "description": "Testing roundtrip",
-        "agents": [{"name": "RTAgent", "description": "Roundtrip agent", "working_directory": "/tmp/rt"}],
+        "agents": [{"name": "RTAgent", "description": "Roundtrip agent", "working_directory": "/tmp/rt"}],  # noqa: S108
         "statuses": [
             {
                 "name": "Open",

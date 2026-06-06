@@ -34,7 +34,7 @@ def _create_board_with_ticket(client, wf_id, status_id):
         json={
             "name": "Gate Test Board",
             "workflow_id": wf_id,
-            "working_directory": "/tmp",
+            "working_directory": "/tmp",  # noqa: S108
         },
     )
     board_id = json.loads(res.data)["id"]
@@ -79,7 +79,7 @@ def test_create_quality_gate(client):
 #    and does NOT move the ticket
 def test_manual_gate_blocks_transition(client):
     wf_id, status_ids = _create_workflow_with_statuses(client)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     # Add manual gate on (from, to) pair
     client.post(
@@ -113,7 +113,7 @@ def test_manual_gate_blocks_transition(client):
 # 3. Test that approving a manual gate moves the ticket
 def test_approve_manual_gate_moves_ticket(client):
     wf_id, status_ids = _create_workflow_with_statuses(client)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     client.post(
         "/api/quality_gates",
@@ -150,7 +150,7 @@ def test_approve_manual_gate_moves_ticket(client):
 # 4. Test that rejecting a manual gate keeps the ticket in old status and adds a comment
 def test_reject_manual_gate_stays_old_status(client):
     wf_id, status_ids = _create_workflow_with_statuses(client)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     client.post(
         "/api/quality_gates",
@@ -193,7 +193,7 @@ def test_reject_manual_gate_stays_old_status(client):
 # 5. Test CLI gate: exit 0 → passed, ticket moves
 def test_cli_gate_pass_moves_ticket(client):
     wf_id, status_ids = _create_workflow_with_statuses(client)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     client.post(
         "/api/quality_gates",
@@ -207,7 +207,7 @@ def test_cli_gate_pass_moves_ticket(client):
         },
     )
 
-    with patch("app.subprocess.Popen") as mock_popen, patch("app.subprocess.run") as mock_run:
+    with patch("app.subprocess.Popen") as _, patch("app.subprocess.run") as mock_run:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "All tests passed"
@@ -228,7 +228,7 @@ def test_cli_gate_pass_moves_ticket(client):
 # 6. Test CLI gate: exit non-zero → failed, ticket stays, comment added
 def test_cli_gate_fail_blocks_ticket(client):
     wf_id, status_ids = _create_workflow_with_statuses(client)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     client.post(
         "/api/quality_gates",
@@ -266,7 +266,7 @@ def test_cli_gate_fail_blocks_ticket(client):
 # 7. Test multiple gates: first CLI fails → whole transition rejected
 def test_multiple_gates_first_fails_rejects_all(client):
     wf_id, status_ids = _create_workflow_with_statuses(client)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     # Add CLI gate that will fail
     client.post(
@@ -318,7 +318,7 @@ def test_multiple_gates_first_fails_rejects_all(client):
 # 8. Test that agent is not spawned while gate is pending
 def test_agent_not_spawned_while_gate_pending(client):
     wf_id, status_ids = _create_workflow_with_statuses(client, n_statuses=3)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     # Create an agent and assign it to status 1
     res = client.post(
@@ -358,7 +358,7 @@ def test_agent_not_spawned_while_gate_pending(client):
 # 9. Test that agent IS re-triggered after rejection (with the feedback comment)
 def test_agent_retriggered_after_rejection(client):
     wf_id, status_ids = _create_workflow_with_statuses(client, n_statuses=3)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     # Create an agent and assign it to the current (old) status
     res = client.post(
@@ -443,7 +443,7 @@ def test_gate_pending_flag_on_tickets(client):
 # 11. Test deleting a quality gate cascades reviews
 def test_delete_gate_cascades_reviews(client):
     wf_id, status_ids = _create_workflow_with_statuses(client)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     res = client.post(
         "/api/quality_gates",
@@ -475,7 +475,7 @@ def test_delete_gate_cascades_reviews(client):
 # 12. Test deleting a status cascades gates and reviews
 def test_delete_status_cascades_gates_and_reviews(client):
     wf_id, status_ids = _create_workflow_with_statuses(client, n_statuses=3)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     # Create another status just for the gate (not used by any ticket directly)
     res = client.post(
@@ -501,7 +501,7 @@ def test_delete_status_cascades_gates_and_reviews(client):
             "workflow_id": wf_id,
         },
     )
-    gate_id = json.loads(res.data)["id"]
+    _ = json.loads(res.data)["id"]
 
     # Create a gate review by attempting a transition
     with patch("app.subprocess.Popen"):
@@ -617,7 +617,7 @@ def test_export_import_includes_quality_gates(client, default_workflow):
 # 15. Regression: duplicate gate review creation should not block manual approval
 def test_duplicate_gate_reviews_cannot_block_approval(client):
     wf_id, status_ids = _create_workflow_with_statuses(client)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     client.post(
         "/api/quality_gates",
@@ -668,7 +668,7 @@ def test_agent_prompt_includes_gate_annotations(client):
     """When a transition target has quality gates, the agent's context message
     must annotate the transition and include gate_pending API docs."""
     wf_id, status_ids = _create_workflow_with_statuses(client, n_statuses=3)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     # Create an agent and assign it to status 1 (the destination status)
     res = client.post(
@@ -733,7 +733,7 @@ def test_agent_prompt_includes_gate_annotations(client):
 def test_agent_prompt_no_gates_no_mention(client):
     """When no transitions have quality gates, the agent context should not mention gates."""
     wf_id, status_ids = _create_workflow_with_statuses(client, n_statuses=3)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     # Create an agent and assign it to status 1 — no gates anywhere
     res = client.post(
@@ -789,7 +789,7 @@ def test_cli_gate_failure_no_auto_retrigger(client):
     automatically re-triggered. Previously this caused infinite loops:
     spawn → try same transition → gate fails → re-spawn → …"""
     wf_id, status_ids = _create_workflow_with_statuses(client, n_statuses=3)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     # Create an agent and assign it to the current (old) status
     res = client.post(
@@ -842,7 +842,7 @@ def test_orphaned_gate_reviews_cleaned_on_unrelated_move(client):
     """When a ticket has pending gate reviews for transition A→B and is then
     manually moved to C (no gate), the orphaned A→B reviews must be cleaned up."""
     wf_id, status_ids = _create_workflow_with_statuses(client, n_statuses=3)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     # Add manual gate on (status 0 → status 1) pair
     client.post(
@@ -884,7 +884,7 @@ def test_orphaned_gate_reviews_cleaned_on_unrelated_move(client):
 # the any_rejected query still sees the stale rejected record and blocks the move.
 def test_reject_then_approve_manual_gate_allows_move(client):
     wf_id, status_ids = _create_workflow_with_statuses(client)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     client.post(
         "/api/quality_gates",
@@ -957,7 +957,7 @@ def test_gate_review_approval_requires_human_action_header(client):
     must be rejected with 403. This prevents AI agents from bypassing
     manual quality gates by calling the gate review API directly."""
     wf_id, status_ids = _create_workflow_with_statuses(client)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     client.post(
         "/api/quality_gates",
@@ -1027,7 +1027,7 @@ def test_gate_review_approval_requires_human_action_header(client):
 def test_gate_review_rejection_requires_human_action_header(client):
     """Rejection of a gate review also requires the X-Human-Action header."""
     wf_id, status_ids = _create_workflow_with_statuses(client)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     client.post(
         "/api/quality_gates",
@@ -1068,7 +1068,7 @@ def test_priority_update_persisted_with_pending_manual_gate(client):
     Previously priority was extracted after the gate early-return, so it was
     silently dropped."""
     wf_id, status_ids = _create_workflow_with_statuses(client)
-    board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
     client.post(
         "/api/quality_gates",

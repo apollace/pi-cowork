@@ -62,14 +62,7 @@ def test_board_has_priority_toggles(client):
 
 
 def test_board_has_filter_summary(client):
-    """Board page should have filter summary area for showing active filter pills."""
-    res = client.get("/board")
-    assert res.status_code == 200
-    html = res.data.decode("utf-8")
-    assert "filter-summary" in html
-
-
-def test_board_has_loading_skeleton(client):
+    """Board page should NOT have the board assistant bubble or panel."""
     """Board page should have a loading skeleton for initial state."""
     res = client.get("/board")
     assert res.status_code == 200

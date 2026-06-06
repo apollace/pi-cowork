@@ -75,7 +75,7 @@ def api_update_label(label_id):
         return jsonify({"error": "No fields to update"}), 400
     args.append(label_id)
     try:
-        run_db(f"UPDATE labels SET {', '.join(updates)} WHERE id = ?", tuple(args))
+        run_db(f"UPDATE labels SET {', '.join(updates)} WHERE id = ?", tuple(args))  # noqa: S608
     except sqlite3.IntegrityError:
         return jsonify({"error": "Label name already exists in this workflow"}), 409
     add_log(
@@ -132,7 +132,8 @@ def api_add_ticket_labels(ticket_id):
         return jsonify({"success": True})
     placeholders = ",".join("?" * len(label_ids))
     valid = query_db(
-        f"SELECT id FROM labels WHERE workflow_id = ? AND id IN ({placeholders})", (ticket["workflow_id"], *label_ids)
+        f"SELECT id FROM labels WHERE workflow_id = ? AND id IN ({placeholders})",
+        (ticket["workflow_id"], *label_ids),  # noqa: S608
     )
     valid_ids = {r["id"] for r in valid}
     invalid = set(label_ids) - valid_ids

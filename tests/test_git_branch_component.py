@@ -131,7 +131,7 @@ class TestJSOutput:
         """Should attach a click listener to the copy button."""
         assert "card-branch-copy" in js
         assert "navigator.clipboard.writeText" in js
-        assert "window.showToast('Branch copied', 'success')" in js
+        assert 'window.showToast("Branch copied", "success")' in js
 
     def test_build_card_branch_stop_propagation(self, js):
         """Copy button should stop propagation to avoid card navigation."""

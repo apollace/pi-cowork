@@ -70,7 +70,7 @@ def test_list_workflows_includes_git_enabled(client):
     res = client.get("/api/workflows")
     assert res.status_code == 200
     data = json.loads(res.data)
-    wf = [w for w in data if w["name"] == "GitList Wf"][0]
+    wf = next(w for w in data if w["name"] == "GitList Wf")
     assert wf["git_enabled"] in (1, True)
 
 
@@ -127,7 +127,7 @@ def test_ticket_no_branch_when_git_disabled(client, default_board):
     # GET ticket list
     res = client.get(f"/api/tickets?board_id={default_board['id']}")
     data = json.loads(res.data)
-    ticket = [t for t in data if t["id"] == tid][0]
+    ticket = next(t for t in data if t["id"] == tid)
     assert "branch" not in ticket
 
 
@@ -155,7 +155,7 @@ def test_ticket_has_branch_when_git_enabled(client, default_board, default_workf
     # GET ticket list
     res = client.get(f"/api/tickets?board_id={default_board['id']}")
     data = json.loads(res.data)
-    ticket = [t for t in data if t["id"] == tid][0]
+    ticket = next(t for t in data if t["id"] == tid)
     assert "branch" in ticket
 
 
@@ -269,9 +269,9 @@ def test_board_list_git_enabled_from_workflow(client, default_workflow, new_work
     board_id = json.loads(res.data)["id"]
 
     boards = json.loads(client.get("/api/boards").data)
-    git_board = [b for b in boards if b["id"] == board_id][0]
+    git_board = next(b for b in boards if b["id"] == board_id)
     assert git_board["git_enabled"] in (True, 1)
 
     # The default board should have git_enabled=False
-    default_board = [b for b in boards if b["id"] != board_id][0]
+    default_board = next(b for b in boards if b["id"] != board_id)
     assert default_board["git_enabled"] in (False, 0)

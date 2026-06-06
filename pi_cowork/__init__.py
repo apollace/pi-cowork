@@ -53,12 +53,15 @@ def _audit_subscriber(event_name=None, **kwargs):
         logger.exception("Audit log write failed")
 
 
-# Subscribe audit subscriber to all defined event names
-from pi_cowork import events as _ev
+def _register_audit_subscribers():
+    from pi_cowork import events as _ev
 
-for _attr in dir(_ev):
-    if _attr.isupper() and isinstance(getattr(_ev, _attr), str):
-        bus.subscribe(getattr(_ev, _attr), _audit_subscriber)
+    for _attr in dir(_ev):
+        if _attr.isupper() and isinstance(getattr(_ev, _attr), str):
+            bus.subscribe(getattr(_ev, _attr), _audit_subscriber)
+
+
+_register_audit_subscribers()
 
 
 # ---------------------------------------------------------------------------

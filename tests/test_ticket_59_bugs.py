@@ -246,7 +246,7 @@ class TestDrainQueueOldStatusId:
                 "workflow_id": default_workflow["id"],
             },
         )
-        to_sid = json.loads(s2.data)["id"]
+        _ = json.loads(s2.data)["id"]
 
         # Create two tickets
         ticket1 = client.post("/api/tickets", json={"title": "OldStat1", "board_id": default_board["id"]})

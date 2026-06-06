@@ -217,7 +217,7 @@ class TestPurgeTerminalLogs:
 
     def test_purge_terminal_tickets_no_log_dirs(self, client):
         """Purging terminal tickets with no .pi-logs dirs should return 0."""
-        board_data, wf_id, status_id, terminal_status_id = _create_workflow_and_board(client)
+        board_data, _wf_id, _status_id, terminal_status_id = _create_workflow_and_board(client)
         # Create a ticket in terminal status
         _create_ticket(client, board_data["id"], terminal_status_id)
         res = client.post("/api/settings/purge-terminal-logs")

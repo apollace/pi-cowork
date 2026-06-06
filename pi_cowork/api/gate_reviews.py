@@ -44,7 +44,7 @@ def api_gate_reviews():
 
 
 @gate_reviews_bp.route("/api/gate_reviews/<int:review_id>", methods=["PUT"])
-def api_update_gate_review(review_id):
+def api_update_gate_review(review_id):  # noqa: C901
     review = query_db(
         """
         SELECT gr.*, qg.gate_type, qg.name AS gate_name,
@@ -157,7 +157,8 @@ def api_update_gate_review(review_id):
                     from pi_cowork.models import get_agents
 
                     ticket_row = query_db(
-                        "SELECT t.board_id, b.workflow_id FROM tickets t JOIN boards b ON t.board_id = b.id WHERE t.id = ?",
+                        "SELECT t.board_id, b.workflow_id "
+                        "FROM tickets t JOIN boards b ON t.board_id = b.id WHERE t.id = ?",
                         (ticket_id,),
                         one=True,
                     )
@@ -174,7 +175,8 @@ def api_update_gate_review(review_id):
                     run_db("DELETE FROM questions WHERE ticket_id = ?", (ticket_id,))
                     add_comment(
                         ticket_id,
-                        "🔔 All pending notifications (gate reviews and questions) cleared — ticket is now in a terminal state.",
+                        "🔔 All pending notifications (gate reviews and questions) cleared — "
+                        "ticket is now in a terminal state.",
                     )
                 # Spawn agent for new status if applicable
                 if status and status.get("agent_id"):

@@ -77,7 +77,7 @@ class TestSSEEventHandlers:
         js = _read_js()
         # sse:open should still use debounceRefresh for full resync
         open_match = re.search(
-            r"addEventListener\('sse:open'[^}]+debounceRefresh\(100\)",
+            r'addEventListener\("sse:open"[^}]+debounceRefresh\(100\)',
             js,
             re.DOTALL,
         )
@@ -104,7 +104,7 @@ class TestBuildCardIdentity:
         start = js.find("function buildCard(ticket)")
         end = js.find("function updateLabelFilters")
         region = js[start:end]
-        assert "card.id = 'ticket-card-' + ticket.id" in region
+        assert 'card.id = "ticket-card-" + ticket.id' in region
 
     def test_card_id_prefix(self):
         js = _read_js()
@@ -144,12 +144,12 @@ class TestRenderRunningPanelDiffing:
         # The old code did `panel.innerHTML = '';` unconditionally after showing the panel.
         # In the new code, innerHTML is only cleared when there are no runs.
         # We verify there is no `panel.innerHTML = '';` after `panel.style.display = 'flex';`
-        flex_pos = region.find("panel.style.display = 'flex';")
+        flex_pos = region.find('panel.style.display = "flex";')
         assert flex_pos != -1
         after_flex = region[flex_pos:]
         # Should NOT contain a second innerHTML = '' after the flex display
         # (the only innerHTML = '' is in the early-return `if (!runs || runs.length === 0)` block)
-        assert "panel.innerHTML = '';" not in after_flex, (
+        assert 'panel.innerHTML = "";' not in after_flex, (
             "renderRunningPanel should not wipe innerHTML after showing panel; it should diff"
         )
 

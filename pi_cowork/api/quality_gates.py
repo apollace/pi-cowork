@@ -69,7 +69,8 @@ def api_create_quality_gate():
 
     try:
         cur = run_db(
-            "INSERT INTO quality_gates (from_status_id, to_status_id, gate_type, name, config, sort_order, enabled, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO quality_gates (from_status_id, to_status_id, gate_type, name, "
+            "config, sort_order, enabled, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (from_status_id, to_status_id, gate_type, name, config_str, int(sort_order), enabled, workflow_id),
         )
         add_log(
@@ -141,7 +142,7 @@ def api_update_quality_gate(gate_id):
     if not updates:
         return jsonify({"error": "No fields to update"}), 400
     args.append(gate_id)
-    run_db(f"UPDATE quality_gates SET {', '.join(updates)} WHERE id = ?", tuple(args))
+    run_db(f"UPDATE quality_gates SET {', '.join(updates)} WHERE id = ?", tuple(args))  # noqa: S608
     add_log(
         "INFO",
         "db_change",

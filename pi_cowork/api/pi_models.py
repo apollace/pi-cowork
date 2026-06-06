@@ -118,8 +118,8 @@ def _fetch_thinking_levels_map() -> dict:
     )
 
     try:
-        result = subprocess.run(
-            ["node", "-e", script],
+        result = subprocess.run(  # noqa: S603
+            ["node", "-e", script],  # noqa: S607
             capture_output=True,
             text=True,
             timeout=10,
@@ -148,7 +148,7 @@ def _parse_pi_list_models() -> dict:
     """
     try:
         result = subprocess.run(
-            ["pi", "--list-models"],
+            ["pi", "--list-models"],  # noqa: S607
             capture_output=True,
             text=True,
             timeout=5,
