@@ -19,7 +19,32 @@ import threading
 import time
 
 from pi_cowork import config, create_app
+from pi_cowork.agents import (
+    _start_watcher,
+    _watch_agent,
+    cleanup_runs,
+    drain_queue,
+    spawn_agent,
+    spawn_agent_for_ticket,
+    try_spawn_or_queue,
+)
 from pi_cowork.config import get_config
+from pi_cowork.db import get_db, init_db, query_db, run_db
+from pi_cowork.models import process_recurring_tasks
+
+# Self-assignments keep imports "used" for ruff while re-exporting for tests
+_start_watcher = _start_watcher
+_watch_agent = _watch_agent
+cleanup_runs = cleanup_runs
+drain_queue = drain_queue
+spawn_agent = spawn_agent
+spawn_agent_for_ticket = spawn_agent_for_ticket
+try_spawn_or_queue = try_spawn_or_queue
+get_db = get_db
+init_db = init_db
+query_db = query_db
+run_db = run_db
+process_recurring_tasks = process_recurring_tasks
 
 # Backwards-compat re-exports for tests that patch app.<module> directly
 datetime = datetime

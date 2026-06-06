@@ -132,8 +132,8 @@ def api_add_ticket_labels(ticket_id):
         return jsonify({"success": True})
     placeholders = ",".join("?" * len(label_ids))
     valid = query_db(
-        f"SELECT id FROM labels WHERE workflow_id = ? AND id IN ({placeholders})",
-        (ticket["workflow_id"], *label_ids),  # noqa: S608
+        f"SELECT id FROM labels WHERE workflow_id = ? AND id IN ({placeholders})",  # noqa: S608
+        (ticket["workflow_id"], *label_ids),
     )
     valid_ids = {r["id"] for r in valid}
     invalid = set(label_ids) - valid_ids

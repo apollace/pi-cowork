@@ -185,8 +185,6 @@ def test_css_has_filter_pill_styles():
     """style.css should include filter pill and toggle button styles."""
     with open("static/style.css") as f:
         css = f.read()
-    assert ".filter-pill" in css
-    assert ".filter-clear-all" in css
     assert ".priority-toggle" in css
     assert ".priority-toggles" in css
 

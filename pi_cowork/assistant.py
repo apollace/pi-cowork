@@ -216,6 +216,171 @@ def _get_assistant_system_prompt(cfg, board_id=None):
     return prompt
 
 
+def _resolve_board_id(data):
+    """Validate and resolve board_id from request data.
+
+    Returns ``(board_id, board, error_response)``.
+    ``error_response`` is a Flask ``Response`` tuple when validation fails,
+    otherwise ``None``.
+    """
+    board_id = data.get("board_id")
+    if board_id is not None:
+        try:
+            board_id = int(board_id)
+        except (ValueError, TypeError):
+            return None, None, (jsonify({"error": "board_id must be an integer"}), 400)
+        board = _get_board(board_id)
+        if not board:
+            return None, None, (jsonify({"error": "board not found"}), 404)
+        return board_id, board, None
+    return None, None, None
+
+
+def _save_user_message_and_get_history(scope, message):
+    """Persist user message and return full conversation history."""
+    if scope is not None:
+        run_db(
+            "INSERT INTO assistant_messages (board_id, role, content) VALUES (?, ?, ?)",
+            (scope, "user", message),
+        )
+        rows = query_db(
+            "SELECT role, content FROM assistant_messages WHERE board_id = ? ORDER BY created_at, id",
+            (scope,),
+        )
+    else:
+        run_db(
+            "INSERT INTO assistant_messages (role, content) VALUES (?, ?)",
+            ("user", message),
+        )
+        rows = query_db("SELECT role, content FROM assistant_messages WHERE board_id IS NULL ORDER BY created_at, id")
+    return rows
+
+
+def _build_context_text(rows, cfg, data, board_id, board):
+    """Assemble the context text sent to the ``pi`` CLI."""
+    history_parts = [f"{r['role'].upper()}: {r['content']}" for r in rows]
+    context_text = "\n\n".join(history_parts)
+
+    extra_context = []
+    if cfg.get("auto_context") and data.get("page_url"):
+        extra_context.append(f"Current page context: {data['page_url']}")
+    if board_id is not None and board:
+        extra_context.append(f"Current board context: {board['name']} (board_id={board_id})")
+    if extra_context:
+        context_text = "\n\n".join(extra_context + [context_text])
+    return context_text
+
+
+def _poll_queue_event(proc, q, run, last_keepalive):
+    """Get next event from the assistant reader queue.
+
+    Handles keepalive generation when the queue is empty and the process is
+    still running.  Returns ``(event, last_keepalive, is_keepalive)``.
+    """
+    while True:
+        try:
+            return q.get(timeout=0.5), last_keepalive, False
+        except queue.Empty:
+            if proc.poll() is not None:
+                returncode = proc.wait()
+                stderr_text = proc.stderr.read().strip() if hasattr(proc.stderr, "read") else ""
+                if run.cancelled:
+                    event = {"type": "stopped"}
+                elif returncode != 0:
+                    event = {"type": "error", "error": stderr_text or f"exit code {returncode}"}
+                else:
+                    event = {"type": "done"}
+                return event, last_keepalive, False
+            now = time.monotonic()
+            if now - last_keepalive >= 25:
+                return {"type": "_keepalive"}, now, True
+
+
+def _process_stdout_closed(proc, run):
+    """Wait for the assistant process to finish and return a terminal event."""
+    returncode = proc.wait()
+    stderr_text = proc.stderr.read().strip() if hasattr(proc.stderr, "read") else ""
+    if run.cancelled:
+        return {"type": "stopped"}
+    elif returncode != 0:
+        return {"type": "error", "error": stderr_text or f"exit code {returncode}"}
+    else:
+        return {"type": "done"}
+
+
+def _yield_for_event(event, run):
+    """Return ``(yield_string, should_break)`` for a single assistant event."""
+    etype = event.get("type")
+    if etype == "text_delta":
+        run.accumulated_text.append(event.get("chunk", ""))
+        return f"data: {json.dumps(event)}\n\n", False
+    elif etype == "thinking_delta":
+        run.accumulated_thinking.append(event.get("chunk", ""))
+        return f"event: thinking\ndata: {json.dumps(event)}\n\n", False
+    elif etype == "toolcall_start":
+        payload = json.dumps({"type": "tool_start", "name": event.get("name", "")})
+        return f"event: status\ndata: {payload}\n\n", False
+    elif etype == "toolcall_end":
+        payload = json.dumps({"type": "tool_end", "name": event.get("name", "")})
+        return f"event: status\ndata: {payload}\n\n", False
+    elif etype == "done":
+        event["full_text"] = "".join(run.accumulated_text)
+        return f"event: done\ndata: {json.dumps(event)}\n\n", True
+    elif etype == "error":
+        return f"event: error\ndata: {json.dumps(event)}\n\n", True
+    elif etype == "stopped":
+        event["partial"] = "".join(run.accumulated_text)
+        return f"event: stopped\ndata: {json.dumps(event)}\n\n", True
+    return None, False
+
+
+def _cleanup_assistant_run(proc, run, scope, _app):
+    """Terminate the process and persist the assistant response."""
+    if proc.poll() is None:
+        with contextlib.suppress(ProcessLookupError, OSError):
+            os.kill(proc.pid, signal.SIGTERM)
+    full_text = "".join(run.accumulated_text)
+    if full_text:
+        with _app.app_context():
+            if scope is not None:
+                run_db(
+                    "INSERT INTO assistant_messages (board_id, role, content) VALUES (?, ?, ?)",
+                    (scope, "assistant", full_text),
+                )
+            else:
+                run_db(
+                    "INSERT INTO assistant_messages (role, content) VALUES (?, ?)",
+                    ("assistant", full_text),
+                )
+    with _assistant_runs_lock:
+        if _ASSISTANT_RUNS.get(scope) is run:
+            del _ASSISTANT_RUNS[scope]
+
+
+def _assistant_stream_generator(proc, q, run, scope, _app):
+    """SSE generator that yields NDJSON events from the ``pi`` assistant process."""
+    last_keepalive = time.monotonic()
+    try:
+        while True:
+            event, last_keepalive, is_keepalive = _poll_queue_event(proc, q, run, last_keepalive)
+            if is_keepalive:
+                yield ": keepalive\n\n"
+                continue
+
+            event = _normalize_ndjson_event(event)
+
+            if event.get("type") == "_stdout_closed":
+                event = _process_stdout_closed(proc, run)
+
+            yield_str, should_break = _yield_for_event(event, run)
+            if yield_str:
+                yield yield_str
+            if should_break:
+                break
+    finally:
+        _cleanup_assistant_run(proc, run, scope, _app)
+
+
 # ---------------------------------------------------------------------------
 # Assistant API routes
 # ---------------------------------------------------------------------------
@@ -228,44 +393,16 @@ def api_assistant_chat():
     if not message:
         return jsonify({"error": "message is required"}), 400
 
-    board_id = data.get("board_id")
-    if board_id is not None:
-        try:
-            board_id = int(board_id)
-        except (ValueError, TypeError):
-            return jsonify({"error": "board_id must be an integer"}), 400
-        board = _get_board(board_id)
-        if not board:
-            return jsonify({"error": "board not found"}), 404
+    board_id, board, error = _resolve_board_id(data)
+    if error:
+        return error
 
     scope = board_id
 
     with _get_lock(scope):
         cfg = _get_assistant_config()
-
-        if scope is not None:
-            run_db(
-                "INSERT INTO assistant_messages (board_id, role, content) VALUES (?, ?, ?)", (scope, "user", message)
-            )
-            rows = query_db(
-                "SELECT role, content FROM assistant_messages WHERE board_id = ? ORDER BY created_at, id", (scope,)
-            )
-        else:
-            run_db("INSERT INTO assistant_messages (role, content) VALUES (?, ?)", ("user", message))
-            rows = query_db(
-                "SELECT role, content FROM assistant_messages WHERE board_id IS NULL ORDER BY created_at, id"
-            )
-
-        history_parts = [f"{r['role'].upper()}: {r['content']}" for r in rows]
-        context_text = "\n\n".join(history_parts)
-
-        extra_context = []
-        if cfg.get("auto_context") and data.get("page_url"):
-            extra_context.append(f"Current page context: {data['page_url']}")
-        if board_id is not None and board:
-            extra_context.append(f"Current board context: {board['name']} (board_id={board_id})")
-        if extra_context:
-            context_text = "\n\n".join(extra_context + [context_text])
+        rows = _save_user_message_and_get_history(scope, message)
+        context_text = _build_context_text(rows, cfg, data, board_id, board)
 
         thinking = cfg.get("thinking")
         model = cfg.get("model")
@@ -292,7 +429,7 @@ def api_assistant_chat():
             cmd += ["--model", model]
         cmd += [context_text]
 
-        proc = subprocess.Popen(
+        proc = subprocess.Popen(  # noqa: S603
             cmd,
             cwd=work_dir,
             stdout=subprocess.PIPE,
@@ -309,90 +446,11 @@ def api_assistant_chat():
 
     _app = current_app._get_current_object()
 
-    def _generator():
-        last_keepalive = time.monotonic()
-        try:
-            while True:
-                try:
-                    event = q.get(timeout=0.5)
-                except queue.Empty:
-                    if proc.poll() is not None:
-                        try:
-                            event = q.get(timeout=0.2)
-                        except queue.Empty:
-                            returncode = proc.wait()
-                            stderr_text = proc.stderr.read().strip() if hasattr(proc.stderr, "read") else ""
-                            if run.cancelled:
-                                event = {"type": "stopped"}
-                            elif returncode != 0:
-                                event = {"type": "error", "error": stderr_text or f"exit code {returncode}"}
-                            else:
-                                event = {"type": "done"}
-                    else:
-                        now = time.monotonic()
-                        if now - last_keepalive >= 25:
-                            last_keepalive = now
-                            yield ": keepalive\n\n"
-                        continue
-
-                event = _normalize_ndjson_event(event)
-
-                if event.get("type") == "_stdout_closed":
-                    returncode = proc.wait()
-                    stderr_text = proc.stderr.read().strip() if hasattr(proc.stderr, "read") else ""
-                    if run.cancelled:
-                        event = {"type": "stopped"}
-                    elif returncode != 0:
-                        event = {"type": "error", "error": stderr_text or f"exit code {returncode}"}
-                    else:
-                        event = {"type": "done"}
-
-                if event.get("type") == "text_delta":
-                    run.accumulated_text.append(event.get("chunk", ""))
-                    yield f"data: {json.dumps(event)}\n\n"
-                elif event.get("type") == "thinking_delta":
-                    run.accumulated_thinking.append(event.get("chunk", ""))
-                    yield f"event: thinking\ndata: {json.dumps(event)}\n\n"
-                elif event.get("type") == "toolcall_start":
-                    yield f"event: status\ndata: {json.dumps({'type': 'tool_start', 'name': event.get('name', '')})}\n\n"
-                elif event.get("type") == "toolcall_end":
-                    yield f"event: status\ndata: {json.dumps({'type': 'tool_end', 'name': event.get('name', '')})}\n\n"
-                elif event.get("type") == "done":
-                    event["full_text"] = "".join(run.accumulated_text)
-                    yield f"event: done\ndata: {json.dumps(event)}\n\n"
-                    break
-                elif event.get("type") == "error":
-                    yield f"event: error\ndata: {json.dumps(event)}\n\n"
-                    break
-                elif event.get("type") == "stopped":
-                    event["partial"] = "".join(run.accumulated_text)
-                    yield f"event: stopped\ndata: {json.dumps(event)}\n\n"
-                    break
-        finally:
-            if proc.poll() is None:
-                with contextlib.suppress(ProcessLookupError, OSError):
-                    os.kill(proc.pid, signal.SIGTERM)
-            full_text = "".join(run.accumulated_text)
-            if full_text:
-                with _app.app_context():
-                    if scope is not None:
-                        run_db(
-                            "INSERT INTO assistant_messages (board_id, role, content) VALUES (?, ?, ?)",
-                            (scope, "assistant", full_text),
-                        )
-                    else:
-                        run_db("INSERT INTO assistant_messages (role, content) VALUES (?, ?)", ("assistant", full_text))
-            with _assistant_runs_lock:
-                if _ASSISTANT_RUNS.get(scope) is run:
-                    del _ASSISTANT_RUNS[scope]
-
-    # In test mode, materialise the generator so side effects (DB writes in
-    # finally) run before the test client returns.  Production keeps true
-    # streaming.
+    gen = _assistant_stream_generator(proc, q, run, scope, _app)
     if request.environ.get("SERVER_NAME") == "localhost" or current_app.config.get("TESTING"):
-        body = b"".join(chunk.encode("utf-8") for chunk in _generator())
+        body = b"".join(chunk.encode("utf-8") for chunk in gen)
         return Response(body, mimetype="text/event-stream")
-    return Response(_generator(), mimetype="text/event-stream")
+    return Response(gen, mimetype="text/event-stream")
 
 
 @assistant_bp.route("/api/assistant/stop", methods=["POST"])
@@ -423,7 +481,8 @@ def api_assistant_history():
         )
     else:
         rows = query_db(
-            "SELECT id, role, content, created_at FROM assistant_messages WHERE board_id IS NULL ORDER BY created_at, id"
+            "SELECT id, role, content, created_at FROM assistant_messages"
+            " WHERE board_id IS NULL ORDER BY created_at, id"
         )
     return jsonify([row_to_dict(r) for r in rows])
 
@@ -475,7 +534,7 @@ def api_assistant_compact():
             cmd += ["--model", model]
 
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # noqa: S603
                 cmd, cwd=work_dir, capture_output=True, text=True, timeout=60, input='{"type":"compact"}'
             )
             if result.returncode != 0:
@@ -532,7 +591,7 @@ def api_assistant_reset():
             cmd += ["--model", model]
 
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # noqa: S603
                 cmd, cwd=work_dir, capture_output=True, text=True, timeout=60, input='{"type":"new_session"}'
             )
             if result.returncode != 0:
@@ -606,7 +665,10 @@ def api_assistant_config_put():
 
     run_db(
         """
-        INSERT INTO assistant_config (id, enabled, model, thinking, working_directory, system_prompt, auto_context, api_endpoints, updated_at)
+        INSERT INTO assistant_config (
+            id, enabled, model, thinking, working_directory,
+            system_prompt, auto_context, api_endpoints, updated_at
+        )
         VALUES (1, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(id) DO UPDATE SET
             enabled = excluded.enabled,
@@ -631,7 +693,8 @@ def api_assistant_config_put():
 @assistant_bp.route("/api/assistant/saved-prompts", methods=["GET"])
 def api_assistant_saved_prompts_list():
     rows = query_db(
-        "SELECT id, name, prompt_text, sort_order, created_at FROM assistant_saved_prompts ORDER BY sort_order, created_at"
+        "SELECT id, name, prompt_text, sort_order, created_at"
+        " FROM assistant_saved_prompts ORDER BY sort_order, created_at"
     )
     return jsonify([row_to_dict(r) for r in rows])
 

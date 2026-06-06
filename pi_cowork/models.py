@@ -379,8 +379,8 @@ def set_ticket_labels(ticket_id, workflow_id, label_ids):
     if label_ids:
         placeholders = ",".join("?" * len(label_ids))
         valid = query_db(
-            f"SELECT id FROM labels WHERE workflow_id = ? AND id IN ({placeholders})",
-            (workflow_id, *label_ids),  # noqa: S608
+            f"SELECT id FROM labels WHERE workflow_id = ? AND id IN ({placeholders})",  # noqa: S608
+            (workflow_id, *label_ids),
         )
         valid_ids = {r["id"] for r in valid}
         for lid in valid_ids:
