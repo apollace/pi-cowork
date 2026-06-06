@@ -1,8 +1,23 @@
+import io
 import json
 import os
+import signal
 from unittest.mock import patch, MagicMock
 
 from pi_cowork.config import ASSISTANT_SESSION_DIR
+
+
+def _make_mock_popen(ndjson='', stderr='', returncode=0):
+    """Return a side-effect function that creates a mock Popen with NDJSON stdout."""
+    def _fake(*args, **kwargs):
+        proc = MagicMock()
+        proc.stdout = io.StringIO(ndjson)
+        proc.stderr = io.StringIO(stderr)
+        proc.pid = 12345
+        proc.poll.return_value = None
+        proc.wait.return_value = returncode
+        return proc
+    return _fake
 
 
 # ---------------------------------------------------------------------------
@@ -139,16 +154,25 @@ def test_put_config_rejects_non_list_api_endpoints(client):
 
 
 # ---------------------------------------------------------------------------
-# Chat
+# Chat — SSE streaming
 # ---------------------------------------------------------------------------
 
+def test_chat_sse_content_type(client):
+    ndjson = '{"type":"text_delta","chunk":"Hello"}\n{"type":"done"}\n'
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=_make_mock_popen(ndjson=ndjson)):
+        res = client.post('/api/assistant/chat', json={'message': 'Hi'})
+    assert res.status_code == 200
+    assert res.mimetype == 'text/event-stream'
+
+
 def test_chat_stores_messages_and_returns_response(client):
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='Hello there', stderr='', returncode=0)
+    ndjson = '{"type":"text_delta","chunk":"Hello there"}\n{"type":"done"}\n'
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=_make_mock_popen(ndjson=ndjson)):
         res = client.post('/api/assistant/chat', json={'message': 'Hi'})
         assert res.status_code == 200
-        data = json.loads(res.data)
-        assert data['response'] == 'Hello there'
+        body = res.data.decode('utf-8')
+        assert 'Hello there' in body
+        assert 'event: done' in body
 
     history = client.get('/api/assistant/history')
     rows = json.loads(history.data)
@@ -170,49 +194,57 @@ def test_chat_requires_message(client):
 
 
 def test_chat_error_handling(client):
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='', stderr='pi not found', returncode=127)
+    """Non-zero exit code with stderr should produce SSE error event."""
+    fake = _make_mock_popen(ndjson='', stderr='pi not found', returncode=127)
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=fake):
         res = client.post('/api/assistant/chat', json={'message': 'Hi'})
         assert res.status_code == 200
-        data = json.loads(res.data)
-        assert 'Assistant error' in data['response']
+        body = res.data.decode('utf-8')
+        assert 'event: error' in body
+        assert 'pi not found' in body
+
+    history = client.get('/api/assistant/history')
+    rows = json.loads(history.data)
+    # No assistant message inserted because accumulated_text is empty
+    assert len(rows) == 1
+    assert rows[0]['role'] == 'user'
 
 
 def test_chat_uses_config_system_prompt_and_api_docs(client):
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='Response', stderr='', returncode=0)
+    with patch('pi_cowork.assistant.subprocess.Popen') as mock_popen:
+        mock_popen.side_effect = _make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')
         client.put('/api/assistant/config', json={
             'system_prompt': 'Custom system prompt',
         })
         res = client.post('/api/assistant/chat', json={'message': 'Hi'})
         assert res.status_code == 200
-        cmd = mock_run.call_args[0][0]
+        cmd = mock_popen.call_args[0][0]
         system_prompt = cmd[cmd.index('--system-prompt') + 1]
         assert 'Custom system prompt' in system_prompt
         assert 'API Documentation' in system_prompt
 
 
 def test_chat_system_prompt_defaults_include_api_docs(client):
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='Response', stderr='', returncode=0)
+    with patch('pi_cowork.assistant.subprocess.Popen') as mock_popen:
+        mock_popen.side_effect = _make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')
         client.put('/api/assistant/config', json={'system_prompt': None})
         res = client.post('/api/assistant/chat', json={'message': 'Hi'})
         assert res.status_code == 200
-        cmd = mock_run.call_args[0][0]
+        cmd = mock_popen.call_args[0][0]
         system_prompt = cmd[cmd.index('--system-prompt') + 1]
         assert 'pi-CoWork Assistant' in system_prompt
         assert 'API Documentation' in system_prompt
 
 
 def test_chat_prompt_includes_selected_endpoints(client):
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='Response', stderr='', returncode=0)
+    with patch('pi_cowork.assistant.subprocess.Popen') as mock_popen:
+        mock_popen.side_effect = _make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')
         client.put('/api/assistant/config', json={
             'api_endpoints': ['boards_list', 'workflows_list'],
         })
         res = client.post('/api/assistant/chat', json={'message': 'Hi'})
         assert res.status_code == 200
-        cmd = mock_run.call_args[0][0]
+        cmd = mock_popen.call_args[0][0]
         system_prompt = cmd[cmd.index('--system-prompt') + 1]
         assert '/api/boards' in system_prompt
         assert '/api/workflows' in system_prompt
@@ -220,12 +252,12 @@ def test_chat_prompt_includes_selected_endpoints(client):
 
 
 def test_chat_prompt_default_includes_all_endpoints(client):
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='Response', stderr='', returncode=0)
+    with patch('pi_cowork.assistant.subprocess.Popen') as mock_popen:
+        mock_popen.side_effect = _make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')
         client.put('/api/assistant/config', json={'api_endpoints': None})
         res = client.post('/api/assistant/chat', json={'message': 'Hi'})
         assert res.status_code == 200
-        cmd = mock_run.call_args[0][0]
+        cmd = mock_popen.call_args[0][0]
         system_prompt = cmd[cmd.index('--system-prompt') + 1]
         assert '/api/tickets/' in system_prompt
         assert '/api/boards' in system_prompt
@@ -235,41 +267,141 @@ def test_chat_prompt_default_includes_all_endpoints(client):
 
 
 def test_chat_uses_config_model_and_thinking(client):
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='Response', stderr='', returncode=0)
+    with patch('pi_cowork.assistant.subprocess.Popen') as mock_popen:
+        mock_popen.side_effect = _make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')
         client.put('/api/assistant/config', json={
             'model': 'custom-model',
             'thinking': 'low',
         })
         res = client.post('/api/assistant/chat', json={'message': 'Hi'})
         assert res.status_code == 200
-        cmd = mock_run.call_args[0][0]
+        cmd = mock_popen.call_args[0][0]
         assert '--model' in cmd
         assert cmd[cmd.index('--model') + 1] == 'custom-model'
         assert '--thinking' in cmd
         assert cmd[cmd.index('--thinking') + 1] == 'low'
 
 
+def test_chat_json_mode_flag(client):
+    """Chat command must include '--mode json'."""
+    with patch('pi_cowork.assistant.subprocess.Popen') as mock_popen:
+        mock_popen.side_effect = _make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')
+        res = client.post('/api/assistant/chat', json={'message': 'Hi'})
+        assert res.status_code == 200
+        cmd = mock_popen.call_args[0][0]
+        assert '--mode' in cmd
+        assert cmd[cmd.index('--mode') + 1] == 'json'
+
+
 def test_chat_injects_page_url_when_auto_context_enabled(client):
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='Response', stderr='', returncode=0)
+    with patch('pi_cowork.assistant.subprocess.Popen') as mock_popen:
+        mock_popen.side_effect = _make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')
         client.put('/api/assistant/config', json={'auto_context': True})
         res = client.post('/api/assistant/chat', json={'message': 'Hi', 'page_url': '/board'})
         assert res.status_code == 200
-        cmd = mock_run.call_args[0][0]
+        cmd = mock_popen.call_args[0][0]
         prompt = cmd[-1]
         assert 'Current page context: /board' in prompt
 
 
 def test_chat_does_not_inject_page_url_when_auto_context_disabled(client):
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='Response', stderr='', returncode=0)
+    with patch('pi_cowork.assistant.subprocess.Popen') as mock_popen:
+        mock_popen.side_effect = _make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')
         client.put('/api/assistant/config', json={'auto_context': False})
         res = client.post('/api/assistant/chat', json={'message': 'Hi', 'page_url': '/board'})
         assert res.status_code == 200
-        cmd = mock_run.call_args[0][0]
+        cmd = mock_popen.call_args[0][0]
         prompt = cmd[-1]
         assert 'Current page context:' not in prompt
+
+
+def test_chat_text_delta_streaming(client):
+    ndjson = '{"type":"text_delta","chunk":"Hello"}\n{"type":"text_delta","chunk":" world"}\n{"type":"done"}\n'
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=_make_mock_popen(ndjson=ndjson)):
+        res = client.post('/api/assistant/chat', json={'message': 'Hi'})
+        assert res.status_code == 200
+        body = res.data.decode('utf-8')
+        assert 'Hello' in body
+        assert ' world' in body
+        assert 'event: done' in body
+        # Full text should appear in done payload
+        assert 'Hello world' in body
+
+
+def test_chat_done_event_has_full_text(client):
+    ndjson = '{"type":"text_delta","chunk":"Full reply"}\n{"type":"done"}\n'
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=_make_mock_popen(ndjson=ndjson)):
+        res = client.post('/api/assistant/chat', json={'message': 'Hi'})
+        assert res.status_code == 200
+        body = res.data.decode('utf-8')
+        assert 'event: done' in body
+        assert 'Full reply' in body
+
+    history = client.get('/api/assistant/history')
+    rows = json.loads(history.data)
+    assert len(rows) == 2
+    assert rows[1]['content'] == 'Full reply'
+
+
+def test_chat_json_error_event(client):
+    """When NDJSON contains an error event, SSE should forward it."""
+    ndjson = '{"type":"error","error":"model failure"}\n'
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=_make_mock_popen(ndjson=ndjson, returncode=0)):
+        res = client.post('/api/assistant/chat', json={'message': 'Hi'})
+        assert res.status_code == 200
+        body = res.data.decode('utf-8')
+        assert 'event: error' in body
+        assert 'model failure' in body
+
+    history = client.get('/api/assistant/history')
+    # No assistant message because no text was accumulated
+    assert len(json.loads(history.data)) == 1
+
+
+def test_chat_sequential_requests_not_blocked(client):
+    """Two sequential requests should both complete without deadlock."""
+    fake = _make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=fake):
+        res1 = client.post('/api/assistant/chat', json={'message': 'M1'})
+        assert res1.status_code == 200
+        res2 = client.post('/api/assistant/chat', json={'message': 'M2'})
+        assert res2.status_code == 200
+
+    history = client.get('/api/assistant/history')
+    rows = json.loads(history.data)
+    assert len(rows) == 4
+
+
+# ---------------------------------------------------------------------------
+# Stop
+# ---------------------------------------------------------------------------
+
+def test_stop_endpoint_kills_active_run(client):
+    from pi_cowork.assistant import _AssistantRun, _ASSISTANT_RUNS, _assistant_runs_lock
+    fake_proc = MagicMock()
+    fake_proc.poll.return_value = None
+    fake_proc.pid = 99999
+    run = _AssistantRun(fake_proc, None)
+    with _assistant_runs_lock:
+        _ASSISTANT_RUNS[None] = run
+
+    with patch('pi_cowork.assistant.os.kill') as mock_kill:
+        res = client.post('/api/assistant/stop', json={})
+        assert res.status_code == 200
+        data = json.loads(res.data)
+        assert data['success'] is True
+        mock_kill.assert_called_once_with(99999, signal.SIGTERM)
+
+    # Clean up
+    with _assistant_runs_lock:
+        _ASSISTANT_RUNS.pop(None, None)
+
+
+def test_stop_endpoint_returns_false_when_no_run(client):
+    res = client.post('/api/assistant/stop', json={})
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    assert data['success'] is False
 
 
 # ---------------------------------------------------------------------------
@@ -283,8 +415,8 @@ def test_history_empty(client):
 
 
 def test_history_returns_messages(client):
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='A', stderr='', returncode=0)
+    ndjson = '{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n'
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=_make_mock_popen(ndjson=ndjson)):
         client.post('/api/assistant/chat', json={'message': 'M1'})
 
     res = client.get('/api/assistant/history')
@@ -300,8 +432,7 @@ def test_history_returns_messages(client):
 # ---------------------------------------------------------------------------
 
 def test_compact_summarizes_and_clears(client):
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='A', stderr='', returncode=0)
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=_make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')):
         client.post('/api/assistant/chat', json={'message': 'M1'})
         client.post('/api/assistant/chat', json={'message': 'M2'})
 
@@ -343,8 +474,7 @@ def test_compact_empty_db(client):
 
 
 def test_compact_uses_config_model_and_thinking(client):
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='A', stderr='', returncode=0)
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=_make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')):
         client.post('/api/assistant/chat', json={'message': 'M1'})
 
     client.put('/api/assistant/config', json={
@@ -370,8 +500,7 @@ def test_compact_uses_config_model_and_thinking(client):
 # ---------------------------------------------------------------------------
 
 def test_reset_clears_all(client):
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='A', stderr='', returncode=0)
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=_make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')):
         client.post('/api/assistant/chat', json={'message': 'Hi'})
 
     os.makedirs(ASSISTANT_SESSION_DIR, exist_ok=True)
@@ -407,12 +536,13 @@ def test_reset_clears_all(client):
 # ---------------------------------------------------------------------------
 
 def test_board_chat_stores_messages_with_board_id(client, default_board):
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='Board reply', stderr='', returncode=0)
+    ndjson = '{"type":"text_delta","chunk":"Board reply"}\n{"type":"done"}\n'
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=_make_mock_popen(ndjson=ndjson)):
         res = client.post('/api/assistant/chat', json={'message': 'Hi board', 'board_id': default_board['id']})
         assert res.status_code == 200
-        data = json.loads(res.data)
-        assert data['response'] == 'Board reply'
+        body = res.data.decode('utf-8')
+        assert 'Board reply' in body
+        assert 'event: done' in body
 
     # Board history should contain the messages
     history = client.get(f'/api/assistant/history?board_id={default_board["id"]}')
@@ -433,8 +563,8 @@ def test_board_chat_isolated_per_board(client, default_board, new_workflow):
     })
     board2 = json.loads(res.data)
 
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='Reply', stderr='', returncode=0)
+    fake = _make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=fake):
         client.post('/api/assistant/chat', json={'message': 'B1', 'board_id': default_board['id']})
         client.post('/api/assistant/chat', json={'message': 'B2', 'board_id': board2['id']})
 
@@ -447,8 +577,8 @@ def test_board_chat_isolated_per_board(client, default_board, new_workflow):
 
 
 def test_board_chat_isolated_from_global(client, default_board):
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='Reply', stderr='', returncode=0)
+    fake = _make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=fake):
         client.post('/api/assistant/chat', json={'message': 'Global'})
         client.post('/api/assistant/chat', json={'message': 'Board', 'board_id': default_board['id']})
 
@@ -461,14 +591,14 @@ def test_board_chat_isolated_from_global(client, default_board):
 
 
 def test_board_chat_injects_board_context(client, default_board):
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='Reply', stderr='', returncode=0)
+    with patch('pi_cowork.assistant.subprocess.Popen') as mock_popen:
+        mock_popen.side_effect = _make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')
         client.post('/api/assistant/chat', json={
             'message': 'Hi',
             'board_id': default_board['id'],
             'page_url': '/board',
         })
-        cmd = mock_run.call_args[0][0]
+        cmd = mock_popen.call_args[0][0]
         prompt = cmd[-1]
         assert f"Current board context: {default_board['name']}" in prompt
         assert f"board_id={default_board['id']}" in prompt
@@ -483,10 +613,10 @@ def test_board_chat_uses_board_working_directory(client, default_board):
         'workflow_id': default_board['workflow_id'],
         'working_directory': custom_dir,
     })
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='Reply', stderr='', returncode=0)
+    with patch('pi_cowork.assistant.subprocess.Popen') as mock_popen:
+        mock_popen.side_effect = _make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')
         client.post('/api/assistant/chat', json={'message': 'Hi', 'board_id': default_board['id']})
-        cwd = mock_run.call_args.kwargs.get('cwd')
+        cwd = mock_popen.call_args.kwargs.get('cwd')
         assert custom_dir in cwd
 
 
@@ -498,8 +628,8 @@ def test_board_compact_affects_only_targeted_board(client, default_board, new_wo
     })
     board2 = json.loads(res.data)
 
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='R', stderr='', returncode=0)
+    fake = _make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=fake):
         client.post('/api/assistant/chat', json={'message': 'B1', 'board_id': default_board['id']})
         client.post('/api/assistant/chat', json={'message': 'B2', 'board_id': board2['id']})
 
@@ -522,8 +652,8 @@ def test_board_reset_affects_only_targeted_board(client, default_board, new_work
     })
     board2 = json.loads(res.data)
 
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='R', stderr='', returncode=0)
+    fake = _make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=fake):
         client.post('/api/assistant/chat', json={'message': 'B1', 'board_id': default_board['id']})
         client.post('/api/assistant/chat', json={'message': 'B2', 'board_id': board2['id']})
 
@@ -539,8 +669,8 @@ def test_board_reset_affects_only_targeted_board(client, default_board, new_work
 
 
 def test_board_deletion_cascades_to_board_assistant_messages(client, default_board):
-    with patch('app.subprocess.run') as mock_run:
-        mock_run.return_value = MagicMock(stdout='R', stderr='', returncode=0)
+    fake = _make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=fake):
         client.post('/api/assistant/chat', json={'message': 'B1', 'board_id': default_board['id']})
 
     h = json.loads(client.get(f'/api/assistant/history?board_id={default_board["id"]}').data)
