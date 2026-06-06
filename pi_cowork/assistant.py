@@ -71,13 +71,17 @@ def _normalize_ndjson_event(event):
 
     Current pi CLI emits nested events:
       {"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"..."}}
-      {"type":"turn_end"}
+      {"type":"agent_end"}
 
     Legacy format was flat:
       {"type":"text_delta","chunk":"..."}
       {"type":"done"}
 
     Pass through events that are already in flat format.
+
+    Note: ``agent_end`` (not ``turn_end``) is the true stream terminator.
+    The pi CLI may emit multiple ``turn_end`` events during a multi-turn
+    tool call, so only ``agent_end`` is mapped to ``done``.
     """
     if not isinstance(event, dict):
         return event
@@ -93,8 +97,8 @@ def _normalize_ndjson_event(event):
             normalized["chunk"] = inner["delta"]
         return normalized
 
-    # Map turn_end -> done
-    if event.get("type") == "turn_end":
+    # Map agent_end -> done (turn_end is NOT the final event)
+    if event.get("type") == "agent_end":
         return {"type": "done"}
 
     return event
