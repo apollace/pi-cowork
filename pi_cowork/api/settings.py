@@ -9,16 +9,16 @@ from pi_cowork.db import query_db, row_to_dict
 from pi_cowork.models import get_setting, set_setting
 from pi_cowork.system_logs import add_log
 
-settings_bp = Blueprint('settings', __name__)
+settings_bp = Blueprint("settings", __name__)
 
 
-@settings_bp.route('/api/settings', methods=['GET'])
+@settings_bp.route("/api/settings", methods=["GET"])
 def api_settings():
     rows = query_db("SELECT key, value, updated_at FROM settings ORDER BY key")
     return jsonify([row_to_dict(r) for r in rows])
 
 
-@settings_bp.route('/api/settings/<key>', methods=['GET'])
+@settings_bp.route("/api/settings/<key>", methods=["GET"])
 def api_get_setting(key):
     value = get_setting(key)
     if value is None:
@@ -26,19 +26,24 @@ def api_get_setting(key):
     return jsonify({"key": key, "value": value})
 
 
-@settings_bp.route('/api/settings/<key>', methods=['PUT'])
+@settings_bp.route("/api/settings/<key>", methods=["PUT"])
 def api_update_setting(key):
     data = request.get_json() or {}
-    value = data.get('value')
+    value = data.get("value")
     if value is None:
         return jsonify({"error": "value is required"}), 400
     value = str(value).strip()
     set_setting(key, value)
-    add_log('INFO', 'db_change', f'UPDATE settings/{key}', details={'operation': 'UPDATE', 'table': 'settings', 'record_id': key})
+    add_log(
+        "INFO",
+        "db_change",
+        f"UPDATE settings/{key}",
+        details={"operation": "UPDATE", "table": "settings", "record_id": key},
+    )
     return jsonify({"success": True})
 
 
-@settings_bp.route('/api/settings/purge-terminal-logs', methods=['POST'])
+@settings_bp.route("/api/settings/purge-terminal-logs", methods=["POST"])
 def api_purge_terminal_logs():
     """Delete file-based agent logs (.pi-logs dirs) for tickets in terminal statuses."""
     # Find all tickets in terminal statuses along with their board's working_directory
@@ -54,15 +59,16 @@ def api_purge_terminal_logs():
     purged_dirs = []
 
     for row in rows:
-        ticket_id = row['ticket_id']
-        working_directory = row['working_directory'] or 'workspace'
+        ticket_id = row["ticket_id"]
+        working_directory = row["working_directory"] or "workspace"
 
         # Resolve working directory (may be relative to PROJECT_ROOT)
         if not os.path.isabs(working_directory):
             from pi_cowork import config
+
             working_directory = os.path.join(config.PROJECT_ROOT, working_directory)
 
-        log_dir = os.path.join(working_directory, '.pi-logs', f'ticket-{ticket_id}')
+        log_dir = os.path.join(working_directory, ".pi-logs", f"ticket-{ticket_id}")
 
         if os.path.isdir(log_dir):
             try:
@@ -72,8 +78,11 @@ def api_purge_terminal_logs():
             except OSError:
                 pass  # Skip dirs we can't delete
 
-    add_log('INFO', 'db_change',
-            f'Purged terminal ticket logs: {purged_count} directories removed',
-            details={'purged_count': purged_count, 'dirs': purged_dirs})
+    add_log(
+        "INFO",
+        "db_change",
+        f"Purged terminal ticket logs: {purged_count} directories removed",
+        details={"purged_count": purged_count, "dirs": purged_dirs},
+    )
 
-    return jsonify({'success': True, 'purged_count': purged_count})
+    return jsonify({"success": True, "purged_count": purged_count})

@@ -70,10 +70,8 @@ class TestSSEEventHandlers:
         )
         assert events_match, "Expected boardEvents array"
         # After the boardEvents forEach, the handler should call debounceSync
-        after_events = js[events_match.end():events_match.end() + 400]
-        assert "debounceSync(500)" in after_events, (
-            "Expected boardEvents listener to call debounceSync(500)"
-        )
+        after_events = js[events_match.end() : events_match.end() + 400]
+        assert "debounceSync(500)" in after_events, "Expected boardEvents listener to call debounceSync(500)"
 
     def test_sse_open_uses_debounceRefresh(self):
         js = _read_js()
@@ -83,9 +81,7 @@ class TestSSEEventHandlers:
             js,
             re.DOTALL,
         )
-        assert open_match, (
-            "Expected sse:open to call debounceRefresh(100) for full resync"
-        )
+        assert open_match, "Expected sse:open to call debounceRefresh(100) for full resync"
 
     def test_no_debounceRefresh_in_boardEvents(self):
         js = _read_js()
@@ -97,9 +93,7 @@ class TestSSEEventHandlers:
         )
         assert events_match
         handler_body = events_match.group(2)
-        assert "debounceRefresh" not in handler_body, (
-            "boardEvents listener should not call debounceRefresh"
-        )
+        assert "debounceRefresh" not in handler_body, "boardEvents listener should not call debounceRefresh"
 
 
 class TestBuildCardIdentity:

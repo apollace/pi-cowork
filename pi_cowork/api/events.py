@@ -6,14 +6,22 @@ import queue
 import threading
 import time
 
-from flask import Blueprint, Response, request, stream_with_context, current_app
+from flask import Blueprint, Response, current_app, request, stream_with_context
 
-from pi_cowork.events import bus
 from pi_cowork.events import (
-    TICKET_CREATED, TICKET_STATUS_CHANGED, TICKET_UPDATED,
-    COMMENT_ADDED, QUESTION_ASKED, QUESTION_ANSWERED,
-    AGENT_SPAWNED, AGENT_COMPLETED, AGENT_FAILED,
-    GATE_PENDING, GATE_PASSED, GATE_FAILED,
+    AGENT_COMPLETED,
+    AGENT_FAILED,
+    AGENT_SPAWNED,
+    COMMENT_ADDED,
+    GATE_FAILED,
+    GATE_PASSED,
+    GATE_PENDING,
+    QUESTION_ANSWERED,
+    QUESTION_ASKED,
+    TICKET_CREATED,
+    TICKET_STATUS_CHANGED,
+    TICKET_UPDATED,
+    bus,
 )
 
 logger = logging.getLogger(__name__)
@@ -22,25 +30,34 @@ MAX_CONNECTIONS = 50
 RETRY_AFTER_SECONDS = 5
 
 EVENT_NAMES = [
-    TICKET_CREATED, TICKET_STATUS_CHANGED, TICKET_UPDATED,
-    COMMENT_ADDED, QUESTION_ASKED, QUESTION_ANSWERED,
-    AGENT_SPAWNED, AGENT_COMPLETED, AGENT_FAILED,
-    GATE_PENDING, GATE_PASSED, GATE_FAILED,
+    TICKET_CREATED,
+    TICKET_STATUS_CHANGED,
+    TICKET_UPDATED,
+    COMMENT_ADDED,
+    QUESTION_ASKED,
+    QUESTION_ANSWERED,
+    AGENT_SPAWNED,
+    AGENT_COMPLETED,
+    AGENT_FAILED,
+    GATE_PENDING,
+    GATE_PASSED,
+    GATE_FAILED,
 ]
 
 # Module-level connection tracking
 _active_connections = 0
 _connections_lock = threading.Lock()
 
-events_bp = Blueprint('events', __name__)
+events_bp = Blueprint("events", __name__)
 
 
 def _get_board_id_for_ticket(ticket_id):
     """Look up the board_id for a given ticket_id. Returns None if not found."""
     try:
         from pi_cowork.db import query_db
+
         row = query_db("SELECT board_id FROM tickets WHERE id = ?", (ticket_id,), one=True)
-        return row['board_id'] if row else None
+        return row["board_id"] if row else None
     except Exception:
         return None
 
@@ -49,13 +66,14 @@ def _get_ticket_updated_at(ticket_id):
     """Look up the updated_at timestamp for a given ticket_id. Returns None if not found."""
     try:
         from pi_cowork.db import query_db
+
         row = query_db("SELECT updated_at FROM tickets WHERE id = ?", (ticket_id,), one=True)
-        return row['updated_at'] if row else None
+        return row["updated_at"] if row else None
     except Exception:
         return None
 
 
-@events_bp.route('/api/events/stream')
+@events_bp.route("/api/events/stream")
 def api_events_stream():
     """SSE endpoint that forwards EventBus events to browser clients.
 
@@ -67,7 +85,7 @@ def api_events_stream():
     """
     global _active_connections
 
-    board_id = request.args.get('board_id', type=int)
+    board_id = request.args.get("board_id", type=int)
 
     # Connection limit guard
     with _connections_lock:
@@ -75,17 +93,17 @@ def api_events_stream():
             return Response(
                 "Too many SSE connections",
                 status=429,
-                mimetype='text/plain',
-                headers={'Retry-After': str(RETRY_AFTER_SECONDS)},
+                mimetype="text/plain",
+                headers={"Retry-After": str(RETRY_AFTER_SECONDS)},
             )
         _active_connections += 1
 
     return current_app.response_class(
         stream_with_context(_event_generator(board_id)),
-        mimetype='text/event-stream',
+        mimetype="text/event-stream",
         headers={
-            'Cache-Control': 'no-cache',
-            'X-Accel-Buffering': 'no',
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
         },
     )
 
@@ -128,10 +146,10 @@ def _event_generator(board_id):
 
             # Board ID filtering
             if board_id is not None:
-                event_board_id = kwargs.get('board_id')
+                event_board_id = kwargs.get("board_id")
                 if event_board_id is None:
                     # Try to resolve from ticket_id
-                    ticket_id = kwargs.get('ticket_id')
+                    ticket_id = kwargs.get("ticket_id")
                     if ticket_id is not None:
                         event_board_id = _get_board_id_for_ticket(ticket_id)
                 if event_board_id != board_id:
@@ -140,11 +158,11 @@ def _event_generator(board_id):
             # Enrich with updated_at for ticket-related events
             # This enables SSE clients to detect changes without re-fetching
             data = dict(kwargs)
-            ticket_id = data.get('ticket_id')
-            if ticket_id is not None and 'updated_at' not in data:
+            ticket_id = data.get("ticket_id")
+            if ticket_id is not None and "updated_at" not in data:
                 updated_at = _get_ticket_updated_at(ticket_id)
                 if updated_at is not None:
-                    data['updated_at'] = updated_at
+                    data["updated_at"] = updated_at
 
             # Build SSE frame
             yield f"event: {event_name}\ndata: {json.dumps(data)}\n\n"

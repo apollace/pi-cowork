@@ -44,7 +44,8 @@ class EventBus:
             except Exception:
                 logger.exception(
                     "EventBus handler %r raised for event %s",
-                    handler, event_name,
+                    handler,
+                    event_name,
                 )
 
     def subscribers(self, event_name):
@@ -55,19 +56,19 @@ class EventBus:
 # ---------------------------------------------------------------------------
 # Event name constants
 # ---------------------------------------------------------------------------
-TICKET_CREATED = 'ticket.created'
-TICKET_STATUS_CHANGED = 'ticket.status_changed'
-TICKET_UPDATED = 'ticket.updated'
-COMMENT_ADDED = 'comment.added'
-QUESTION_ASKED = 'question.asked'
-QUESTION_ANSWERED = 'question.answered'
-AGENT_SPAWNED = 'agent.spawned'
-AGENT_COMPLETED = 'agent.completed'
-AGENT_FAILED = 'agent.failed'
-GATE_PENDING = 'gate.pending'
-GATE_PASSED = 'gate.passed'
-GATE_FAILED = 'gate.failed'
-RECURRING_TRIGGERED = 'recurring.triggered'
+TICKET_CREATED = "ticket.created"
+TICKET_STATUS_CHANGED = "ticket.status_changed"
+TICKET_UPDATED = "ticket.updated"
+COMMENT_ADDED = "comment.added"
+QUESTION_ASKED = "question.asked"
+QUESTION_ANSWERED = "question.answered"
+AGENT_SPAWNED = "agent.spawned"
+AGENT_COMPLETED = "agent.completed"
+AGENT_FAILED = "agent.failed"
+GATE_PENDING = "gate.pending"
+GATE_PASSED = "gate.passed"
+GATE_FAILED = "gate.failed"
+RECURRING_TRIGGERED = "recurring.triggered"
 
 # Module-level singleton
 bus = EventBus()

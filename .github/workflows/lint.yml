@@ -1,0 +1,37 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install ruff
+
+      - name: Install JS dependencies
+        run: npm install --no-save eslint@9.21.0 @eslint/js@9.21.0 globals@15.15.0 jscpd@3.5.10
+
+      - name: Run Ruff (lint + format check)
+        run: ./scripts/lint.sh
+
+      - name: Run tests
+        run: ./scripts/test.sh -q

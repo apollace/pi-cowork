@@ -519,10 +519,10 @@ DEFAULT_ENDPOINT_KEYS = [
 # Gate review write access allows agents to approve their own quality gates,
 # defeating the purpose of manual approval.
 AGENT_RESTRICTED_KEYS = {
-    'gate_reviews_list',
-    'quality_gates_list',
-    'notifications_list',
-    'db_backup_restore',
+    "gate_reviews_list",
+    "quality_gates_list",
+    "notifications_list",
+    "db_backup_restore",
 }
 
 
@@ -546,7 +546,7 @@ def build_api_docs(selected_keys, ticket_id, base_url=None, has_gates=False, boa
         closing advisory line.
     """
     if base_url is None:
-        base_url = get_config('pi_cowork_url')
+        base_url = get_config("pi_cowork_url")
 
     keys = selected_keys if selected_keys else DEFAULT_ENDPOINT_KEYS
     # Filter out restricted endpoints that agents must never see
@@ -557,16 +557,17 @@ def build_api_docs(selected_keys, ticket_id, base_url=None, has_gates=False, boa
         if entry is None:
             continue
         for line_template in entry["doc_lines"]:
-            line = line_template.replace("{base_url}", base_url).replace(
-                "{ticket_id}", str(ticket_id)
-            ).replace("{board_id}", str(board_id or "")).replace(
-                "{workflow_id}", str(workflow_id or "")
+            line = (
+                line_template.replace("{base_url}", base_url)
+                .replace("{ticket_id}", str(ticket_id))
+                .replace("{board_id}", str(board_id or ""))
+                .replace("{workflow_id}", str(workflow_id or ""))
             )
             lines.append(line)
 
     # Conditional gate_pending note for ticket_put
     if has_gates and "ticket_put" in keys:
-        gate_note = f' If response has "gate_pending": true, the move is blocked for human approval — you MUST NOT attempt to approve or bypass the gate review yourself. Add a comment and stop.'
+        gate_note = ' If response has "gate_pending": true, the move is blocked for human approval — you MUST NOT attempt to approve or bypass the gate review yourself. Add a comment and stop.'
         # Append it to the first line that contains ticket_put
         for i, line in enumerate(lines):
             if ticket_id and f"/api/tickets/{ticket_id}" in line and "PUT" in line:
@@ -579,9 +580,7 @@ def build_api_docs(selected_keys, ticket_id, base_url=None, has_gates=False, boa
         "Never attempt to approve your own work or bypass a gate review.\n"
         "If you are blocked by a gate, add a comment to the ticket and stop."
     )
-    lines.append(
-        "If anything is ambiguous or missing, ask clarifying questions before proceeding."
-    )
+    lines.append("If anything is ambiguous or missing, ask clarifying questions before proceeding.")
     return "\n".join(lines)
 
 
@@ -605,7 +604,7 @@ def build_assistant_api_docs(selected_keys, base_url=None):
         line per selected endpoint.
     """
     if base_url is None:
-        base_url = get_config('pi_cowork_url')
+        base_url = get_config("pi_cowork_url")
 
     keys = selected_keys if selected_keys else ALL_ENDPOINT_KEYS
     lines = ["## API Documentation"]

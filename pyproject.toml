@@ -1,0 +1,55 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+exclude = [
+    "__pycache__",
+    ".git",
+    ".pytest_cache",
+    ".pi-logs",
+    ".pi-sessions",
+    "pi-cowork.db",
+    "backups",
+    "workspace",
+]
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E", "W",
+    # Pyflakes
+    "F",
+    # flake8-bugbear (possible bugs)
+    "B",
+    # mccabe complexity
+    "C901",
+    # flake8-bandit (security)
+    "S",
+    # isort
+    "I",
+    # pyupgrade
+    "UP",
+    # pep8-naming
+    "N",
+    # simplify
+    "SIM",
+    # async
+    "ASYNC",
+]
+ignore = [
+    # bandit: assert used (fine in tests, but also common in quick sanity checks)
+    "S101",
+    # bandit: hardcoded bind to all interfaces (common in dev servers)
+    "S104",
+    # bandit: use of `random` (we use secrets where it matters)
+    "S311",
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

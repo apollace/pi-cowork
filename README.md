@@ -71,6 +71,114 @@ The default config ships with **8 agents and 14 statuses** for a startup/content
 ./stop.sh         # reads the PID file and stops the background process
 ```
 
+## Development Setup
+
+If you want to contribute or run in development mode (foreground, with auto-reload awareness):
+
+### Prerequisites
+
+- **Python 3.11+**
+- **Node.js 18+** — required for the JavaScript linting toolchain (ESLint, jscpd)
+- **The `pi` CLI** — see [Quick Start](#1-the-pi-agent-required)
+
+### 1. Python Environment
+
+```bash
+git clone https://github.com/apollace/pi-cowork.git
+cd pi-cowork
+
+python3 -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\activate
+pip install -r requirements.txt   # Flask, pytest, croniter
+```
+
+### 2. Dev Tools (Linting & Formatting)
+
+Install the linting stack:
+
+```bash
+# Python — ruff (replaces flake8, black, isort, bandit)
+pip install ruff
+
+# JavaScript — ESLint + jscpd (duplication detector)
+npm install --no-save eslint@9.21.0 @eslint/js@9.21.0 globals@15.15.0 jscpd@3.5.10
+```
+
+**Optional — pre-commit hooks** (runs lint on every commit):
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+### 3. Run in Dev Mode (Foreground)
+
+```bash
+venv/bin/python3 app.py          # foreground, prints logs to stdout
+# or, with a custom port:
+PI_PORT=5057 venv/bin/python3 app.py
+```
+
+Dev mode is useful when you want to see tracebacks and logs in the terminal, or when working with a debugger.
+
+### 4. Run Tests
+
+```bash
+./scripts/test.sh
+```
+
+The test suite has **930+ tests**. For a quick sanity check:
+
+```bash
+./scripts/test.sh -q
+```
+
+### 5. Run the Linter
+
+```bash
+# Check everything (Python + JS + duplication)
+./scripts/lint.sh
+
+# Auto-fix what can be auto-fixed
+./scripts/lint-fix.sh
+```
+
+Or run individual tools:
+
+```bash
+# Python
+ruff check .
+ruff format --check .
+
+# JavaScript
+npx eslint static/
+
+# Duplication (cross-language)
+npx jscpd --config .jscpd.json
+```
+
+### 6. Project Structure for Contributors
+
+| Path | What to know |
+|------|-------------|
+| `app.py` | Entry point — thin wrapper, most logic lives in the package |
+| `pi_cowork/` | Application package — all business logic, models, API blueprints |
+| `pi_cowork/agents.py` | Agent spawning, queue, watchers, drain loop |
+| `pi_cowork/models.py` | Data access layer (SQLite) |
+| `pi_cowork/api/` | REST API blueprints — one file per domain |
+| `static/` | Vanilla JS — no build step, no framework |
+| `templates/` | Jinja2 templates — server-rendered pages |
+| `tests/` | pytest suite — mirrors the API structure |
+| `schema.sql` | DB schema + seed data |
+
+Key conventions:
+- **No frontend framework** — vanilla JS only
+- **No ORM** — raw SQLite via `sqlite3`
+- **SQLite WAL mode** — writes never block readers
+- **SSE for real-time** — no polling in the UI
+- **`updated_at` bump rule** — any operation that changes ticket-related data (comments, labels, questions, branch) must also run `UPDATE tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+- **Tests before commit** — run the full suite; CI also runs lint
+
 ## How It Works
 
 ### 1. Define Your Workflow

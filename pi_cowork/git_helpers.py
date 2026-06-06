@@ -23,16 +23,18 @@ def _git(cmd, cwd, check=False):
     try:
         return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=check)
     except Exception as e:
+
         class _FakeResult:
             returncode = -1
-            stdout = ''
+            stdout = ""
             stderr = str(e)
+
         return _FakeResult()
 
 
 def is_git_repo(path):
     """Check if a directory is inside a git repository."""
-    return os.path.isdir(os.path.join(path, '.git'))
+    return os.path.isdir(os.path.join(path, ".git"))
 
 
 def _get_default_remote_branch(cwd):
@@ -41,21 +43,21 @@ def _get_default_remote_branch(cwd):
     Uses ``git symbolic-ref refs/remotes/origin/HEAD``, falling back to
     probing ``origin/main`` and ``origin/master``.
     """
-    result = _git(['git', 'symbolic-ref', 'refs/remotes/origin/HEAD'], cwd=cwd)
+    result = _git(["git", "symbolic-ref", "refs/remotes/origin/HEAD"], cwd=cwd)
     if result.returncode == 0 and result.stdout.strip():
         ref = result.stdout.strip()
-        return ref.replace('refs/remotes/', '')
+        return ref.replace("refs/remotes/", "")
     # Fallback: try main, then master
-    for fb in ['main', 'master']:
-        r = _git(['git', 'rev-parse', '--verify', f'origin/{fb}'], cwd=cwd)
+    for fb in ["main", "master"]:
+        r = _git(["git", "rev-parse", "--verify", f"origin/{fb}"], cwd=cwd)
         if r.returncode == 0:
-            return f'origin/{fb}'
+            return f"origin/{fb}"
     return None
 
 
 def get_current_branch(cwd):
     """Return the currently checked-out branch name, or None."""
-    result = _git(['git', 'branch', '--show-current'], cwd=cwd)
+    result = _git(["git", "branch", "--show-current"], cwd=cwd)
     if result.returncode == 0:
         return result.stdout.strip() or None
     return None
@@ -69,9 +71,9 @@ def make_branch_name(ticket_id, title):
     - Consecutive hyphens collapsed
     - Slug portion truncated to 60 characters
     """
-    slug = re.sub(r'[^\w\s-]', '', (title or 'untitled').lower())
-    slug = re.sub(r'[\s]+', '-', slug)
-    slug = re.sub(r'-+', '-', slug).strip('-')
+    slug = re.sub(r"[^\w\s-]", "", (title or "untitled").lower())
+    slug = re.sub(r"[\s]+", "-", slug)
+    slug = re.sub(r"-+", "-", slug).strip("-")
     if len(slug) > 60:
         slug = slug[:60]
     return f"ticket-{ticket_id}-{slug}"
@@ -79,10 +81,10 @@ def make_branch_name(ticket_id, title):
 
 def branch_exists(working_directory, branch_name):
     """Check if a branch exists locally or on the remote."""
-    local = _git(['git', 'rev-parse', '--verify', branch_name], cwd=working_directory)
+    local = _git(["git", "rev-parse", "--verify", branch_name], cwd=working_directory)
     if local.returncode == 0:
         return True
-    remote = _git(['git', 'rev-parse', '--verify', f'origin/{branch_name}'], cwd=working_directory)
+    remote = _git(["git", "rev-parse", "--verify", f"origin/{branch_name}"], cwd=working_directory)
     return remote.returncode == 0
 
 
@@ -105,55 +107,53 @@ def ensure_ticket_branch(working_directory, ticket_id, ticket_title, existing_br
     # Stash any dirty working tree before branch operations so that
     # checkout / rebase cannot fail because of uncommitted files.
     stashed = False
-    status_res = _git(['git', 'status', '--porcelain'], cwd=working_directory)
+    status_res = _git(["git", "status", "--porcelain"], cwd=working_directory)
     if status_res.returncode == 0 and status_res.stdout.strip():
-        stash_res = _git(['git', 'stash', 'push', '-m', 'pi-cowork auto-stash'], cwd=working_directory)
+        stash_res = _git(["git", "stash", "push", "-m", "pi-cowork auto-stash"], cwd=working_directory)
         if stash_res.returncode == 0:
             stashed = True
         else:
             logger.warning("git stash failed in %s: %s", working_directory, stash_res.stderr.strip())
 
     # Fetch quietly
-    fetch_res = _git(['git', 'fetch', 'origin'], cwd=working_directory)
+    fetch_res = _git(["git", "fetch", "origin"], cwd=working_directory)
     if fetch_res.returncode != 0:
         logger.warning("git fetch failed in %s: %s", working_directory, fetch_res.stderr.strip())
 
     # Check if branch already exists locally
-    verify = _git(['git', 'rev-parse', '--verify', branch], cwd=working_directory)
+    verify = _git(["git", "rev-parse", "--verify", branch], cwd=working_directory)
     if verify.returncode == 0:
         # Exists: checkout and rebase onto latest default so the agent works
         # from the most up-to-date base, reducing merge conflicts later.
-        checkout_res = _git(['git', 'checkout', branch], cwd=working_directory)
+        checkout_res = _git(["git", "checkout", branch], cwd=working_directory)
         if checkout_res.returncode != 0:
             logger.error("git checkout %s failed: %s", branch, checkout_res.stderr.strip())
             if stashed:
-                _git(['git', 'stash', 'pop'], cwd=working_directory)
+                _git(["git", "stash", "pop"], cwd=working_directory)
             return None
-        rebase_res = _git(['git', 'rebase', default_remote], cwd=working_directory)
+        rebase_res = _git(["git", "rebase", default_remote], cwd=working_directory)
         if rebase_res.returncode != 0:
             logger.warning(
-                "git rebase %s onto %s failed: %s; aborting rebase",
-                branch, default_remote, rebase_res.stderr.strip()
+                "git rebase %s onto %s failed: %s; aborting rebase", branch, default_remote, rebase_res.stderr.strip()
             )
-            _git(['git', 'rebase', '--abort'], cwd=working_directory)
+            _git(["git", "rebase", "--abort"], cwd=working_directory)
     else:
-        create_res = _git(['git', 'checkout', '-b', branch, default_remote], cwd=working_directory)
+        create_res = _git(["git", "checkout", "-b", branch, default_remote], cwd=working_directory)
         if create_res.returncode != 0:
-            logger.error(
-                "Failed to create branch %s from %s: %s",
-                branch, default_remote, create_res.stderr.strip()
-            )
+            logger.error("Failed to create branch %s from %s: %s", branch, default_remote, create_res.stderr.strip())
             if stashed:
-                _git(['git', 'stash', 'pop'], cwd=working_directory)
+                _git(["git", "stash", "pop"], cwd=working_directory)
             return None
 
     # Restore stashed changes so the agent can continue interrupted work.
     if stashed:
-        pop_res = _git(['git', 'stash', 'pop'], cwd=working_directory)
+        pop_res = _git(["git", "stash", "pop"], cwd=working_directory)
         if pop_res.returncode != 0:
             logger.warning(
                 "git stash pop failed in %s after switching to %s: %s",
-                working_directory, branch, pop_res.stderr.strip()
+                working_directory,
+                branch,
+                pop_res.stderr.strip(),
             )
 
     # Persist branch on ticket if it changed or was generated

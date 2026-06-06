@@ -5,30 +5,30 @@ import sqlite3
 
 from flask import Blueprint, jsonify, request
 
-from pi_cowork.db import query_db, run_db, row_to_dict
-from pi_cowork.models import get_workflow, get_agent, get_agents
-from pi_cowork.api.pi_models import get_thinking_levels, get_model_ids
-from pi_cowork.api_docs import ENDPOINT_REGISTRY, _REGISTRY_MAP
+from pi_cowork.api.pi_models import get_model_ids, get_thinking_levels
+from pi_cowork.api_docs import _REGISTRY_MAP
+from pi_cowork.db import query_db, run_db
+from pi_cowork.models import get_agent, get_agents, get_workflow
 
-agents_api_bp = Blueprint('agents_api', __name__)
+agents_api_bp = Blueprint("agents_api", __name__)
 
 
-@agents_api_bp.route('/api/agents', methods=['GET'])
+@agents_api_bp.route("/api/agents", methods=["GET"])
 def api_agents():
-    workflow_id = request.args.get('workflow_id', type=int)
+    workflow_id = request.args.get("workflow_id", type=int)
     if workflow_id is None:
         return jsonify({"error": "workflow_id is required"}), 400
     return jsonify(get_agents(workflow_id))
 
 
-@agents_api_bp.route('/api/agents', methods=['POST'])
+@agents_api_bp.route("/api/agents", methods=["POST"])
 def api_create_agent():
     data = request.get_json() or {}
-    name = (data.get('name') or '').strip()
-    description = (data.get('description') or '').strip()
-    workflow_id = data.get('workflow_id')
-    model = data.get('model') or None
-    thinking = data.get('thinking') or None
+    name = (data.get("name") or "").strip()
+    description = (data.get("description") or "").strip()
+    workflow_id = data.get("workflow_id")
+    model = data.get("model") or None
+    thinking = data.get("thinking") or None
     if not name or not description:
         return jsonify({"error": "name and description are required"}), 400
     if workflow_id is None:
@@ -45,7 +45,7 @@ def api_create_agent():
         if valid_models and model not in valid_models:
             return jsonify({"error": f"model must be one of: {', '.join(valid_models)}"}), 400
 
-    api_endpoints = data.get('api_endpoints')
+    api_endpoints = data.get("api_endpoints")
     if api_endpoints is not None:
         if not isinstance(api_endpoints, list):
             return jsonify({"error": "api_endpoints must be a list of endpoint keys or null"}), 400
@@ -57,13 +57,16 @@ def api_create_agent():
         api_endpoints_json = None
 
     try:
-        cur = run_db("INSERT INTO agents (name, description, workflow_id, model, thinking, api_endpoints) VALUES (?, ?, ?, ?, ?, ?)", (name, description, workflow_id, model, thinking, api_endpoints_json))
+        cur = run_db(
+            "INSERT INTO agents (name, description, workflow_id, model, thinking, api_endpoints) VALUES (?, ?, ?, ?, ?, ?)",
+            (name, description, workflow_id, model, thinking, api_endpoints_json),
+        )
         return jsonify({"id": cur.lastrowid}), 201
     except sqlite3.IntegrityError:
         return jsonify({"error": "Agent name already exists"}), 409
 
 
-@agents_api_bp.route('/api/agents/<int:agent_id>', methods=['GET'])
+@agents_api_bp.route("/api/agents/<int:agent_id>", methods=["GET"])
 def api_get_agent(agent_id):
     agent = get_agent(agent_id)
     if not agent:
@@ -71,16 +74,16 @@ def api_get_agent(agent_id):
     return jsonify(agent)
 
 
-@agents_api_bp.route('/api/agents/<int:agent_id>', methods=['PUT'])
+@agents_api_bp.route("/api/agents/<int:agent_id>", methods=["PUT"])
 def api_update_agent(agent_id):
     agent = get_agent(agent_id)
     if not agent:
         return jsonify({"error": "Agent not found"}), 404
     data = request.get_json() or {}
-    name = data.get('name')
-    description = data.get('description')
-    model = data.get('model')
-    thinking = data.get('thinking')
+    name = data.get("name")
+    description = data.get("description")
+    model = data.get("model")
+    thinking = data.get("thinking")
     updates = []
     args = []
     if name is not None:
@@ -105,8 +108,8 @@ def api_update_agent(agent_id):
         # Empty string or null clears the override (sets DB value to NULL)
         args.append(thinking if thinking else None)
     # api_endpoints: list of keys → JSON string; null/None → NULL (use defaults)
-    if 'api_endpoints' in data:
-        api_endpoints = data.get('api_endpoints')
+    if "api_endpoints" in data:
+        api_endpoints = data.get("api_endpoints")
         if api_endpoints is not None:
             if not isinstance(api_endpoints, list):
                 return jsonify({"error": "api_endpoints must be a list of endpoint keys or null"}), 400
@@ -129,7 +132,7 @@ def api_update_agent(agent_id):
     return jsonify({"success": True})
 
 
-@agents_api_bp.route('/api/agents/<int:agent_id>', methods=['DELETE'])
+@agents_api_bp.route("/api/agents/<int:agent_id>", methods=["DELETE"])
 def api_delete_agent(agent_id):
     in_use = query_db("SELECT 1 FROM statuses WHERE agent_id = ? LIMIT 1", (agent_id,), one=True)
     if in_use:

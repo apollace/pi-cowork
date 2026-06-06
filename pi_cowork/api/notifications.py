@@ -4,13 +4,14 @@ from flask import Blueprint, jsonify, request
 
 from pi_cowork.db import query_db, row_to_dict
 from pi_cowork.models import (
-    dismiss_notification, dismiss_all_notifications,
+    dismiss_all_notifications,
+    dismiss_notification,
 )
 
-notifications_bp = Blueprint('notifications', __name__)
+notifications_bp = Blueprint("notifications", __name__)
 
 
-@notifications_bp.route('/api/notifications', methods=['GET'])
+@notifications_bp.route("/api/notifications", methods=["GET"])
 def api_notifications():
     """Return derived notifications for pending manual gate reviews and unanswered questions,
     excluding any (ticket_id, type) pairs that have been dismissed."""
@@ -63,29 +64,29 @@ def api_notifications():
     notifications = []
     for row in gate_rows:
         d = row_to_dict(row)
-        d['type'] = 'gate_review'
-        d['message'] = f"{d['count']} pending gate approval(s)"
+        d["type"] = "gate_review"
+        d["message"] = f"{d['count']} pending gate approval(s)"
         notifications.append(d)
 
     for row in question_rows:
         d = row_to_dict(row)
-        d['type'] = 'question'
-        d['message'] = f"{d['count']} unanswered question(s)"
+        d["type"] = "question"
+        d["message"] = f"{d['count']} unanswered question(s)"
         notifications.append(d)
 
-    notifications.sort(key=lambda x: x['created_at'] or '', reverse=True)
+    notifications.sort(key=lambda x: x["created_at"] or "", reverse=True)
     return jsonify(notifications)
 
 
-@notifications_bp.route('/api/notifications/dismiss', methods=['PUT'])
+@notifications_bp.route("/api/notifications/dismiss", methods=["PUT"])
 def api_dismiss_notification():
     """Dismiss a single notification — hide it from the panel."""
     data = request.get_json() or {}
-    ticket_id = data.get('ticket_id')
-    notif_type = data.get('type')
+    ticket_id = data.get("ticket_id")
+    notif_type = data.get("type")
     if ticket_id is None or notif_type is None:
         return jsonify({"error": "ticket_id and type are required"}), 400
-    if notif_type not in ('gate_review', 'question'):
+    if notif_type not in ("gate_review", "question"):
         return jsonify({"error": "type must be 'gate_review' or 'question'"}), 400
     # Verify ticket exists
     ticket = query_db("SELECT id FROM tickets WHERE id = ?", (ticket_id,), one=True)
@@ -95,7 +96,7 @@ def api_dismiss_notification():
     return jsonify({"success": True})
 
 
-@notifications_bp.route('/api/notifications/dismiss-all', methods=['PUT'])
+@notifications_bp.route("/api/notifications/dismiss-all", methods=["PUT"])
 def api_dismiss_all_notifications():
     """Dismiss all current notifications."""
     dismiss_all_notifications()

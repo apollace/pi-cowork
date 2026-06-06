@@ -17,13 +17,13 @@ import pytest
 
 from pi_cowork.db import _migrate
 
-SCHEMA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'schema.sql')
+SCHEMA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "schema.sql")
 
 
 def _open_db(path):
     db = sqlite3.connect(path)
-    db.execute('PRAGMA foreign_keys = ON')
-    db.execute('PRAGMA journal_mode = WAL')
+    db.execute("PRAGMA foreign_keys = ON")
+    db.execute("PRAGMA journal_mode = WAL")
     return db
 
 
@@ -53,10 +53,10 @@ def _get_indexes(db):
 
 def _build_schema_only_db():
     """Create a temp DB from schema.sql only."""
-    fd, path = tempfile.mkstemp(suffix='.db')
+    fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
     db = _open_db(path)
-    with open(SCHEMA_PATH, 'r') as f:
+    with open(SCHEMA_PATH) as f:
         db.cursor().executescript(f.read())
     db.commit()
     return path, db
@@ -64,10 +64,10 @@ def _build_schema_only_db():
 
 def _build_full_db():
     """Create a temp DB from schema.sql + _migrate() (mirrors init_db)."""
-    fd, path = tempfile.mkstemp(suffix='.db')
+    fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
     db = _open_db(path)
-    with open(SCHEMA_PATH, 'r') as f:
+    with open(SCHEMA_PATH) as f:
         db.cursor().executescript(f.read())
     db.commit()
     _migrate(db)
@@ -95,14 +95,10 @@ class TestSchemaSync:
         missing_in_full = set(schema_tables) - set(full_tables)
         msg_parts = []
         if missing_in_schema:
-            msg_parts.append(
-                f"Tables in full DB but missing from schema.sql: {sorted(missing_in_schema)}"
-            )
+            msg_parts.append(f"Tables in full DB but missing from schema.sql: {sorted(missing_in_schema)}")
         if missing_in_full:
-            msg_parts.append(
-                f"Tables in schema.sql but missing from migrations: {sorted(missing_in_full)}"
-            )
-        assert not msg_parts, '\n'.join(msg_parts)
+            msg_parts.append(f"Tables in schema.sql but missing from migrations: {sorted(missing_in_full)}")
+        assert not msg_parts, "\n".join(msg_parts)
 
     def test_columns_match(self):
         """Every shared table has identical column definitions."""
@@ -120,15 +116,13 @@ class TestSchemaSync:
                 missing_in_full = schema_set - full_set
                 if missing_in_schema:
                     diffs.append(
-                        f"Table '{table}': columns in full DB but missing from schema.sql: "
-                        f"{sorted(missing_in_schema)}"
+                        f"Table '{table}': columns in full DB but missing from schema.sql: {sorted(missing_in_schema)}"
                     )
                 if missing_in_full:
                     diffs.append(
-                        f"Table '{table}': columns in schema.sql but missing from full DB: "
-                        f"{sorted(missing_in_full)}"
+                        f"Table '{table}': columns in schema.sql but missing from full DB: {sorted(missing_in_full)}"
                     )
-        assert not diffs, '\n'.join(diffs)
+        assert not diffs, "\n".join(diffs)
 
     def test_indexes_match(self):
         """All user-created indexes exist in both schemas."""
@@ -141,21 +135,14 @@ class TestSchemaSync:
         mismatched = []
         for name in set(full_dict) & set(schema_dict):
             if full_dict[name] != schema_dict[name]:
-                mismatched.append(
-                    f"Index '{name}': schema.sql has {schema_dict[name]}, "
-                    f"full DB has {full_dict[name]}"
-                )
+                mismatched.append(f"Index '{name}': schema.sql has {schema_dict[name]}, full DB has {full_dict[name]}")
         msg_parts = []
         if missing_in_schema:
             names = sorted(missing_in_schema)
-            msg_parts.append(
-                f"Indexes in full DB but missing from schema.sql: {names}"
-            )
+            msg_parts.append(f"Indexes in full DB but missing from schema.sql: {names}")
         if missing_in_full:
             names = sorted(missing_in_full)
-            msg_parts.append(
-                f"Indexes in schema.sql but missing from full DB: {names}"
-            )
+            msg_parts.append(f"Indexes in schema.sql but missing from full DB: {names}")
         if mismatched:
-            msg_parts.append(f"Index definitions differ:\n" + '\n'.join(mismatched))
-        assert not msg_parts, '\n'.join(msg_parts)
+            msg_parts.append("Index definitions differ:\n" + "\n".join(mismatched))
+        assert not msg_parts, "\n".join(msg_parts)
