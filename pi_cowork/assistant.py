@@ -66,6 +66,40 @@ def _stop_assistant_run(scope, timeout=5):
     return True
 
 
+def _normalize_ndjson_event(event):
+    """Normalize wrapped pi NDJSON events to flat legacy format.
+
+    Current pi CLI emits nested events:
+      {"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"..."}}
+      {"type":"turn_end"}
+
+    Legacy format was flat:
+      {"type":"text_delta","chunk":"..."}
+      {"type":"done"}
+
+    Pass through events that are already in flat format.
+    """
+    if not isinstance(event, dict):
+        return event
+
+    # Unwrap message_update wrapper
+    if event.get("type") == "message_update":
+        inner = event.get("assistantMessageEvent") or {}
+        if not inner:
+            return event
+        normalized = dict(inner)
+        # Map delta -> chunk for text/thinking deltas
+        if inner.get("type") in ("text_delta", "thinking_delta") and "delta" in inner:
+            normalized["chunk"] = inner["delta"]
+        return normalized
+
+    # Map turn_end -> done
+    if event.get("type") == "turn_end":
+        return {"type": "done"}
+
+    return event
+
+
 def _reader_thread(proc, q):
     """Read NDJSON lines from proc.stdout and push parsed events to queue."""
     try:
@@ -297,6 +331,8 @@ def api_assistant_chat():
                             last_keepalive = now
                             yield ": keepalive\n\n"
                         continue
+
+                event = _normalize_ndjson_event(event)
 
                 if event.get("type") == "_stdout_closed":
                     returncode = proc.wait()

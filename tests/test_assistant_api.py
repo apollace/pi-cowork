@@ -165,6 +165,50 @@ def test_chat_sse_content_type(client):
     assert res.mimetype == 'text/event-stream'
 
 
+def test_chat_wrapped_ndjson_format(client):
+    """Current pi CLI emits nested message_update events; verify normalization."""
+    ndjson = (
+        '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"Hello "}}\n'
+        '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"world"}}\n'
+        '{"type":"turn_end"}\n'
+    )
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=_make_mock_popen(ndjson=ndjson)):
+        res = client.post('/api/assistant/chat', json={'message': 'Hi'})
+        assert res.status_code == 200
+        body = res.data.decode('utf-8')
+        assert 'Hello ' in body
+        assert 'world' in body
+        assert 'event: done' in body
+
+    history = client.get('/api/assistant/history')
+    rows = json.loads(history.data)
+    assert len(rows) == 2
+    assert rows[0]['role'] == 'user'
+    assert rows[0]['content'] == 'Hi'
+    assert rows[1]['role'] == 'assistant'
+    assert rows[1]['content'] == 'Hello world'
+
+
+def test_chat_thinking_delta_wrapped_format(client):
+    """Wrapped thinking_delta should be normalized and streamed."""
+    ndjson = (
+        '{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","delta":"Hmm"}}\n'
+        '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"Answer"}}\n'
+        '{"type":"turn_end"}\n'
+    )
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=_make_mock_popen(ndjson=ndjson)):
+        res = client.post('/api/assistant/chat', json={'message': 'Hi'})
+        assert res.status_code == 200
+        body = res.data.decode('utf-8')
+        assert 'event: thinking' in body
+        assert 'Answer' in body
+        assert 'event: done' in body
+
+    history = client.get('/api/assistant/history')
+    rows = json.loads(history.data)
+    assert rows[1]['content'] == 'Answer'
+
+
 def test_chat_stores_messages_and_returns_response(client):
     ndjson = '{"type":"text_delta","chunk":"Hello there"}\n{"type":"done"}\n'
     with patch('pi_cowork.assistant.subprocess.Popen', side_effect=_make_mock_popen(ndjson=ndjson)):
