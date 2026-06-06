@@ -170,7 +170,7 @@ def test_chat_wrapped_ndjson_format(client):
     ndjson = (
         '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"Hello "}}\n'
         '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"world"}}\n'
-        '{"type":"turn_end"}\n'
+        '{"type":"agent_end"}\n'
     )
     with patch('pi_cowork.assistant.subprocess.Popen', side_effect=_make_mock_popen(ndjson=ndjson)):
         res = client.post('/api/assistant/chat', json={'message': 'Hi'})
@@ -194,7 +194,7 @@ def test_chat_thinking_delta_wrapped_format(client):
     ndjson = (
         '{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","delta":"Hmm"}}\n'
         '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"Answer"}}\n'
-        '{"type":"turn_end"}\n'
+        '{"type":"agent_end"}\n'
     )
     with patch('pi_cowork.assistant.subprocess.Popen', side_effect=_make_mock_popen(ndjson=ndjson)):
         res = client.post('/api/assistant/chat', json={'message': 'Hi'})
@@ -207,6 +207,52 @@ def test_chat_thinking_delta_wrapped_format(client):
     history = client.get('/api/assistant/history')
     rows = json.loads(history.data)
     assert rows[1]['content'] == 'Answer'
+
+
+def test_chat_multi_turn_tool_call_does_not_prematurely_end(client):
+    """Multiple turn_end events during a tool call must not break the stream.
+
+    Sequence: toolcall_start -> toolcall_end -> turn_end (after tool result)
+    -> text_delta chunks -> turn_end (after final response) -> agent_end.
+    Only agent_end should terminate the stream.
+    """
+    ndjson = (
+        '{"type":"toolcall_start","name":"search_web"}\n'
+        '{"type":"toolcall_end","name":"search_web"}\n'
+        '{"type":"turn_end"}\n'
+        '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"The"}}\n'
+        '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":" answer"}}\n'
+        '{"type":"turn_end"}\n'
+        '{"type":"agent_end"}\n'
+    )
+    with patch('pi_cowork.assistant.subprocess.Popen', side_effect=_make_mock_popen(ndjson=ndjson)):
+        res = client.post('/api/assistant/chat', json={'message': 'Hi'})
+        assert res.status_code == 200
+        body = res.data.decode('utf-8')
+
+    # Tool status events
+    assert 'tool_start' in body
+    assert 'tool_end' in body
+
+    # Text should be fully accumulated
+    assert 'The' in body
+    assert ' answer' in body
+
+    # Only one done event, at the very end
+    assert body.count('event: done') == 1
+    assert 'event: done' in body
+
+    # No premature error/stopped
+    assert 'event: error' not in body
+    assert 'event: stopped' not in body
+
+    history = client.get('/api/assistant/history')
+    rows = json.loads(history.data)
+    assert len(rows) == 2
+    assert rows[0]['role'] == 'user'
+    assert rows[0]['content'] == 'Hi'
+    assert rows[1]['role'] == 'assistant'
+    assert rows[1]['content'] == 'The answer'
 
 
 def test_chat_stores_messages_and_returns_response(client):
