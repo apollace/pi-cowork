@@ -63,7 +63,10 @@ class TestEventBus:
     def test_unsubscribe(self):
         eb = EventBus()
         results = []
-        handler = lambda **kw: results.append(1)
+
+        def handler(**kw):
+            return results.append(1)
+
         eb.subscribe("test.event", handler)
         eb.publish("test.event")
         assert len(results) == 1
@@ -73,7 +76,10 @@ class TestEventBus:
 
     def test_subscribers_method(self):
         eb = EventBus()
-        handler = lambda **kw: None
+
+        def handler(**kw):
+            return None
+
         eb.subscribe("test.event", handler)
         subs = eb.subscribers("test.event")
         assert handler in subs

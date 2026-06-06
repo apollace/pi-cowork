@@ -70,7 +70,7 @@ def test_per_card_rerun_button_removed_from_html(client, default_board):
     )
 
 
-def test_rerunAgent_function_removed_from_js(client, default_board):
+def test_rerun_agent_function_removed_from_js(client, default_board):
     """The `rerunAgent()` JavaScript function should not exist in the page."""
     ticket = _create_ticket(client, default_board["id"])
     tid = ticket["id"]
@@ -109,7 +109,8 @@ def test_no_rerun_text_inside_agent_run_cards(client, default_workflow, default_
 
     with client.application.app_context():
         app_module.run_db(
-            "UPDATE agent_runs SET status = 'completed', exit_code = 0, completed_at = datetime('now') WHERE ticket_id = ?",
+            "UPDATE agent_runs SET status = 'completed', exit_code = 0, "
+            "completed_at = datetime('now') WHERE ticket_id = ?",
             (tid,),
         )
 
@@ -147,7 +148,8 @@ def test_log_button_still_present_in_completed_runs(client, default_workflow, de
 
     with client.application.app_context():
         app_module.run_db(
-            "UPDATE agent_runs SET status = 'completed', exit_code = 0, completed_at = datetime('now') WHERE ticket_id = ?",
+            "UPDATE agent_runs SET status = 'completed', exit_code = 0, "
+            "completed_at = datetime('now') WHERE ticket_id = ?",
             (tid,),
         )
 
@@ -181,7 +183,8 @@ def test_rerun_via_spawn_api_still_works(client, default_workflow, default_board
     # Mark as completed
     with client.application.app_context():
         app_module.run_db(
-            "UPDATE agent_runs SET status = 'completed', exit_code = 0, completed_at = datetime('now') WHERE ticket_id = ?",
+            "UPDATE agent_runs SET status = 'completed', exit_code = 0, "
+            "completed_at = datetime('now') WHERE ticket_id = ?",
             (tid,),
         )
 

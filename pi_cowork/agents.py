@@ -482,7 +482,11 @@ def spawn_agent(ticket, status, agent, old_status_id=None):
         knowledge_block = "\n".join(lines)
 
     if transitions_line:
-        done_instruction = "When done: first add a comment to the ticket summarizing what you did, then update the ticket status to exactly one of the statuses listed above (or leave it where it is if you asked questions via the questions endpoint)."
+        done_instruction = (
+            "When done: first add a comment to the ticket summarizing what you did, "
+            "then update the ticket status to exactly one of the statuses listed "
+            "above (or leave it where it is if you asked questions via the questions endpoint)."
+        )
     else:
         done_instruction = "When done: add a comment to the ticket summarizing what you did, then you're finished."
 
@@ -532,7 +536,10 @@ API:
         if status_changed and old_status_id is not None:
             old_status = query_db("SELECT name FROM statuses WHERE id = ?", (old_status_id,), one=True)
             if old_status:
-                change_note = f'\nNote: This ticket was moved from "{old_status["name"]}" to "{status["name"]}" before you were spawned.\n'
+                change_note = (
+                    f'\nNote: This ticket was moved from "{old_status["name"]}" to "'
+                    + f'"{status["name"]}" before you were spawned.\n'
+                )
         context_msg = f"""Ticket #{ticket_id}: {ticket["title"]}
 {board_ctx}{git_info}{change_note}\nDescription:
 {ticket["body"] or "(no description)"}\nComments:
@@ -544,7 +551,8 @@ Your goal: {goal_line}
 
     system_prompt = f"""{agent["description"]}
 
-Your task and allowed actions change with each prompt. Always follow the instructions at the end of the prompt, not your general expertise.
+Your task and allowed actions change with each prompt. Always follow the instructions at\
+ the end of the prompt, not your general expertise.
 After completing your task, write a comment on the ticket summarizing what you did."""
 
     # Inject board long-term vision if present

@@ -80,14 +80,18 @@ def test_drain_queue_deletes_entry_on_spawn_true(client, default_workflow, defau
     tid2 = json.loads(ticket2.data)["id"]
 
     # First ticket takes the slot
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
 
     # Second ticket gets queued
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
 
     # Verify queued
     q_data = json.loads(client.get(f"/api/tickets/{tid2}").data)
@@ -102,12 +106,14 @@ def test_drain_queue_deletes_entry_on_spawn_true(client, default_workflow, defau
         db.commit()
 
     # Drain — spawn_agent returns True, so queue entry should be deleted
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9998)):
-        with patch("pi_cowork.agents._is_our_process", return_value=False):
-            with client.application.app_context():
-                from pi_cowork.agents import drain_queue
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9998)),
+        patch("pi_cowork.agents._is_our_process", return_value=False),
+        client.application.app_context(),
+    ):
+        from pi_cowork.agents import drain_queue
 
-                drain_queue()
+        drain_queue()
 
     q_data = json.loads(client.get(f"/api/tickets/{tid2}").data)
     assert q_data["queued"] is False, "Queue entry should be deleted when spawn_agent returns True"
@@ -144,14 +150,18 @@ def test_drain_queue_keeps_entry_on_spawn_false(client, default_workflow, defaul
     tid2 = json.loads(ticket2.data)["id"]
 
     # First ticket takes the slot
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
 
     # Second ticket gets queued
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
 
     # Free slot
     from pi_cowork.db import get_db
@@ -207,14 +217,18 @@ def test_drain_queue_racey_completion_still_deletes_entry(client, default_workfl
     tid2 = json.loads(ticket2.data)["id"]
 
     # First ticket takes the slot
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
 
     # Second ticket gets queued
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
 
     # Free slot
     from pi_cowork.db import get_db
@@ -227,12 +241,14 @@ def test_drain_queue_racey_completion_still_deletes_entry(client, default_workfl
     # Drain — spawn_agent will return True (it did create a run), but the run
     # may already be marked completed by watcher. Old code checked status='running'
     # which would fail. New code uses return value, so queue entry is deleted.
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9998)):
-        with patch("pi_cowork.agents._is_our_process", return_value=False):
-            with client.application.app_context():
-                from pi_cowork.agents import drain_queue
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9998)),
+        patch("pi_cowork.agents._is_our_process", return_value=False),
+        client.application.app_context(),
+    ):
+        from pi_cowork.agents import drain_queue
 
-                drain_queue()
+        drain_queue()
 
     # After drain, the queue entry should be gone (bug 1 fixed)
     q_data = json.loads(client.get(f"/api/tickets/{tid2}").data)
@@ -274,9 +290,11 @@ def test_direct_spawn_cleans_stale_queue_entry(client, default_workflow, default
 
     # First, queue the ticket by filling up the parallel limit to 0
     _set_limits(client, max_parallel=0, max_per_hour=10)
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
 
     # Verify it was queued
     q_data = json.loads(client.get(f"/api/tickets/{tid1}").data)
@@ -293,9 +311,11 @@ def test_direct_spawn_cleans_stale_queue_entry(client, default_workflow, default
         db.commit()
 
     # Trigger another spawn via the re-run endpoint (/api/tickets/<id>/spawn)
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9998)):
-        with patch("pi_cowork.agents._is_our_process", return_value=False):
-            client.post(f"/api/tickets/{tid1}/spawn")
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9998)),
+        patch("pi_cowork.agents._is_our_process", return_value=False),
+    ):
+        client.post(f"/api/tickets/{tid1}/spawn")
 
     # After direct spawn, the ticket should NOT be queued anymore
     q_data = json.loads(client.get(f"/api/tickets/{tid1}").data)
@@ -338,16 +358,20 @@ def test_no_duplicate_queue_entries(client, default_workflow, default_board):
     tid2 = json.loads(ticket2.data)["id"]
 
     # Fill up the parallel limit
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
 
     # Queue ticket2 multiple times (simulating repeated status changes)
     _set_limits(client, max_parallel=0, max_per_hour=10)
     for _ in range(3):
-        with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-            with patch("pi_cowork.agents._is_our_process", return_value=True):
-                client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
+        with (
+            patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+            patch("pi_cowork.agents._is_our_process", return_value=True),
+        ):
+            client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
 
     # Should have exactly ONE queue entry for ticket2 (not 3)
     from pi_cowork.db import query_db
@@ -390,15 +414,19 @@ def test_queue_entry_replaced_on_requeue(client, default_workflow, default_board
     tid2 = json.loads(ticket2.data)["id"]
 
     # Fill up the parallel limit
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
 
     # Queue ticket2 with 'rate' reason (set max_per_hour=0)
     _set_limits(client, max_parallel=1, max_per_hour=0)
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
 
     from pi_cowork.db import query_db
 
@@ -411,9 +439,11 @@ def test_queue_entry_replaced_on_requeue(client, default_workflow, default_board
 
     # Queue again (different reason: parallel, set max_parallel=0)
     _set_limits(client, max_parallel=0, max_per_hour=10)
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
 
     with client.application.app_context():
         entries_after = query_db(
@@ -457,9 +487,11 @@ def test_cleanup_runs_removes_queue_entries_with_running_agent(client, default_w
     tid1 = json.loads(ticket1.data)["id"]
 
     # Spawn a running agent for the ticket
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
 
     # Verify there's a running agent
     data = json.loads(client.get(f"/api/tickets/{tid1}").data)
@@ -525,7 +557,10 @@ def test_cleanup_runs_removes_old_queue_entries(client, default_workflow, defaul
     with client.application.app_context():
         db = get_db()
         db.execute(
-            "INSERT INTO agent_queue (ticket_id, status_id, agent_id, reason, queued_at) VALUES (?, ?, ?, 'parallel', datetime('now', '-3 hours'))",
+            (
+                "INSERT INTO agent_queue (ticket_id, status_id, agent_id, reason, queued_at) "
+                "VALUES (?, ?, ?, 'parallel', datetime('now', '-3 hours'))"
+            ),
             (tid1, id1, aid),
         )
         db.commit()
@@ -995,14 +1030,18 @@ def test_queued_label_removed_after_drain(client, default_workflow, default_boar
     tid2 = json.loads(ticket2.data)["id"]
 
     # First ticket takes the slot
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
 
     # Second ticket gets queued
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
 
     assert json.loads(client.get(f"/api/tickets/{tid2}").data)["queued"] is True
 
@@ -1014,12 +1053,14 @@ def test_queued_label_removed_after_drain(client, default_workflow, default_boar
         db.execute("UPDATE agent_runs SET status = 'completed' WHERE ticket_id = ?", (tid1,))
         db.commit()
 
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9998)):
-        with patch("pi_cowork.agents._is_our_process", return_value=False):
-            with client.application.app_context():
-                from pi_cowork.agents import drain_queue
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9998)),
+        patch("pi_cowork.agents._is_our_process", return_value=False),
+        client.application.app_context(),
+    ):
+        from pi_cowork.agents import drain_queue
 
-                drain_queue()
+        drain_queue()
 
     # The second ticket should no longer show as queued
     assert json.loads(client.get(f"/api/tickets/{tid2}").data)["queued"] is False
@@ -1057,14 +1098,18 @@ def test_bug1_race_condition_no_stale_queued_label(client, default_workflow, def
     tid2 = json.loads(t2.data)["id"]
 
     # First ticket takes the slot
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
 
     # Second ticket gets queued
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
 
     assert json.loads(client.get(f"/api/tickets/{tid2}").data)["queued"] is True
 
@@ -1093,18 +1138,23 @@ def test_bug1_race_condition_no_stale_queued_label(client, default_workflow, def
             with client.application.app_context():
                 d = get_db()
                 d.execute(
-                    "UPDATE agent_runs SET status = 'completed', completed_at = datetime('now') WHERE ticket_id = ? AND status = 'running'",
+                    (
+                        "UPDATE agent_runs SET status = 'completed', completed_at = datetime('now') "
+                        "WHERE ticket_id = ? AND status = 'running'"
+                    ),
                     (ticket["id"],),
                 )
                 d.commit()
         return result
 
-    with patch("pi_cowork.agents.spawn_agent", side_effect=spawn_and_complete):
-        with patch("pi_cowork.agents._is_our_process", return_value=False):
-            with client.application.app_context():
-                from pi_cowork.agents import drain_queue
+    with (
+        patch("pi_cowork.agents.spawn_agent", side_effect=spawn_and_complete),
+        patch("pi_cowork.agents._is_our_process", return_value=False),
+        client.application.app_context(),
+    ):
+        from pi_cowork.agents import drain_queue
 
-                drain_queue()
+        drain_queue()
 
     # The queue entry should be deleted even though the agent completed instantly
     assert spawned_return is True, f"spawn_agent should return True, got {spawned_return}"

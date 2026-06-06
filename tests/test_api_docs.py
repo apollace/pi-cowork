@@ -92,8 +92,8 @@ class TestBuildApiDocs:
             has_gates=True,
         )
         lines = result.split("\n")
-        put_line = [l for l in lines if "PUT" in l and "/api/tickets/1" in l]
-        boards_line = [l for l in lines if "/api/boards" in l]
+        put_line = [line for line in lines if "PUT" in line and "/api/tickets/1" in line]
+        boards_line = [line for line in lines if "/api/boards" in line]
         assert len(put_line) == 1
         assert "gate_pending" in put_line[0]
         assert len(boards_line) == 1

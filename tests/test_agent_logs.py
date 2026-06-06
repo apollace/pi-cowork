@@ -139,9 +139,11 @@ def test_log_contains_agent_output(client, default_workflow, default_board):
         proc.stdout = io.BytesIO(b"FAKE_AGENT_OUTPUT_LINE\n")
         return proc
 
-    with patch("app.subprocess.Popen", side_effect=fake_popen):
-        with patch("pi_cowork.agents._start_log_reader", lambda pipe, log_f: _read_log(pipe, log_f)):
-            client.put(f"/api/tickets/{tid}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", side_effect=fake_popen),
+        patch("pi_cowork.agents._start_log_reader", lambda pipe, log_f: _read_log(pipe, log_f)),
+    ):
+        client.put(f"/api/tickets/{tid}", json={"status_id": id1})
 
     runs_res = client.get(f"/api/tickets/{tid}/agent_runs")
     run = json.loads(runs_res.data)[0]
@@ -296,10 +298,12 @@ def test_agent_run_sse_stream(client, default_workflow, default_board):
         proc.stdout = io.BytesIO(b"STREAM_LINE_1\nSTREAM_LINE_2\n")
         return proc
 
-    with patch("app.subprocess.Popen", side_effect=fake_popen):
-        with patch("pi_cowork.agents._start_log_reader", lambda pipe, log_f: _read_log(pipe, log_f)):
-            res = client.put(f"/api/tickets/{tid}", json={"status_id": id1})
-            assert res.status_code == 200
+    with (
+        patch("app.subprocess.Popen", side_effect=fake_popen),
+        patch("pi_cowork.agents._start_log_reader", lambda pipe, log_f: _read_log(pipe, log_f)),
+    ):
+        res = client.put(f"/api/tickets/{tid}", json={"status_id": id1})
+        assert res.status_code == 200
 
     runs_res = client.get(f"/api/tickets/{tid}/agent_runs")
     run = json.loads(runs_res.data)[0]

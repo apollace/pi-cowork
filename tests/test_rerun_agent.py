@@ -99,7 +99,8 @@ def test_ticket_detail_last_agent_run_after_failure(client, default_workflow, de
     # Mark the agent run as failed with exit code 1
     with client.application.app_context():
         app_module.run_db(
-            "UPDATE agent_runs SET status = 'failed', exit_code = 1, completed_at = datetime('now') WHERE ticket_id = ?",
+            "UPDATE agent_runs SET status = 'failed', exit_code = 1, "
+            "completed_at = datetime('now') WHERE ticket_id = ?",
             (tid,),
         )
 
@@ -131,7 +132,8 @@ def test_ticket_detail_last_agent_run_after_completion(client, default_workflow,
     # Mark the agent run as completed
     with client.application.app_context():
         app_module.run_db(
-            "UPDATE agent_runs SET status = 'completed', exit_code = 0, completed_at = datetime('now') WHERE ticket_id = ?",
+            "UPDATE agent_runs SET status = 'completed', exit_code = 0, "
+            "completed_at = datetime('now') WHERE ticket_id = ?",
             (tid,),
         )
 
@@ -173,7 +175,8 @@ def test_ticket_detail_multiple_runs_shows_latest(client, default_workflow, defa
     # Mark first run as completed
     with client.application.app_context():
         app_module.run_db(
-            "UPDATE agent_runs SET status = 'completed', exit_code = 0, completed_at = datetime('now') WHERE ticket_id = ?",
+            "UPDATE agent_runs SET status = 'completed', exit_code = 0, "
+            "completed_at = datetime('now') WHERE ticket_id = ?",
             (tid,),
         )
 
@@ -224,7 +227,8 @@ def test_rerun_after_failed_agent(client, default_workflow, default_board):
     # Mark first run as failed
     with client.application.app_context():
         app_module.run_db(
-            "UPDATE agent_runs SET status = 'failed', exit_code = 1, completed_at = datetime('now') WHERE ticket_id = ?",
+            "UPDATE agent_runs SET status = 'failed', exit_code = 1, "
+            "completed_at = datetime('now') WHERE ticket_id = ?",
             (tid,),
         )
 
@@ -264,7 +268,8 @@ def test_rerun_after_completed_agent(client, default_workflow, default_board):
     # Mark first run as completed
     with client.application.app_context():
         app_module.run_db(
-            "UPDATE agent_runs SET status = 'completed', exit_code = 0, completed_at = datetime('now') WHERE ticket_id = ?",
+            "UPDATE agent_runs SET status = 'completed', exit_code = 0, "
+            "completed_at = datetime('now') WHERE ticket_id = ?",
             (tid,),
         )
 
@@ -300,7 +305,8 @@ def test_rerun_button_scenario_failed_run(client, default_workflow, default_boar
     # Fail the run
     with client.application.app_context():
         app_module.run_db(
-            "UPDATE agent_runs SET status = 'failed', exit_code = 1, completed_at = datetime('now') WHERE ticket_id = ?",
+            "UPDATE agent_runs SET status = 'failed', exit_code = 1, "
+            "completed_at = datetime('now') WHERE ticket_id = ?",
             (tid,),
         )
 

@@ -12,6 +12,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 os.environ.setdefault("PI_MAX_PARALLEL", "100")
 os.environ.setdefault("PI_MAX_PER_HOUR", "100")
 
+import contextlib
+
 from app import app as flask_app
 from app import init_db
 from pi_cowork import agents as agents_module
@@ -25,14 +27,10 @@ def _fake_start_watcher(proc, run_id, ticket_id, agent_name, log_f):
 
 
 def _fake_log_reader(pipe, log_f):
-    try:
+    with contextlib.suppress(ValueError, OSError, AttributeError):
         pipe.close()
-    except (ValueError, OSError, AttributeError):
-        pass
-    try:
+    with contextlib.suppress(ValueError, OSError):
         log_f.close()
-    except (ValueError, OSError):
-        pass
 
 
 @pytest.fixture(autouse=True)

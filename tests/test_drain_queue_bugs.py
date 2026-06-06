@@ -57,14 +57,17 @@ def test_drain_loop_survives_exceptions(client, default_workflow, default_board,
             raise RuntimeError("Transient DB error")
 
     # Patch within the right module context
-    with client.application.app_context(), patch("pi_cowork.agents.cleanup_runs", side_effect=fake_cleanup):
-        with patch("pi_cowork.agents.drain_queue"):
-            with patch("pi_cowork.agents.time.sleep", side_effect=fake_sleep):
-                # _drain_loop should survive the first exception
-                t = threading.Thread(target=_drain_loop, args=(client.application,), daemon=True)
-                t.start()
-                stopped.wait(timeout=5)
-                t.join(timeout=2)
+    with (
+        client.application.app_context(),
+        patch("pi_cowork.agents.cleanup_runs", side_effect=fake_cleanup),
+        patch("pi_cowork.agents.drain_queue"),
+        patch("pi_cowork.agents.time.sleep", side_effect=fake_sleep),
+    ):
+        # _drain_loop should survive the first exception
+        t = threading.Thread(target=_drain_loop, args=(client.application,), daemon=True)
+        t.start()
+        stopped.wait(timeout=5)
+        t.join(timeout=2)
 
     # Should have called sleep 3 times (3 iterations), meaning it survived the exception
     assert call_count >= 3, f"Expected >=3 iterations, got {call_count}"
@@ -122,14 +125,18 @@ def test_drain_queue_respects_spawn_lock(client, default_workflow, default_board
         return original_spawn(ticket, status, agent, old_status_id=old_status_id)
 
     # First ticket takes the slot
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
 
     # Queue second ticket (limit reached)
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
 
     # Mark first as completed (free slot)
     from pi_cowork.db import get_db
@@ -140,12 +147,14 @@ def test_drain_queue_respects_spawn_lock(client, default_workflow, default_board
         db.commit()
 
     # Drain should only spawn one for ticket2 (within lock)
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)) as mock_popen:
-        with patch("pi_cowork.agents._is_our_process", return_value=False):
-            with client.application.app_context():
-                from pi_cowork.agents import drain_queue
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)) as mock_popen,
+        patch("pi_cowork.agents._is_our_process", return_value=False),
+        client.application.app_context(),
+    ):
+        from pi_cowork.agents import drain_queue
 
-                drain_queue()
+        drain_queue()
 
     # Second ticket should now be running
     with client.application.app_context():
@@ -193,14 +202,18 @@ def test_drain_queue_keeps_entry_on_spawn_failure(client, default_workflow, defa
     tid2 = json.loads(ticket2.data)["id"]
 
     # First ticket takes the slot
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
 
     # Second ticket gets queued
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
 
     # Verify queue entry exists
     q_data = json.loads(client.get(f"/api/tickets/{tid2}").data)
@@ -228,10 +241,12 @@ def test_drain_queue_keeps_entry_on_spawn_failure(client, default_workflow, defa
             raise RuntimeError("Spawn failed!")
         return original_spawn(*args, **kwargs)
 
-    with patch("pi_cowork.agents.spawn_agent", side_effect=failing_spawn):
-        with patch("pi_cowork.agents._is_our_process", return_value=False):
-            with client.application.app_context():
-                agents_module.drain_queue()
+    with (
+        patch("pi_cowork.agents.spawn_agent", side_effect=failing_spawn),
+        patch("pi_cowork.agents._is_our_process", return_value=False),
+        client.application.app_context(),
+    ):
+        agents_module.drain_queue()
 
     # Queue entry should still exist (not deleted on spawn failure)
     q_data = json.loads(client.get(f"/api/tickets/{tid2}").data)
@@ -274,14 +289,18 @@ def test_drain_queue_preserves_entry_on_blocked_questions(client, default_workfl
     tid2 = json.loads(ticket2.data)["id"]
 
     # First ticket takes the slot
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
 
     # Second ticket gets queued
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
 
     # Add an unanswered question to ticket2
     client.post(
@@ -350,14 +369,18 @@ def test_drain_queue_preserves_pending_gate_reviews(client, default_workflow, de
     tid2 = json.loads(ticket2.data)["id"]
 
     # First ticket takes the slot
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
 
     # Second ticket gets queued
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
 
     # Artificially add a pending gate review for ticket2
     from pi_cowork.db import get_db
@@ -365,12 +388,18 @@ def test_drain_queue_preserves_pending_gate_reviews(client, default_workflow, de
     with client.application.app_context():
         db = get_db()
         db.execute(
-            "INSERT INTO quality_gates (from_status_id, to_status_id, gate_type, name, workflow_id) VALUES (?, ?, 'manual', 'Test Gate', ?)",
+            (
+                "INSERT INTO quality_gates (from_status_id, to_status_id, gate_type, name, workflow_id) "
+                "VALUES (?, ?, 'manual', 'Test Gate', ?)"
+            ),
             (id1, id1, default_workflow["id"]),
         )
         gate_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
         db.execute(
-            "INSERT INTO gate_reviews (ticket_id, gate_id, from_status_id, to_status_id, status) VALUES (?, ?, ?, ?, 'pending')",
+            (
+                "INSERT INTO gate_reviews (ticket_id, gate_id, from_status_id, to_status_id, status) "
+                "VALUES (?, ?, ?, ?, 'pending')"
+            ),
             (tid2, gate_id, id1, id1),
         )
         db.commit()
@@ -383,12 +412,14 @@ def test_drain_queue_preserves_pending_gate_reviews(client, default_workflow, de
 
     # Drain queue should SKIP the ticket with a pending gate review,
     # NOT delete the review or the queue entry.
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=False):
-            with client.application.app_context():
-                from pi_cowork.agents import drain_queue
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=False),
+        client.application.app_context(),
+    ):
+        from pi_cowork.agents import drain_queue
 
-                drain_queue()
+        drain_queue()
 
     # Pending gate reviews must STILL exist (not deleted)
     from pi_cowork.models import has_pending_gate_reviews
@@ -493,14 +524,18 @@ def test_stuck_queue_recovery(client, default_workflow, default_board, monkeypat
     tid2 = json.loads(ticket2.data)["id"]
 
     # First ticket takes the slot
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
 
     # Second ticket gets queued
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
 
     # Verify ticket2 is queued
     q_data = json.loads(client.get(f"/api/tickets/{tid2}").data)
@@ -515,13 +550,15 @@ def test_stuck_queue_recovery(client, default_workflow, default_board, monkeypat
         db.commit()
 
     # Simulate drain loop recovery (e.g., after the bug 1 fix prevented permanent death)
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9998)) as mock_popen:
-        with patch("pi_cowork.agents._is_our_process", return_value=False):
-            with client.application.app_context():
-                from pi_cowork.agents import cleanup_runs, drain_queue
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9998)) as mock_popen,
+        patch("pi_cowork.agents._is_our_process", return_value=False),
+        client.application.app_context(),
+    ):
+        from pi_cowork.agents import cleanup_runs, drain_queue
 
-                cleanup_runs()
-                drain_queue()
+        cleanup_runs()
+        drain_queue()
 
     # Ticket2 should now be un-queued and have a running agent
     q_data = json.loads(client.get(f"/api/tickets/{tid2}").data)
@@ -565,13 +602,16 @@ def test_drain_loop_exception_does_not_kill_thread(client, default_workflow, def
         if call_num == 1:
             raise RuntimeError("Database is locked")
 
-    with client.application.app_context(), patch("pi_cowork.agents.cleanup_runs", side_effect=cleanup_first_raises):
-        with patch("pi_cowork.agents.drain_queue", side_effect=fake_drain):
-            with patch("pi_cowork.agents.time.sleep", side_effect=fake_sleep):
-                t = threading.Thread(target=_drain_loop, args=(client.application,), daemon=True)
-                t.start()
-                stop_event.wait(timeout=5)
-                t.join(timeout=2)
+    with (
+        client.application.app_context(),
+        patch("pi_cowork.agents.cleanup_runs", side_effect=cleanup_first_raises),
+        patch("pi_cowork.agents.drain_queue", side_effect=fake_drain),
+        patch("pi_cowork.agents.time.sleep", side_effect=fake_sleep),
+    ):
+        t = threading.Thread(target=_drain_loop, args=(client.application,), daemon=True)
+        t.start()
+        stop_event.wait(timeout=5)
+        t.join(timeout=2)
 
     # Should have reached 3 iterations despite the exception on the first iteration
     assert iteration_count >= 3, f"Expected >=3 iterations after exception, got {iteration_count}"
@@ -668,10 +708,12 @@ def test_concurrent_try_spawn_and_drain_no_race(client, default_workflow, defaul
         return result
 
     # Spawn via HTTP (try_spawn_or_queue)
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            with patch("pi_cowork.agents.count_running", side_effect=instrumented_count_running):
-                client.put(f"/api/tickets/{tid}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+        patch("pi_cowork.agents.count_running", side_effect=instrumented_count_running),
+    ):
+        client.put(f"/api/tickets/{tid}", json={"status_id": id1})
 
     # Since max_parallel is 1, max_running should never exceed 1
     # (this is a basic sanity check -- a real race is hard to trigger in a test)

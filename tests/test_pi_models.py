@@ -164,14 +164,14 @@ def test_fetch_thinking_levels_map_returns_json():
             },
         ),
         patch("pi_cowork.api.pi_models.os.path.isfile", side_effect=_fake_isfile),
+        patch("pi_cowork.api.pi_models.subprocess.run") as mock_run,
     ):
-        with patch("pi_cowork.api.pi_models.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                stdout=fake_nodejs_output,
-                stderr="",
-                returncode=0,
-            )
-            result = pi_models_module._fetch_thinking_levels_map()
+        mock_run.return_value = MagicMock(
+            stdout=fake_nodejs_output,
+            stderr="",
+            returncode=0,
+        )
+        result = pi_models_module._fetch_thinking_levels_map()
 
     assert result == {
         "openai/gpt-4o": ["off", "minimal", "low", "medium", "high", "xhigh"],

@@ -484,7 +484,7 @@ class TestTicketStatusOverridesCascadeDelete:
     def test_schema_has_cascade(self, client):
         """Verify the ticket_status_overrides table has ON DELETE CASCADE on ticket_id FK."""
         # Use the API to trigger model-layer which uses the DB
-        ticket_id = _create_ticket(client)
+        _create_ticket(client)
 
         # Verify the table exists and has cascade by checking via sqlite_master
         # We need an app context for query_db

@@ -19,9 +19,16 @@ ENDPOINT_REGISTRY = [
         "category": "Tickets",
         "method": "PUT",
         "path_template": "/api/tickets/{ticket_id}",
-        "label": "update ticket (fields: status_id, title, body, priority, branch) — branch only writable when workflow has git_enabled=True",
+        "label": (
+            "update ticket (fields: status_id, title, body, priority, branch) — "
+            "branch only writable when workflow has git_enabled=True"
+        ),
         "doc_lines": [
-            "- PUT {base_url}/api/tickets/{ticket_id} → update ticket (fields: status_id, title, body, priority, branch — branch only writable when workflow has git_enabled=True)",
+            (
+                "- PUT {base_url}/api/tickets/{ticket_id} → update ticket "
+                "(fields: status_id, title, body, priority, branch — branch only writable "
+                "when workflow has git_enabled=True)"
+            ),
         ],
     },
     {
@@ -31,7 +38,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/tickets/{ticket_id}",
         "label": "get ticket details (includes priority; includes branch when git_enabled)",
         "doc_lines": [
-            "- GET {base_url}/api/tickets/{ticket_id} → get ticket details (includes priority; includes branch when git_enabled)",
+            (
+                "- GET {base_url}/api/tickets/{ticket_id} → get ticket details "
+                "(includes priority; includes branch when git_enabled)"
+            ),
         ],
     },
     {
@@ -61,9 +71,17 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/tickets/{ticket_id}/questions",
         "label": "ask questions (field: questions, array of {body, options})",
         "doc_lines": [
-            "- POST {base_url}/api/tickets/{ticket_id}/questions → ask questions (field: questions, array of {body, options}). ALWAYS provide the options field as a JSON array of answer choices whenever possible — humans can answer with one click instead of typing free text.",
+            (
+                "- POST {base_url}/api/tickets/{ticket_id}/questions → ask questions "
+                "(field: questions, array of {body, options}). ALWAYS provide the options "
+                "field as a JSON array of answer choices whenever possible — humans can "
+                "answer with one click instead of typing free text."
+            ),
             "  Example: questions=[{'body': 'Which database?', 'options': ['SQLite', 'PostgreSQL']}]",
-            "When questions are posted, the agent is paused until a human answers them; answers appear as formatted comments (**Q:** ... **A:** ...).",
+            (
+                "When questions are posted, the agent is paused until a human answers them; "
+                "answers appear as formatted comments (**Q:** ... **A:** ...)."
+            ),
         ],
     },
     {
@@ -144,7 +162,8 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/tickets",
         "label": "create ticket (fields: title, body, board_id, status_id, labels, priority)",
         "doc_lines": [
-            "- POST {base_url}/api/tickets → create ticket (fields: title, body, board_id, status_id, labels, priority)",
+            "- POST {base_url}/api/tickets → create ticket (fields: title, body, board_id, status_id, labels, "
+            "priority)",
         ],
     },
     # ── Boards ──
@@ -271,7 +290,8 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/quality_gates",
         "label": "list quality gates (query: from_status_id, to_status_id)",
         "doc_lines": [
-            "- GET {base_url}/api/quality_gates?from_status_id={from}&to_status_id={to} → list quality gates for transition",
+            "- GET {base_url}/api/quality_gates?from_status_id={from}&to_status_id={to} → list quality gates for "
+            "transition",
         ],
     },
     # ── Gate Reviews ──
@@ -375,9 +395,13 @@ ENDPOINT_REGISTRY = [
         "category": "DB Backup",
         "method": "POST",
         "path_template": "/api/db-backup/restore",
-        "label": "restore database from a backup (fields: filename, confirm); requires X-Human-Action header; creates a pre-restore safety backup first",
+        "label": "restore database from a backup (fields: filename, confirm); requires X-Human-Action header; creates "
+        "a pre-restore safety backup "
+        "first",
         "doc_lines": [
-            "- POST {base_url}/api/db-backup/restore → restore database from a backup (fields: filename, confirm must be true); requires X-Human-Action header (human-only action); creates a pre-restore safety backup first",
+            "- POST {base_url}/api/db-backup/restore → restore database from a backup (fields: filename, confirm must "
+            "be true); requires X-Human-Action header (human-only action); creates a pre-restore safety backup "
+            "first",
         ],
     },
     {
@@ -398,7 +422,8 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/tickets/{ticket_id}/status_overrides",
         "label": "list ticket status overrides (per-status model/thinking overrides)",
         "doc_lines": [
-            "- GET {base_url}/api/tickets/{ticket_id}/status_overrides → list ticket status overrides (per-status model/thinking overrides)",
+            "- GET {base_url}/api/tickets/{ticket_id}/status_overrides → list ticket status overrides (per-status "
+            "model/thinking overrides)",
         ],
     },
     {
@@ -408,7 +433,8 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/tickets/{ticket_id}/status_overrides",
         "label": "upsert ticket status override (fields: status_id, model, thinking)",
         "doc_lines": [
-            "- PUT {base_url}/api/tickets/{ticket_id}/status_overrides → upsert ticket status override (fields: status_id, model, thinking)",
+            "- PUT {base_url}/api/tickets/{ticket_id}/status_overrides → upsert ticket status override (fields: "
+            "status_id, model, thinking)",
         ],
     },
     {
@@ -418,7 +444,8 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/tickets/{ticket_id}/status_overrides/{status_id}",
         "label": "clear ticket status override for a specific status",
         "doc_lines": [
-            "- DELETE {base_url}/api/tickets/{ticket_id}/status_overrides/{status_id} → clear ticket status override for a specific status",
+            "- DELETE {base_url}/api/tickets/{ticket_id}/status_overrides/{status_id} → clear ticket status override "
+            "for a specific status",
         ],
     },
     # ── Knowledge Management ──
@@ -429,7 +456,9 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/knowledge",
         "label": "list knowledge entries (query: board_id, search, category, auto_context, tags)",
         "doc_lines": [
-            "- GET {base_url}/api/knowledge?board_id={board_id} → list knowledge entries (query: board_id, search, category, auto_context, tags). Omit board_id for global-only; provide board_id for global + board-specific.",
+            "- GET {base_url}/api/knowledge?board_id={board_id} → list knowledge entries (query: board_id, search, "
+            "category, auto_context, tags). Omit board_id for global-only; provide board_id for global + "
+            "board-specific.",
         ],
     },
     {
@@ -447,9 +476,12 @@ ENDPOINT_REGISTRY = [
         "category": "Knowledge",
         "method": "POST",
         "path_template": "/api/knowledge",
-        "label": "create a knowledge entry (fields: title, content, board_id, category, auto_context, tags, sort_order)",
+        "label": "create a knowledge entry (fields: title, content, board_id, category, auto_context, tags, "
+        "sort_order)",
         "doc_lines": [
-            "- POST {base_url}/api/knowledge → create a knowledge entry (fields: title, content, board_id or null for global, category, auto_context, tags as array of strings, sort_order, created_by 'human'/'agent')",
+            "- POST {base_url}/api/knowledge → create a knowledge entry (fields: title, content, board_id or null for "
+            "global, category, auto_context, tags as array of strings, sort_order, created_by "
+            "'human'/'agent')",
         ],
     },
     {
@@ -457,9 +489,15 @@ ENDPOINT_REGISTRY = [
         "category": "Knowledge",
         "method": "PUT",
         "path_template": "/api/knowledge/{entry_id}",
-        "label": "update a knowledge entry (fields: title, content, board_id, clear_board_id, category, auto_context, tags, sort_order)",
+        "label": "update a knowledge entry (fields: title, content, board_id, clear_board_id, category, auto_context, "
+        "tags, sort_order)",
         "doc_lines": [
-            "- PUT {base_url}/api/knowledge/{entry_id} → update a knowledge entry (fields: title, content, board_id, clear_board_id, category, auto_context, tags as array of strings, sort_order, updated_by 'human'/'agent'). board_id sets the entry to a specific board; clear_board_id=True sets it to global (board_id=NULL). Omitting both leaves board_id unchanged. Providing both board_id and clear_board_id=True is an error. Auto-creates a version history record.",
+            "- PUT {base_url}/api/knowledge/{entry_id} → update a knowledge entry (fields: title, content, board_id, "
+            "clear_board_id, category, auto_context, tags as array of strings, sort_order, updated_by "
+            "'human'/'agent'). board_id sets the entry to a specific board; clear_board_id=True sets it to global "
+            "(board_id=NULL). Omitting both leaves board_id unchanged. Providing both board_id and clear_board_id=True "
+            "is an error. Auto-creates a version history "
+            "record.",
         ],
     },
     {
@@ -479,7 +517,9 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/knowledge/search",
         "label": "search knowledge entries by query (params: q, board_id)",
         "doc_lines": [
-            "- GET {base_url}/api/knowledge/search?q=query&board_id={board_id} → search knowledge entries by query (params: q required, board_id optional. Returns global + board-specific matches.)",
+            "- GET {base_url}/api/knowledge/search?q=query&board_id={board_id} → search knowledge entries by query "
+            "(params: q required, board_id optional. Returns global + board-specific "
+            "matches.)",
         ],
     },
     {
@@ -499,7 +539,9 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/knowledge/{entry_id}/versions/{version_id}/restore",
         "label": "restore a previous version as current",
         "doc_lines": [
-            "- POST {base_url}/api/knowledge/{entry_id}/versions/{version_id}/restore → restore a previous version as current (field: restored_by 'human'/'agent')",
+            "- POST {base_url}/api/knowledge/{entry_id}/versions/{version_id}/restore → restore a previous version as "
+            "current (field: restored_by "
+            "'human'/'agent')",
         ],
     },
 ]
@@ -567,7 +609,9 @@ def build_api_docs(selected_keys, ticket_id, base_url=None, has_gates=False, boa
 
     # Conditional gate_pending note for ticket_put
     if has_gates and "ticket_put" in keys:
-        gate_note = ' If response has "gate_pending": true, the move is blocked for human approval — you MUST NOT attempt to approve or bypass the gate review yourself. Add a comment and stop.'
+        gate_note = ' If response has "gate_pending": true, the move is blocked for human approval — you MUST NOT '
+        "attempt to approve or bypass the gate review yourself. Add a comment and "
+        "stop."
         # Append it to the first line that contains ticket_put
         for i, line in enumerate(lines):
             if ticket_id and f"/api/tickets/{ticket_id}" in line and "PUT" in line:

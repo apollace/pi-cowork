@@ -207,17 +207,14 @@ def test_cli_gate_pass_moves_ticket(client):
         },
     )
 
-    with patch("app.subprocess.Popen") as mock_popen:
-        # The CLI gate runs via subprocess.run, not Popen
-        # We need to patch subprocess.run for the gate, and Popen for potential agent spawn
-        with patch("app.subprocess.run") as mock_run:
-            mock_result = MagicMock()
-            mock_result.returncode = 0
-            mock_result.stdout = "All tests passed"
-            mock_result.stderr = ""
-            mock_run.return_value = mock_result
+    with patch("app.subprocess.Popen") as mock_popen, patch("app.subprocess.run") as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "All tests passed"
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
 
-            res = client.put(f"/api/tickets/{ticket_id}", json={"status_id": status_ids[1]})
+        res = client.put(f"/api/tickets/{ticket_id}", json={"status_id": status_ids[1]})
 
     assert res.status_code == 200
     data = json.loads(res.data)

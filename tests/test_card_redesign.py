@@ -107,7 +107,7 @@ class TestCSSClasses:
         """The old .card-meta rule should be gone."""
         assert ".card-meta" not in css
 
-    def test_translateY_hover_present(self, css):
+    def test_translate_y_hover_present(self, css):
         """Cards should have a subtle lift on hover (translateY(-1px) added as polish)."""
         card_hover_match = re.search(r"\.card:hover\s*\{([^}]*)\}", css)
         assert card_hover_match is not None
@@ -130,28 +130,28 @@ class TestCSSClasses:
 class TestJSOutput:
     """Verify buildCard() produces the new card structure."""
 
-    def test_buildCard_has_card_header(self, js):
+    def test_build_card_has_card_header(self, js):
         assert "card-header" in js
 
-    def test_buildCard_has_card_body(self, js):
+    def test_build_card_has_card_body(self, js):
         assert "card-body" in js
 
-    def test_buildCard_has_card_footer(self, js):
+    def test_build_card_has_card_footer(self, js):
         assert "card-footer" in js
 
-    def test_buildCard_priority_class(self, js):
+    def test_build_card_priority_class(self, js):
         """Card root should have priority class like card-priority-High."""
         assert "card-priority-" in js
 
-    def test_buildCard_priority_label(self, js):
+    def test_build_card_priority_label(self, js):
         """Should render priority label pill in header."""
         assert "card-priority-label" in js
 
-    def test_buildCard_status_select(self, js):
+    def test_build_card_status_select(self, js):
         """Should render styled inline select for status, not a read-only pill."""
         assert "card-status-select" in js
 
-    def test_buildCard_status_select_element(self, js):
+    def test_build_card_status_select_element(self, js):
         """Should render a <select> element with all status options."""
         start = js.find("function buildCard")
         end = js.find("function updateLabelFilters")
@@ -159,7 +159,7 @@ class TestJSOutput:
         assert "<select" in buildcard_region
         assert "card-status-select" in buildcard_region
 
-    def test_buildCard_status_select_wired_to_moveTicket(self, js):
+    def test_build_card_status_select_wired_to_move_ticket(self, js):
         """The status select change event should call moveTicket()."""
         assert "moveTicket" in js
         assert "card-status-select" in js
@@ -169,15 +169,15 @@ class TestJSOutput:
         buildcard_region = js[start:end]
         assert "stopPropagation" in buildcard_region or "moveTicket" in buildcard_region
 
-    def test_buildCard_label_add_button(self, js):
+    def test_build_card_label_add_button(self, js):
         """Label add button should use .card-label-add class."""
         assert "card-label-add" in js
 
-    def test_buildCard_has_card_indicator(self, js):
+    def test_build_card_has_card_indicator(self, js):
         """Card should have a .card-indicator div as first child."""
         assert "card-indicator" in js
 
-    def test_buildCard_has_card_inner(self, js):
+    def test_build_card_has_card_inner(self, js):
         """Card content should be wrapped in .card-inner div."""
         assert "card-inner" in js
 
@@ -185,7 +185,7 @@ class TestJSOutput:
         """Inline priority-dot style should be gone from buildCard."""
         assert "priorityDot" not in js
 
-    def test_moveTicket_function_retained(self, js):
+    def test_move_ticket_function_retained(self, js):
         """moveTicket function should still exist."""
         assert "async function moveTicket" in js or "function moveTicket" in js
 

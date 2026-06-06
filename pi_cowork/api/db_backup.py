@@ -48,9 +48,7 @@ def _safe_filename(filename):
     if "/" in filename or "\\" in filename or ".." in filename:
         return False
     # Must match the expected backup filename pattern
-    if not _BACKUP_RE.match(filename):
-        return False
-    return True
+    return _BACKUP_RE.match(filename)
 
 
 def _timestamp_from_filename(filename):
@@ -203,7 +201,7 @@ def api_restore_backup():
         return jsonify({"error": "Backup file not found"}), 404
 
     # Ensure source is within backups dir (resolve symlinks)
-    if not source_path.resolve().parent == backup_dir.resolve():
+    if source_path.resolve().parent != backup_dir.resolve():
         return jsonify({"error": "Invalid backup path"}), 400
 
     db_file = _db_path()
@@ -255,7 +253,7 @@ def api_delete_backup():
         return jsonify({"error": "Backup file not found"}), 404
 
     # Ensure target is within backups dir (resolve symlinks)
-    if not target_path.resolve().parent == backup_dir.resolve():
+    if target_path.resolve().parent != backup_dir.resolve():
         return jsonify({"error": "Invalid backup path"}), 400
 
     try:

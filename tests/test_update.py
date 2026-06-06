@@ -150,7 +150,7 @@ def test_update_run_success(client, monkeypatch, tmp_path):
         patch("pi_cowork.update._git_available", return_value=True),
         patch("pi_cowork.update._git_dir_exists", return_value=True),
         patch("pi_cowork.update._run_git") as mock_git,
-        patch("pi_cowork.update.os._exit") as mock_exit,
+        patch("pi_cowork.update.os._exit"),
         patch("pi_cowork.update.threading.Thread") as mock_thread,
     ):
 

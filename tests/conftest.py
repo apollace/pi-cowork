@@ -10,6 +10,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 os.environ.setdefault("PI_MAX_PARALLEL", "100")
 os.environ.setdefault("PI_MAX_PER_HOUR", "100")
 
+import contextlib
+
 from app import app as flask_app
 from app import init_db
 from pi_cowork import agents as agents_module
@@ -26,14 +28,10 @@ def _fake_start_watcher(proc, run_id, ticket_id, agent_name, log_f):
 
 def _fake_log_reader(pipe, log_f):
     """In tests, don't spawn a reader thread; just close log_f safely."""
-    try:
+    with contextlib.suppress(ValueError, OSError, AttributeError):
         pipe.close()
-    except (ValueError, OSError, AttributeError):
-        pass
-    try:
+    with contextlib.suppress(ValueError, OSError):
         log_f.close()
-    except (ValueError, OSError):
-        pass
 
 
 HUMAN_ACTION_SECRET_FOR_TESTS = "test-human-action-secret-12345678901234567890123456789012"
@@ -114,19 +112,21 @@ def mock_model_ids(monkeypatch):
     """Return a fixed list of valid model ids so tests don't depend on pi CLI."""
     from pi_cowork.api import pi_models
 
-    fake = lambda: (
-        "gpt-4o",
-        "gpt-4",
-        "custom-model",
-        "compact-model",
-        "claude-3",
-        "claude-3-opus",
-        "claude-3-opus-20240229",
-        "agent-model",
-        "status-model",
-        "both-model",
-        "plain-model",
-    )
+    def fake():
+        return (
+            "gpt-4o",
+            "gpt-4",
+            "custom-model",
+            "compact-model",
+            "claude-3",
+            "claude-3-opus",
+            "claude-3-opus-20240229",
+            "agent-model",
+            "status-model",
+            "both-model",
+            "plain-model",
+        )
+
     monkeypatch.setattr(pi_models, "get_model_ids", fake)
     # Module-level imports in agents_api/statuses/assistant also need patching
     import pi_cowork.api.agents_api as _agents_api

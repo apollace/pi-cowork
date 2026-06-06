@@ -58,9 +58,11 @@ def test_watcher_thread_updates_db_on_success(client, default_workflow, default_
         app_module._watch_agent(proc, run_id, ticket_id, agent_name, log_f)
         watched_event.set()
 
-    with patch("app.subprocess.Popen", return_value=fake_proc):
-        with patch("pi_cowork.agents._start_watcher", side_effect=tracking_watcher):
-            client.put(f"/api/tickets/{tid}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=fake_proc),
+        patch("pi_cowork.agents._start_watcher", side_effect=tracking_watcher),
+    ):
+        client.put(f"/api/tickets/{tid}", json={"status_id": id1})
 
     # Wait for the watcher to finish
     assert watched_event.wait(timeout=5)
@@ -118,9 +120,11 @@ def test_watcher_thread_marks_failed_on_nonzero_exit(client, default_workflow, d
         app_module._watch_agent(proc, run_id, ticket_id, agent_name, log_f)
         watched_event.set()
 
-    with patch("app.subprocess.Popen", return_value=fake_proc):
-        with patch("pi_cowork.agents._start_watcher", side_effect=tracking_watcher):
-            client.put(f"/api/tickets/{tid}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=fake_proc),
+        patch("pi_cowork.agents._start_watcher", side_effect=tracking_watcher),
+    ):
+        client.put(f"/api/tickets/{tid}", json={"status_id": id1})
 
     assert watched_event.wait(timeout=5)
 
@@ -193,9 +197,11 @@ def test_cleanup_uses_is_our_process(client, default_workflow, default_board):
     tid = json.loads(ticket.data)["id"]
 
     # Spawn agent with fake PID
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid}", json={"status_id": id1})
 
     # PID exists but is NOT our process -> should mark completed
     with patch("pi_cowork.agents._is_our_process", return_value=False), client.application.app_context():
@@ -251,7 +257,10 @@ def test_cleanup_marks_null_pid_as_failed(client, default_workflow, default_boar
 
         db = get_db()
         db.execute(
-            "INSERT INTO agent_runs (ticket_id, agent_id, pid, started_at, status) VALUES (?, ?, NULL, datetime('now'), 'running')",
+            (
+                "INSERT INTO agent_runs (ticket_id, agent_id, pid, started_at, status) "
+                "VALUES (?, ?, NULL, datetime('now'), 'running')"
+            ),
             (tid, aid),
         )
         db.commit()
@@ -303,9 +312,11 @@ def test_cleanup_stale_run(client, default_workflow, default_board):
     tid = json.loads(ticket.data)["id"]
 
     # Spawn agent with fake PID
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid}", json={"status_id": id1})
 
     # Set started_at to 3 hours ago (beyond RUN_MAX_AGE_SECONDS = 7200s)
     with client.application.app_context():

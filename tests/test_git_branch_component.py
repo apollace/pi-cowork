@@ -89,16 +89,16 @@ class TestCSSClasses:
 class TestJSOutput:
     """Verify buildCard() produces the new branch component."""
 
-    def test_buildCard_has_card_branch_pill(self, js):
+    def test_build_card_has_card_branch_pill(self, js):
         assert "card-branch-pill" in js
 
-    def test_buildCard_has_card_branch_text(self, js):
+    def test_build_card_has_card_branch_text(self, js):
         assert "card-branch-text" in js
 
-    def test_buildCard_has_card_branch_copy(self, js):
+    def test_build_card_has_card_branch_copy(self, js):
         assert "card-branch-copy" in js
 
-    def test_buildCard_branch_svg_icon(self, js):
+    def test_build_card_branch_svg_icon(self, js):
         """Should include a Git branch SVG icon with #64748B stroke."""
         start = js.find("function buildCard")
         end = js.find("function updateLabelFilters")
@@ -108,7 +108,7 @@ class TestJSOutput:
         assert "<circle" in region
         assert "<path" in region
 
-    def test_buildCard_branch_copy_svg_icon(self, js):
+    def test_build_card_branch_copy_svg_icon(self, js):
         """Should include a clipboard SVG icon inside the copy button."""
         start = js.find("function buildCard")
         end = js.find("function updateLabelFilters")
@@ -117,7 +117,7 @@ class TestJSOutput:
         assert "<rect" in region
         assert 'stroke="currentColor"' in region
 
-    def test_buildCard_branch_truncation_logic(self, js):
+    def test_build_card_branch_truncation_logic(self, js):
         """Should test auto-generated pattern and fallback to full text."""
         start = js.find("function buildCard")
         end = js.find("function updateLabelFilters")
@@ -127,20 +127,20 @@ class TestJSOutput:
         assert "isAuto" in region
         assert "#${ticket.id}" in region or "`#${ticket.id}`" in region
 
-    def test_buildCard_branch_copy_listener(self, js):
+    def test_build_card_branch_copy_listener(self, js):
         """Should attach a click listener to the copy button."""
         assert "card-branch-copy" in js
         assert "navigator.clipboard.writeText" in js
         assert "window.showToast('Branch copied', 'success')" in js
 
-    def test_buildCard_branch_stop_propagation(self, js):
+    def test_build_card_branch_stop_propagation(self, js):
         """Copy button should stop propagation to avoid card navigation."""
         start = js.find("function buildCard")
         end = js.find("function updateLabelFilters")
         region = js[start:end]
         assert "e.stopPropagation()" in region
 
-    def test_no_old_branch_badge_in_buildCard(self, js):
+    def test_no_old_branch_badge_in_build_card(self, js):
         """Old 📁 branch badge should be gone from buildCard."""
         start = js.find("function buildCard")
         end = js.find("function updateLabelFilters")
@@ -148,14 +148,14 @@ class TestJSOutput:
         assert "📁" not in region
         assert "badge branch" not in region
 
-    def test_buildCard_branch_title_attribute(self, js):
+    def test_build_card_branch_title_attribute(self, js):
         """The pill should have a title tooltip with the full branch name."""
         start = js.find("function buildCard")
         end = js.find("function updateLabelFilters")
         region = js[start:end]
         assert 'title="Git branch:' in region
 
-    def test_buildCard_aria_label(self, js):
+    def test_build_card_aria_label(self, js):
         """Copy button should have an aria-label for accessibility."""
         start = js.find("function buildCard")
         end = js.find("function updateLabelFilters")

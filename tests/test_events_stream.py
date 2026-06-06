@@ -105,7 +105,7 @@ class TestSSEGenerator:
         assert "data: " in frame
         # Parse the data line
         lines = frame.split("\n")
-        data_line = [l for l in lines if l.startswith("data: ")]
+        data_line = [line for line in lines if line.startswith("data: ")]
         assert len(data_line) == 1
         json_str = data_line[0][6:]
         parsed = json.loads(json_str)

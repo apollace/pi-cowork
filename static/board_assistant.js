@@ -9,7 +9,6 @@
   const resetBtn = document.getElementById("board-assistant-reset");
 
   let savedScrollY = 0;
-  let activeBoardId = localStorage.getItem("activeBoard");
 
   function getBoardId() {
     return localStorage.getItem("activeBoard");
@@ -121,7 +120,7 @@
       rows.forEach(function (r) {
         appendMessage(r.role, r.content);
       });
-    } catch (e) {
+    } catch {
       messagesEl.innerHTML = '<div class="assistant-error">Failed to load history</div>';
     }
   }
@@ -246,7 +245,6 @@
   }
   window.addEventListener("storage", function (e) {
     if (e.key === "activeBoard") {
-      activeBoardId = e.newValue;
       updateVisibility();
       if (panel.classList.contains("open")) {
         // Reload history for the new board

@@ -20,39 +20,39 @@ def _read_js():
 class TestSyncTicketsFunction:
     """Verify syncTickets() and helpers exist."""
 
-    def test_syncTickets_function_exists(self):
+    def test_sync_tickets_function_exists(self):
         js = _read_js()
         assert "async function syncTickets()" in js
 
-    def test_diffAndUpdateBoard_function_exists(self):
+    def test_diff_and_update_board_function_exists(self):
         js = _read_js()
         assert "function diffAndUpdateBoard(newTickets)" in js
 
-    def test_debounceSync_function_exists(self):
+    def test_debounce_sync_function_exists(self):
         js = _read_js()
         assert "function debounceSync(delay)" in js
 
-    def test_updateCardInPlace_function_exists(self):
+    def test_update_card_in_place_function_exists(self):
         js = _read_js()
         assert "function updateCardInPlace(ticket, cardEl)" in js
 
-    def test_updateGroupCounts_function_exists(self):
+    def test_update_group_counts_function_exists(self):
         js = _read_js()
         assert "function updateGroupCounts(allTickets)" in js
 
-    def test_getCardsContainer_function_exists(self):
+    def test_get_cards_container_function_exists(self):
         js = _read_js()
         assert "function getCardsContainer(statusId)" in js
 
-    def test_removeCard_function_exists(self):
+    def test_remove_card_function_exists(self):
         js = _read_js()
         assert "function removeCard(ticketId)" in js
 
-    def test_appendCardToColumn_function_exists(self):
+    def test_append_card_to_column_function_exists(self):
         js = _read_js()
         assert "function appendCardToColumn(ticket)" in js
 
-    def test_moveCardToColumn_function_exists(self):
+    def test_move_card_to_column_function_exists(self):
         js = _read_js()
         assert "function moveCardToColumn(ticket, oldStatusId)" in js
 
@@ -60,7 +60,7 @@ class TestSyncTicketsFunction:
 class TestSSEEventHandlers:
     """Verify SSE events use debounceSync, not debounceRefresh."""
 
-    def test_board_events_use_debounceSync(self):
+    def test_board_events_use_debounce_sync(self):
         js = _read_js()
         # Find the boardEvents array and its listener
         events_match = re.search(
@@ -73,7 +73,7 @@ class TestSSEEventHandlers:
         after_events = js[events_match.end() : events_match.end() + 400]
         assert "debounceSync(500)" in after_events, "Expected boardEvents listener to call debounceSync(500)"
 
-    def test_sse_open_uses_debounceRefresh(self):
+    def test_sse_open_uses_debounce_refresh(self):
         js = _read_js()
         # sse:open should still use debounceRefresh for full resync
         open_match = re.search(
@@ -83,7 +83,7 @@ class TestSSEEventHandlers:
         )
         assert open_match, "Expected sse:open to call debounceRefresh(100) for full resync"
 
-    def test_no_debounceRefresh_in_boardEvents(self):
+    def test_no_debounce_refresh_in_board_events(self):
         js = _read_js()
         # The boardEvents handler block should NOT contain debounceRefresh
         events_match = re.search(
@@ -99,7 +99,7 @@ class TestSSEEventHandlers:
 class TestBuildCardIdentity:
     """Verify cards have stable IDs for surgical updates."""
 
-    def test_buildCard_assigns_id(self):
+    def test_build_card_assigns_id(self):
         js = _read_js()
         start = js.find("function buildCard(ticket)")
         end = js.find("function updateLabelFilters")
@@ -114,7 +114,7 @@ class TestBuildCardIdentity:
 class TestRenderRunningPanelDiffing:
     """Verify renderRunningPanel diffs instead of wiping."""
 
-    def test_uses_dataset_runId(self):
+    def test_uses_dataset_run_id(self):
         js = _read_js()
         panel_start = js.find("function renderRunningPanel(runs)")
         panel_end = js.find("async function moveTicket", panel_start)
@@ -136,7 +136,7 @@ class TestRenderRunningPanelDiffing:
         region = js[panel_start:panel_end]
         assert "card.remove()" in region
 
-    def test_no_unconditional_panel_innerHTML_empty(self):
+    def test_no_unconditional_panel_inner_html_empty(self):
         js = _read_js()
         panel_start = js.find("function renderRunningPanel(runs)")
         panel_end = js.find("async function moveTicket", panel_start)
@@ -170,7 +170,7 @@ class TestSyncTicketsLightweightFetch:
         assert "/api/statuses?workflow_id=" not in region
         assert "/api/labels?workflow_id=" not in region
 
-    def test_no_skeleton_in_syncTickets(self):
+    def test_no_skeleton_in_sync_tickets(self):
         js = _read_js()
         sync_start = js.find("async function syncTickets()")
         sync_end = js.find("function getCardsContainer", sync_start)
@@ -182,7 +182,7 @@ class TestSyncTicketsLightweightFetch:
 class TestMoveTicketBehavior:
     """Verify moveTicket triggers lightweight sync instead of full refresh."""
 
-    def test_moveTicket_calls_syncTickets_not_refresh(self):
+    def test_move_ticket_calls_sync_tickets_not_refresh(self):
         js = _read_js()
         move_start = js.find("async function moveTicket(ticketId, statusId)")
         move_end = js.find("function closeActivePopover", move_start)
@@ -191,7 +191,7 @@ class TestMoveTicketBehavior:
         assert "await refresh()" not in region
         assert "refresh()" not in region
 
-    def test_moveTicket_uses_setTimeout_fallback(self):
+    def test_move_ticket_uses_set_timeout_fallback(self):
         js = _read_js()
         move_start = js.find("async function moveTicket(ticketId, statusId)")
         move_end = js.find("function closeActivePopover", move_start)

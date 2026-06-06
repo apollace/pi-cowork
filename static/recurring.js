@@ -1,5 +1,5 @@
+/* exported switchTab, showCreateRecurring, showEditRecurring, toggleRecurring, triggerRecurring, deleteRecurring */
 // ── Recurring Tasks Tab ──
-let _currentRecurringBoardId = null;
 
 function switchTab(tabName) {
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
@@ -21,7 +21,6 @@ async function loadRecurringList() {
     document.getElementById("recurring-list").innerHTML = '<p class="empty">No board selected.</p>';
     return;
   }
-  _currentRecurringBoardId = boardId;
 
   try {
     const res = await fetch(`/api/recurring?board_id=${boardId}`);
@@ -213,7 +212,7 @@ async function previewCron() {
     } else {
       preview.innerHTML = `<div class="cron-preview-box error">${escapeHtml(data.error || "Invalid expression")}</div>`;
     }
-  } catch (e) {
+  } catch {
     preview.innerHTML = "";
   }
 }

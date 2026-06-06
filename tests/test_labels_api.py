@@ -292,5 +292,5 @@ def test_import_export_roundtrips_labels(client, default_workflow):
     new_wf_id = data["workflow_id"]
     res = client.get(f"/api/labels?workflow_id={new_wf_id}")
     imported = json.loads(res.data)
-    names = {l["name"] for l in imported}
+    names = {label["name"] for label in imported}
     assert "Roundtrip" in names

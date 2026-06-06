@@ -10,6 +10,7 @@ Note on ``ticket_id``: the column has no foreign-key constraint intentionally
 so that log entries survive ticket deletion (audit integrity).
 """
 
+import contextlib
 import json
 import logging
 import os
@@ -181,12 +182,10 @@ def get_system_log(log_id):
         row = db.execute("SELECT * FROM system_logs WHERE id = ?", (log_id,)).fetchone()
         if row is None:
             return None
-        d = dict(zip(row.keys(), row))
+        d = dict(zip(row.keys(), row, strict=False))
         if d.get("details"):
-            try:
+            with contextlib.suppress(json.JSONDecodeError, TypeError):
                 d["details"] = json.loads(d["details"])
-            except (json.JSONDecodeError, TypeError):
-                pass
         return d
     finally:
         if not use_flask:
@@ -285,13 +284,11 @@ def get_system_logs(
 
         logs = []
         for row in rows:
-            d = dict(zip(row.keys(), row))
+            d = dict(zip(row.keys(), row, strict=False))
             if include_details:
                 if d.get("details"):
-                    try:
+                    with contextlib.suppress(json.JSONDecodeError, TypeError):
                         d["details"] = json.loads(d["details"])
-                    except (json.JSONDecodeError, TypeError):
-                        pass
             else:
                 # Convert SQLite integer 0/1 to Python boolean
                 d["has_details"] = bool(d.get("has_details", 0))
@@ -416,10 +413,7 @@ def record_request_start_time():
 
 def _should_skip_path(path):
     """Check if a request path should be skipped for logging."""
-    for skip in _SKIP_PATHS:
-        if path.startswith(skip):
-            return True
-    return False
+    return any(path.startswith(skip) for skip in _SKIP_PATHS)
 
 
 def log_http_request(response):
@@ -465,10 +459,8 @@ def log_http_request(response):
             ticket_id = None
             parts = path.strip("/").split("/")
             if len(parts) >= 3 and parts[0] == "api" and parts[1] == "tickets":
-                try:
+                with contextlib.suppress(ValueError, IndexError):
                     ticket_id = int(parts[2])
-                except (ValueError, IndexError):
-                    pass
             add_log("WARNING", "http_request", slow_message, details=slow_details, ticket_id=ticket_id)
 
     # --- Audit log (POST/PUT/DELETE only) ---
@@ -517,10 +509,8 @@ def log_http_request(response):
     ticket_id = None
     parts = path.strip("/").split("/")
     if len(parts) >= 3 and parts[0] == "api" and parts[1] == "tickets":
-        try:
+        with contextlib.suppress(ValueError, IndexError):
             ticket_id = int(parts[2])
-        except (ValueError, IndexError):
-            pass
 
     add_log(level, "http_request", message, details=details, ticket_id=ticket_id)
 

@@ -14,6 +14,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 os.environ.setdefault("PI_MAX_PARALLEL", "100")
 os.environ.setdefault("PI_MAX_PER_HOUR", "100")
 
+import contextlib
+
 from app import app as flask_app
 from app import init_db
 from pi_cowork import agents as agents_module
@@ -37,14 +39,10 @@ def _fake_start_watcher(proc, run_id, ticket_id, agent_name, log_f):
 
 
 def _fake_log_reader(pipe, log_f):
-    try:
+    with contextlib.suppress(ValueError, OSError, AttributeError):
         pipe.close()
-    except (ValueError, OSError, AttributeError):
-        pass
-    try:
+    with contextlib.suppress(ValueError, OSError):
         log_f.close()
-    except (ValueError, OSError):
-        pass
 
 
 @pytest.fixture(autouse=True)
@@ -312,8 +310,8 @@ class TestGetSystemLogsIncludeDetails:
             assert "details" not in log
             assert "has_details" in log
         # Find the specific logs we just added
-        with_details = [l for l in result["logs"] if l["message"] == "Log with details"]
-        without_details = [l for l in result["logs"] if l["message"] == "Log without details"]
+        with_details = [log for log in result["logs"] if log["message"] == "Log with details"]
+        without_details = [log for log in result["logs"] if log["message"] == "Log without details"]
         assert len(with_details) >= 1
         assert len(without_details) >= 1
         assert with_details[0]["has_details"] is True
@@ -323,7 +321,7 @@ class TestGetSystemLogsIncludeDetails:
         """get_system_logs(include_details=True) should include details."""
         add_log("INFO", "db_change", "Detail test", details={"foo": "bar"})
         result = get_system_logs(per_page=10, include_details=True)
-        found = [l for l in result["logs"] if l["message"] == "Detail test"]
+        found = [log for log in result["logs"] if log["message"] == "Detail test"]
         assert len(found) >= 1
         assert "details" in found[0]
         assert found[0]["details"] == {"foo": "bar"}
@@ -333,7 +331,7 @@ class TestGetSystemLogsIncludeDetails:
         """get_system_logs(include_details=True) with no details should have None."""
         add_log("INFO", "db_change", "No detail test", details=None)
         result = get_system_logs(per_page=10, include_details=True)
-        found = [l for l in result["logs"] if l["message"] == "No detail test"]
+        found = [log for log in result["logs"] if log["message"] == "No detail test"]
         assert len(found) >= 1
         assert found[0]["details"] is None
 
@@ -341,7 +339,7 @@ class TestGetSystemLogsIncludeDetails:
         """has_details should be True when details column is not NULL."""
         add_log("INFO", "db_change", "Has details", details={"x": 1})
         result = get_system_logs(per_page=10)
-        found = [l for l in result["logs"] if l["message"] == "Has details"]
+        found = [log for log in result["logs"] if log["message"] == "Has details"]
         assert len(found) >= 1
         assert found[0]["has_details"] is True
 
@@ -349,7 +347,7 @@ class TestGetSystemLogsIncludeDetails:
         """has_details should be False when details column is NULL."""
         add_log("INFO", "db_change", "No details", details=None)
         result = get_system_logs(per_page=10)
-        found = [l for l in result["logs"] if l["message"] == "No details"]
+        found = [log for log in result["logs"] if log["message"] == "No details"]
         assert len(found) >= 1
         assert found[0]["has_details"] is False
 
@@ -361,8 +359,8 @@ class TestGetSystemLogsIncludeDetails:
         assert res.status_code == 200
         data = json.loads(res.data)
         # At least one log should have has_details=True and one False
-        has_true = any(l.get("has_details") is True for l in data["logs"])
-        has_false = any(l.get("has_details") is False for l in data["logs"])
+        has_true = any(log.get("has_details") is True for log in data["logs"])
+        has_false = any(log.get("has_details") is False for log in data["logs"])
         assert has_true, "Expected at least one log with has_details=True"
         assert has_false, "Expected at least one log with has_details=False"
         # No log should have 'details' key in the list response
@@ -392,7 +390,10 @@ class TestLogRotation:
         old_ts = "2020-01-01T00:00:00+00:00"
         db = get_db()
         db.execute(
-            "INSERT INTO system_logs (timestamp, level, action_type, message) VALUES (?, 'INFO', 'db_change', 'old log')",
+            (
+                "INSERT INTO system_logs (timestamp, level, action_type, message) "
+                "VALUES (?, 'INFO', 'db_change', 'old log')"
+            ),
             (old_ts,),
         )
         db.commit()
@@ -408,7 +409,7 @@ class TestLogRotation:
     def test_cleanup_keeps_recent_logs(self, client):
         """cleanup_old_logs should keep entries within the retention period."""
         add_log("INFO", "db_change", "recent log")
-        deleted = cleanup_old_logs(max_age_days=30)
+        cleanup_old_logs(max_age_days=30)
         # Recent log should still be there
         from pi_cowork.db import get_db
 
@@ -534,7 +535,7 @@ class TestHTTPRequestLogging:
 
     def test_delete_request_is_logged(self, client):
         """DELETE requests should be logged."""
-        res = client.delete("/api/statuses/9999")
+        client.delete("/api/statuses/9999")
         # May return 409 or 404 but should still be logged
         from pi_cowork.db import get_db
 
@@ -599,7 +600,8 @@ class TestHTTPRequestLogging:
 
         db = get_db()
         row = db.execute(
-            "SELECT * FROM system_logs WHERE action_type = 'http_request' AND message LIKE 'POST%/api/tickets%' ORDER BY id DESC LIMIT 1"
+            "SELECT * FROM system_logs WHERE action_type = 'http_request' "
+            "AND message LIKE 'POST%/api/tickets%' ORDER BY id DESC LIMIT 1"
         ).fetchone()
         assert row is not None
         details = json.loads(row["details"])
@@ -754,7 +756,8 @@ class TestAgentEventLogging:
 
         db = get_db()
         rows = db.execute(
-            "SELECT * FROM system_logs WHERE action_type = 'agent_event' AND level = 'ERROR' AND message LIKE '%failed%'"
+            "SELECT * FROM system_logs WHERE action_type = 'agent_event' "
+            "AND level = 'ERROR' AND message LIKE '%failed%'"
         ).fetchall()
         assert len(rows) >= 1
 
@@ -1073,10 +1076,12 @@ class TestSlowAPIRequestWarning:
         db = get_db()
         # Should have both a WARNING slow log and an INFO audit log
         slow_rows = db.execute(
-            "SELECT * FROM system_logs WHERE action_type = 'http_request' AND message LIKE 'SLOW API%POST%/api/tickets%'"
+            "SELECT * FROM system_logs WHERE action_type = 'http_request' "
+            "AND message LIKE 'SLOW API%POST%/api/tickets%'"
         ).fetchall()
         audit_rows = db.execute(
-            "SELECT * FROM system_logs WHERE action_type = 'http_request' AND level = 'INFO' AND message LIKE 'POST%/api/tickets%'"
+            "SELECT * FROM system_logs WHERE action_type = 'http_request' "
+            "AND level = 'INFO' AND message LIKE 'POST%/api/tickets%'"
         ).fetchall()
         assert len(slow_rows) >= 1
         assert len(audit_rows) >= 1
@@ -1140,7 +1145,8 @@ class TestSlowAPIRequestWarning:
 
         db = get_db()
         rows = db.execute(
-            f"SELECT * FROM system_logs WHERE action_type = 'http_request' AND message LIKE 'SLOW API%' AND ticket_id = {ticket_id}"
+            "SELECT * FROM system_logs WHERE action_type = 'http_request' "
+            f"AND message LIKE 'SLOW API%' AND ticket_id = {ticket_id}"
         ).fetchall()
         assert len(rows) >= 1
         assert rows[-1]["ticket_id"] == ticket_id

@@ -125,7 +125,7 @@
       rows.forEach(function (r) {
         appendMessage(r.role, r.content);
       });
-    } catch (e) {
+    } catch {
       messagesEl.innerHTML = '<div class="assistant-error">Failed to load history</div>';
     }
   }

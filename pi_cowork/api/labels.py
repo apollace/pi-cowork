@@ -1,5 +1,6 @@
 """API: Labels and Ticket-Labels."""
 
+import contextlib
 import sqlite3
 
 from flask import Blueprint, jsonify, request
@@ -138,10 +139,8 @@ def api_add_ticket_labels(ticket_id):
     if invalid:
         return jsonify({"error": f"Invalid label IDs: {sorted(invalid)}"}), 400
     for lid in label_ids:
-        try:
+        with contextlib.suppress(sqlite3.IntegrityError):
             run_db("INSERT INTO ticket_labels (ticket_id, label_id) VALUES (?, ?)", (ticket_id, lid))
-        except sqlite3.IntegrityError:
-            pass
     return jsonify({"success": True}), 201
 
 

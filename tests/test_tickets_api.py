@@ -86,7 +86,7 @@ def test_update_ticket_invalid_priority(client, default_board):
 
 def test_list_tickets_sort_by_priority(client, default_board):
     # Create tickets with different priorities
-    t1 = client.post(
+    client.post(
         "/api/tickets",
         json={
             "title": "Low Ticket",
@@ -94,7 +94,7 @@ def test_list_tickets_sort_by_priority(client, default_board):
             "priority": "Low",
         },
     )
-    t2 = client.post(
+    client.post(
         "/api/tickets",
         json={
             "title": "Critical Ticket",
@@ -102,7 +102,7 @@ def test_list_tickets_sort_by_priority(client, default_board):
             "priority": "Critical",
         },
     )
-    t3 = client.post(
+    client.post(
         "/api/tickets",
         json={
             "title": "High Ticket",
@@ -110,7 +110,7 @@ def test_list_tickets_sort_by_priority(client, default_board):
             "priority": "High",
         },
     )
-    t4 = client.post(
+    client.post(
         "/api/tickets",
         json={
             "title": "Medium Ticket",

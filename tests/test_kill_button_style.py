@@ -48,7 +48,7 @@ class TestKillBtnCss:
         body = m.group(1)
         # The default .kill-btn rule should not have a solid danger background
         # It should only appear in :hover
-        lines = [l.strip() for l in body.split(";") if l.strip()]
+        lines = [line.strip() for line in body.split(";") if line.strip()]
         for line in lines:
             if line.startswith("background"):
                 assert "var(--danger-soft)" in line or "transparent" in line, (

@@ -1,5 +1,6 @@
 """Assistant: global and per-board chat backed by DB."""
 
+import contextlib
 import json
 import logging
 import os
@@ -49,10 +50,8 @@ def _stop_assistant_run(scope, timeout=5):
     run.cancelled = True
     proc = run.proc
     if proc.poll() is None:
-        try:
+        with contextlib.suppress(ProcessLookupError, OSError):
             os.kill(proc.pid, signal.SIGTERM)
-        except (ProcessLookupError, OSError):
-            pass
 
     def _kill_later():
         time.sleep(timeout)
@@ -371,10 +370,8 @@ def api_assistant_chat():
                     break
         finally:
             if proc.poll() is None:
-                try:
+                with contextlib.suppress(ProcessLookupError, OSError):
                     os.kill(proc.pid, signal.SIGTERM)
-                except (ProcessLookupError, OSError):
-                    pass
             full_text = "".join(run.accumulated_text)
             if full_text:
                 with _app.app_context():
@@ -576,16 +573,10 @@ def api_assistant_config_put():
         ), 400
 
     enabled = data.get("enabled")
-    if enabled is not None:
-        enabled = 1 if enabled else 0
-    else:
-        enabled = current["enabled"]
+    enabled = (1 if enabled else 0) if enabled is not None else current["enabled"]
 
     auto_context = data.get("auto_context")
-    if auto_context is not None:
-        auto_context = 1 if auto_context else 0
-    else:
-        auto_context = current["auto_context"]
+    auto_context = (1 if auto_context else 0) if auto_context is not None else current["auto_context"]
 
     model = data.get("model", current["model"])
     if model == "":

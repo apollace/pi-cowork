@@ -163,7 +163,7 @@ def test_ensure_ticket_branch_creates_branch(tmp_path):
 
     repo = str(tmp_path / "repo")
     os.makedirs(repo)
-    bare_path = _init_git_repo(repo)
+    _init_git_repo(repo)
 
     # Call with no existing branch
     with patch("pi_cowork.git_helpers.run_db"):
@@ -180,7 +180,7 @@ def test_ensure_ticket_branch_existing_branch(tmp_path):
 
     repo = str(tmp_path / "repo")
     os.makedirs(repo)
-    bare_path = _init_git_repo(repo)
+    _init_git_repo(repo)
 
     # Create a branch first
     branch_name = "ticket-99-existing-branch"
@@ -207,7 +207,7 @@ def test_ensure_ticket_branch_persists_new_branch(tmp_path):
 
     repo = str(tmp_path / "repo")
     os.makedirs(repo)
-    bare_path = _init_git_repo(repo)
+    _init_git_repo(repo)
 
     mock_run_db = MagicMock()
     with patch("pi_cowork.git_helpers.run_db", mock_run_db):
@@ -225,7 +225,7 @@ def test_ensure_ticket_branch_no_persist_if_existing_match(tmp_path):
 
     repo = str(tmp_path / "repo")
     os.makedirs(repo)
-    bare_path = _init_git_repo(repo)
+    _init_git_repo(repo)
 
     # Create branch first
     branch_name = "ticket-33-my-task"

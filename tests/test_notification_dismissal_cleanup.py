@@ -226,7 +226,8 @@ class TestNotificationQueryPerformance:
 
             db = get_db()
             indexes = db.execute(
-                "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_gate_reviews_ticket_id_status_created_at'"
+                "SELECT name FROM sqlite_master WHERE type='index' AND "
+                "name='idx_gate_reviews_ticket_id_status_created_at'"
             ).fetchone()
             assert indexes is not None, "Missing idx_gate_reviews_ticket_id_status_created_at"
 

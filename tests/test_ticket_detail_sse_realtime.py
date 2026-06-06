@@ -129,7 +129,8 @@ class TestAgentEventHandlersRefreshStatus:
 
     def _extract_handler_body(self, html, event_name):
         """Extract the debounceDetailRefresh callback body for a given SSE event."""
-        # Match the pattern: addEventListener('sse:EVENT', function(e) { ... debounceDetailRefresh(function() { BODY }, ...); });
+        # Match the pattern: addEventListener('sse:EVENT', function(e) { ...
+        # debounceDetailRefresh(function() { BODY }, ...); });
         # We need a regex that captures the body inside debounceDetailRefresh
         pattern = (
             r"addEventListener\('sse:" + re.escape(event_name) + r"',\s*function\(e\)\s*\{"

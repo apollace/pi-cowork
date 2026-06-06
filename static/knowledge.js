@@ -3,7 +3,6 @@
 (function() {
   let boards = [];
   let categories = [];
-  let currentScope = "";
   let currentSearch = "";
   let currentCategory = "";
   let currentAutoContext = false;
@@ -18,7 +17,6 @@
     await loadEntries();
 
     document.getElementById("knowledge-scope").addEventListener("change", function() {
-      currentScope = this.value;
       loadEntries();
     });
     document.getElementById("knowledge-search").addEventListener("input", debounce(function() {

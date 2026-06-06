@@ -159,9 +159,8 @@ def api_knowledge_update(entry_id):
         title = title.strip()
         if not title:
             return jsonify({"error": "title cannot be empty"}), 400
-    if content is not None:
-        if content.strip() == "":
-            return jsonify({"error": "content cannot be empty"}), 400
+    if content is not None and content.strip() == "":
+        return jsonify({"error": "content cannot be empty"}), 400
 
     entry = update_knowledge_entry(
         entry_id,

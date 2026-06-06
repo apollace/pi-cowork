@@ -3,6 +3,7 @@
 Handler exceptions are caught per-handler so they never crash the caller.
 """
 
+import contextlib
 import logging
 from threading import Lock
 
@@ -26,10 +27,8 @@ class EventBus:
         """Remove *handler* from *event_name*."""
         with self._lock:
             handlers = self._subscribers.get(event_name, [])
-            try:
+            with contextlib.suppress(ValueError):
                 handlers.remove(handler)
-            except ValueError:
-                pass
 
     def publish(self, event_name, **kwargs):
         """Publish an event. All subscribed handlers are called synchronously.

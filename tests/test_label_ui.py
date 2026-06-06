@@ -156,11 +156,11 @@ class TestLabelPickerPopoverMode:
         html = read(BASE_HTML_PATH)
         assert "this.popover" in html, "Expected LabelPicker to store popover option"
 
-    def test_label_picker_has_renderPopover(self):
+    def test_label_picker_has_render_popover(self):
         html = read(BASE_HTML_PATH)
         assert "_renderPopover" in html, "Expected LabelPicker to have _renderPopover method"
 
-    def test_label_picker_has_closePopover(self):
+    def test_label_picker_has_close_popover(self):
         html = read(BASE_HTML_PATH)
         assert "closePopover" in html, "Expected LabelPicker to have closePopover method"
 
@@ -207,11 +207,11 @@ class TestLabelPickerCollapsedCreate:
 class TestLabelPickerReRender:
     """Verify _reRender method dispatches to popover or inline mode."""
 
-    def test_reRender_method_exists(self):
+    def test_re_render_method_exists(self):
         html = read(BASE_HTML_PATH)
         assert "_reRender()" in html or "this._reRender" in html, "Expected _reRender method in LabelPicker"
 
-    def test_reRender_dispatches_to_popover(self):
+    def test_re_render_dispatches_to_popover(self):
         html = read(BASE_HTML_PATH)
         # _reRender should check this.popover
         assert "this.popover" in html, "Expected _reRender to check this.popover for dispatching"
@@ -227,7 +227,7 @@ class TestInlineLabelPickerImproved:
         html = read(BASE_HTML_PATH)
         # In the inline render() method, pills should use opacity 33
         # Find the inline chip rendering
-        inline_pattern = re.findall(r"background:\$\{escapeHtml\(l\.color\)\}(\w+)", html)
+        re.findall(r"background:\$\{escapeHtml\(l\.color\)\}(\w+)", html)
         # Check that at least the label-pill class is used
         assert "label-pill" in html, "Expected label-pill class usage in LabelPicker"
 

@@ -235,7 +235,7 @@ def test_kill_agent_run_409_not_running(client, default_workflow, default_board)
     """POST /api/agent_runs/<id>/kill returns 409 if run is not in 'running' status."""
     run = _spawn_running_agent(client, default_workflow, default_board)
     run_id = run["id"]
-    ticket_id = run["ticket_id"]
+    run["ticket_id"]
 
     # Mark the run as completed
     with client.application.app_context():

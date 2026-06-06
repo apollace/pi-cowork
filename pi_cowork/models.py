@@ -4,6 +4,7 @@ Every function here performs SQL via ``pi_cowork.db`` and publishes events
 through ``pi_cowork.events.bus`` where appropriate.
 """
 
+import contextlib
 import json
 import logging
 import subprocess
@@ -386,10 +387,8 @@ def set_ticket_labels(ticket_id, workflow_id, label_ids):
         )
         valid_ids = {r["id"] for r in valid}
         for lid in valid_ids:
-            try:
+            with contextlib.suppress(Exception):
                 run_db("INSERT INTO ticket_labels (ticket_id, label_id) VALUES (?, ?)", (ticket_id, lid))
-            except Exception:
-                pass
     run_db("UPDATE tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", (ticket_id,))
     return True
 
@@ -718,9 +717,7 @@ def process_recurring_tasks():
         spawn_agent_for_ticket(ticket_id, task["status_id"])
 
         # Update next_trigger_at and last_triggered_at
-        last_triggered = compute_next_trigger(
-            task["cron_expression"], after=triggered_time if triggered_time else datetime.now(UTC)
-        )
+        compute_next_trigger(task["cron_expression"], after=triggered_time if triggered_time else datetime.now(UTC))
         # Actually trigger from the just-fired time
         next_trigger = compute_next_trigger(task["cron_expression"], after=_parse_dt(task["next_trigger_at"]))
         run_db(

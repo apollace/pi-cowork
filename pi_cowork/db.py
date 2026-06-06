@@ -43,7 +43,7 @@ def run_db(query, args=()):
 
 def row_to_dict(row):
     """Convert a ``sqlite3.Row`` to a plain dict."""
-    return dict(zip(row.keys(), row))
+    return dict(zip(row.keys(), row, strict=False))
 
 
 def _migrate(db):

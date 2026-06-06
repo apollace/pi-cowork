@@ -111,7 +111,7 @@ class TestBoardListingBatchQueries:
 
         listing = json.loads(client.get(f"/api/tickets?board_id={default_board['id']}").data)
         ticket = next(t for t in listing if t["id"] == tid)
-        label_names = sorted(l["name"] for l in ticket["labels"])
+        label_names = sorted(label["name"] for label in ticket["labels"])
         assert label_names == ["bug", "feature"]
 
     def test_queued_flag_in_board_listing(self, client, default_board):

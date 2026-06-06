@@ -65,14 +65,18 @@ class TestDrainQueueFullContext:
         tid2 = json.loads(ticket2.data)["id"]
 
         # First ticket takes the slot
-        with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-            with patch("pi_cowork.agents._is_our_process", return_value=True):
-                client.put(f"/api/tickets/{tid1}", json={"status_id": sid})
+        with (
+            patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+            patch("pi_cowork.agents._is_our_process", return_value=True),
+        ):
+            client.put(f"/api/tickets/{tid1}", json={"status_id": sid})
 
         # Second ticket gets queued (limit reached)
-        with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-            with patch("pi_cowork.agents._is_our_process", return_value=True):
-                client.put(f"/api/tickets/{tid2}", json={"status_id": sid})
+        with (
+            patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+            patch("pi_cowork.agents._is_our_process", return_value=True),
+        ):
+            client.put(f"/api/tickets/{tid2}", json={"status_id": sid})
 
         # Verify ticket2 is queued
         q_data = json.loads(client.get(f"/api/tickets/{tid2}").data)
@@ -101,11 +105,13 @@ class TestDrainQueueFullContext:
             captured_args["old_status_id"] = old_status_id
             return original_spawn(ticket, status, agent, old_status_id=old_status_id)
 
-        with patch("pi_cowork.agents.spawn_agent", side_effect=capture_spawn):
-            with patch("app.subprocess.Popen", return_value=MagicMock(pid=9998)):
-                with patch("pi_cowork.agents._is_our_process", return_value=False):
-                    with client.application.app_context():
-                        agents_module.drain_queue()
+        with (
+            patch("pi_cowork.agents.spawn_agent", side_effect=capture_spawn),
+            patch("app.subprocess.Popen", return_value=MagicMock(pid=9998)),
+            patch("pi_cowork.agents._is_our_process", return_value=False),
+            client.application.app_context(),
+        ):
+            agents_module.drain_queue()
 
         # Verify the ticket dict passed to spawn_agent has full context
         assert "board_name" in captured_args["ticket"], "Bug A: ticket dict lacks board_name"
@@ -148,14 +154,18 @@ class TestDrainQueueFullContext:
         tid2 = json.loads(ticket2.data)["id"]
 
         # First ticket takes the slot
-        with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-            with patch("pi_cowork.agents._is_our_process", return_value=True):
-                client.put(f"/api/tickets/{tid1}", json={"status_id": sid})
+        with (
+            patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+            patch("pi_cowork.agents._is_our_process", return_value=True),
+        ):
+            client.put(f"/api/tickets/{tid1}", json={"status_id": sid})
 
         # Second ticket gets queued
-        with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-            with patch("pi_cowork.agents._is_our_process", return_value=True):
-                client.put(f"/api/tickets/{tid2}", json={"status_id": sid})
+        with (
+            patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+            patch("pi_cowork.agents._is_our_process", return_value=True),
+        ):
+            client.put(f"/api/tickets/{tid2}", json={"status_id": sid})
 
         # Mark first as completed
         with client.application.app_context():
@@ -174,13 +184,15 @@ class TestDrainQueueFullContext:
             proc.pid = 9998
             return proc
 
-        with patch("app.subprocess.Popen", side_effect=capture_popen):
-            with patch("pi_cowork.agents._is_our_process", return_value=False):
-                with client.application.app_context():
-                    from pi_cowork.agents import cleanup_runs, drain_queue
+        with (
+            patch("app.subprocess.Popen", side_effect=capture_popen),
+            patch("pi_cowork.agents._is_our_process", return_value=False),
+            client.application.app_context(),
+        ):
+            from pi_cowork.agents import cleanup_runs, drain_queue
 
-                    cleanup_runs()
-                    drain_queue()
+            cleanup_runs()
+            drain_queue()
 
         assert captured_cmd, "Agent should have been spawned during drain"
         context_msg = captured_cmd[-1]
@@ -243,9 +255,11 @@ class TestDrainQueueOldStatusId:
         tid2 = json.loads(ticket2.data)["id"]
 
         # Move ticket1 to from_status to take the slot
-        with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-            with patch("pi_cowork.agents._is_our_process", return_value=True):
-                client.put(f"/api/tickets/{tid1}", json={"status_id": from_sid})
+        with (
+            patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+            patch("pi_cowork.agents._is_our_process", return_value=True),
+        ):
+            client.put(f"/api/tickets/{tid1}", json={"status_id": from_sid})
 
         # Move ticket2 to from_status (no agent on from_status at this point... actually there is)
         # Let's reconfigure: use a status with no agent for the initial state, then move to one with agent
@@ -262,9 +276,11 @@ class TestDrainQueueOldStatusId:
             # (already running from the spawn above)
 
         # Move ticket2 to from_status (this will queue because limit is 1)
-        with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-            with patch("pi_cowork.agents._is_our_process", return_value=True):
-                client.put(f"/api/tickets/{tid2}", json={"status_id": from_sid})
+        with (
+            patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+            patch("pi_cowork.agents._is_our_process", return_value=True),
+        ):
+            client.put(f"/api/tickets/{tid2}", json={"status_id": from_sid})
 
         # Verify ticket2 is queued
         q_data = json.loads(client.get(f"/api/tickets/{tid2}").data)
@@ -311,11 +327,13 @@ class TestDrainQueueOldStatusId:
             captured_args["old_status_id"] = old_status_id
             return original_spawn(ticket, status, agent, old_status_id=old_status_id)
 
-        with patch("pi_cowork.agents.spawn_agent", side_effect=capture_spawn):
-            with patch("app.subprocess.Popen", return_value=MagicMock(pid=9998)):
-                with patch("pi_cowork.agents._is_our_process", return_value=False):
-                    with client.application.app_context():
-                        agents_module.drain_queue()
+        with (
+            patch("pi_cowork.agents.spawn_agent", side_effect=capture_spawn),
+            patch("app.subprocess.Popen", return_value=MagicMock(pid=9998)),
+            patch("pi_cowork.agents._is_our_process", return_value=False),
+            client.application.app_context(),
+        ):
+            agents_module.drain_queue()
 
         # Verify old_status_id was passed through to spawn_agent
         assert captured_args.get("old_status_id") is not None, (
@@ -358,14 +376,18 @@ class TestDrainQueueOldStatusId:
         ticket2 = client.post("/api/tickets", json={"title": "FillSlot", "board_id": default_board["id"]})
         tid2 = json.loads(ticket2.data)["id"]
 
-        with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-            with patch("pi_cowork.agents._is_our_process", return_value=True):
-                client.put(f"/api/tickets/{tid2}", json={"status_id": sid})
+        with (
+            patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+            patch("pi_cowork.agents._is_our_process", return_value=True),
+        ):
+            client.put(f"/api/tickets/{tid2}", json={"status_id": sid})
 
         # Now move ticket1 - this should queue
-        with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-            with patch("pi_cowork.agents._is_our_process", return_value=True):
-                client.put(f"/api/tickets/{tid}", json={"status_id": sid})
+        with (
+            patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+            patch("pi_cowork.agents._is_our_process", return_value=True),
+        ):
+            client.put(f"/api/tickets/{tid}", json={"status_id": sid})
 
         # Check queue entry has old_status_id
         with client.application.app_context():
@@ -427,14 +449,18 @@ class TestDrainQueueOldStatusId:
         tid2 = json.loads(ticket2.data)["id"]
 
         # Move ticket1 to "from" status to take the slot
-        with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-            with patch("pi_cowork.agents._is_our_process", return_value=True):
-                client.put(f"/api/tickets/{tid1}", json={"status_id": from_sid})
+        with (
+            patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+            patch("pi_cowork.agents._is_our_process", return_value=True),
+        ):
+            client.put(f"/api/tickets/{tid1}", json={"status_id": from_sid})
 
         # Move ticket2 from backlog to "to" status (this will queue due to limit)
-        with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-            with patch("pi_cowork.agents._is_our_process", return_value=True):
-                client.put(f"/api/tickets/{tid2}", json={"status_id": to_sid})
+        with (
+            patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+            patch("pi_cowork.agents._is_our_process", return_value=True),
+        ):
+            client.put(f"/api/tickets/{tid2}", json={"status_id": to_sid})
 
         # Verify ticket2 is queued
         q_data = json.loads(client.get(f"/api/tickets/{tid2}").data)
@@ -457,13 +483,15 @@ class TestDrainQueueOldStatusId:
             proc.pid = 9998
             return proc
 
-        with patch("app.subprocess.Popen", side_effect=capture_popen):
-            with patch("pi_cowork.agents._is_our_process", return_value=False):
-                with client.application.app_context():
-                    from pi_cowork.agents import cleanup_runs, drain_queue
+        with (
+            patch("app.subprocess.Popen", side_effect=capture_popen),
+            patch("pi_cowork.agents._is_our_process", return_value=False),
+            client.application.app_context(),
+        ):
+            from pi_cowork.agents import cleanup_runs, drain_queue
 
-                    cleanup_runs()
-                    drain_queue()
+            cleanup_runs()
+            drain_queue()
 
         assert captured_cmd, "Agent should have been spawned during drain"
         context_msg = captured_cmd[-1]
@@ -745,11 +773,13 @@ class TestRecurringTaskSpawnsAgent:
             captured_args["old_status_id"] = old_status_id
             return original_spawn(ticket, status, agent, old_status_id=old_status_id)
 
-        with patch("app.subprocess.Popen", return_value=MagicMock(pid=9997)):
-            with patch("pi_cowork.agents._is_our_process", return_value=False):
-                with patch("pi_cowork.agents.spawn_agent", side_effect=capture_spawn):
-                    with client.application.app_context():
-                        models.process_recurring_tasks()
+        with (
+            patch("app.subprocess.Popen", return_value=MagicMock(pid=9997)),
+            patch("pi_cowork.agents._is_our_process", return_value=False),
+            patch("pi_cowork.agents.spawn_agent", side_effect=capture_spawn),
+            client.application.app_context(),
+        ):
+            models.process_recurring_tasks()
 
         assert "ticket" in captured_args, "Spawn should have been called"
         ticket = captured_args["ticket"]

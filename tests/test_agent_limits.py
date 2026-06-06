@@ -52,17 +52,21 @@ def test_parallel_limit_queues(client, default_workflow, default_board):
     tid2 = json.loads(ticket2.data)["id"]
 
     # First spawn goes through (keep fake PID alive)
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)) as mock_popen:
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
-            assert mock_popen.call_count == 1
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)) as mock_popen,
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+        assert mock_popen.call_count == 1
 
     # Second spawn should be queued
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)) as mock_popen:
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            res = client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
-            assert res.status_code == 200
-            assert mock_popen.call_count == 0
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)) as mock_popen,
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        res = client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
+        assert res.status_code == 200
+        assert mock_popen.call_count == 0
 
     # Queue row created
     q = client.get(f"/api/tickets/{tid2}")
@@ -105,15 +109,19 @@ def test_hourly_limit_queues(client, default_workflow, default_board):
     tid2 = json.loads(ticket2.data)["id"]
 
     # First spawn goes through
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
 
     # Second spawn queued for rate limit
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)) as mock_popen:
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
-            assert mock_popen.call_count == 0
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)) as mock_popen,
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
+        assert mock_popen.call_count == 0
 
     q = client.get(f"/api/tickets/{tid2}")
     qdata = json.loads(q.data)
@@ -153,14 +161,18 @@ def test_cleanup_frees_slot(client, default_workflow, default_board):
     tid2 = json.loads(ticket2.data)["id"]
 
     # Spawn first; queue second
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)) as mock_popen:
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
-            assert mock_popen.call_count == 1
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)) as mock_popen,
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+        assert mock_popen.call_count == 1
 
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
 
     # Verify queue exists
     q = client.get(f"/api/tickets/{tid2}")
@@ -171,11 +183,13 @@ def test_cleanup_frees_slot(client, default_workflow, default_board):
         app_module.cleanup_runs()
 
     # drain_queue should start the next one and delete the queue row
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)) as mock_popen:
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            with client.application.app_context():
-                app_module.drain_queue()
-            assert mock_popen.call_count == 1
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)) as mock_popen,
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        with client.application.app_context():
+            app_module.drain_queue()
+        assert mock_popen.call_count == 1
 
     # Queue should be gone (row deleted, not just started_at set)
     q = client.get(f"/api/tickets/{tid2}")
@@ -221,13 +235,17 @@ def test_auto_cancel_on_status_change(client, default_workflow, default_board):
     ticket2 = client.post("/api/tickets", json={"title": "C2", "board_id": default_board["id"]})
     tid2 = json.loads(ticket2.data)["id"]
 
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
 
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
 
     # Queue exists
     q = client.get(f"/api/tickets/{tid2}")
@@ -275,9 +293,11 @@ def test_hour_rollover_resets_limit(client, default_workflow, default_board):
     tid2 = json.loads(ticket2.data)["id"]
 
     # Spawn first agent
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)),
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        client.put(f"/api/tickets/{tid1}", json={"status_id": id1})
 
     # Roll back its start time by 2 hours
     from pi_cowork.db import get_db
@@ -288,8 +308,10 @@ def test_hour_rollover_resets_limit(client, default_workflow, default_board):
         db.commit()
 
     # Second agent should now go through (hourly limit reset)
-    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)) as mock_popen:
-        with patch("pi_cowork.agents._is_our_process", return_value=True):
-            res = client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
-            assert res.status_code == 200
-            assert mock_popen.call_count == 1
+    with (
+        patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)) as mock_popen,
+        patch("pi_cowork.agents._is_our_process", return_value=True),
+    ):
+        res = client.put(f"/api/tickets/{tid2}", json={"status_id": id1})
+        assert res.status_code == 200
+        assert mock_popen.call_count == 1

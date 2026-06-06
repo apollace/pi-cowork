@@ -1,5 +1,6 @@
 """Update check/run logic and update-related routes."""
 
+import contextlib
 import json
 import os
 import shutil
@@ -36,10 +37,8 @@ def _read_and_clear_update_state():
                 "message": "Update applied successfully. The app has been restarted.",
                 "timestamp": data.get("timestamp"),
             }
-            try:
+            with contextlib.suppress(OSError):
                 path.unlink()
-            except OSError:
-                pass
             return result
         # Pre-restart (same PID or no PID stored): show an "installing"
         # message but *do not* delete the file.
@@ -49,10 +48,8 @@ def _read_and_clear_update_state():
             "timestamp": data.get("timestamp"),
         }
     except (OSError, json.JSONDecodeError):
-        try:
+        with contextlib.suppress(OSError):
             path.unlink()
-        except OSError:
-            pass
         return None
 
 
@@ -87,10 +84,8 @@ def register_update_routes(app):
     def update_page():
         info = {"branch": "unknown", "commit": "unknown"}
         if _git_available() and _git_dir_exists():
-            try:
+            with contextlib.suppress(Exception):
                 info = _get_git_info()
-            except Exception:
-                pass
         return render_template("update.html", info=info)
 
     @app.route("/update/check", methods=["POST"])

@@ -612,7 +612,7 @@ class TestTimestampBasedDismissal:
 
         # Create initial gate review with created_at in the past
         with client.application.app_context():
-            cur = run_db(
+            run_db(
                 "INSERT INTO gate_reviews (ticket_id, gate_id, from_status_id, to_status_id, status, created_at) "
                 "VALUES (?, ?, ?, ?, 'pending', '2025-01-01 00:00:00')",
                 (ticket, gate, s1, s2),
@@ -638,7 +638,7 @@ class TestTimestampBasedDismissal:
 
         # Create a NEW gate review with created_at after dismissed_at
         with client.application.app_context():
-            cur = run_db(
+            run_db(
                 "INSERT INTO gate_reviews (ticket_id, gate_id, from_status_id, to_status_id, status, created_at) "
                 "VALUES (?, ?, ?, ?, 'pending', '2025-01-01 00:00:02')",
                 (ticket, gate, s1, s2),
@@ -661,7 +661,7 @@ class TestTimestampBasedDismissal:
 
         # Create initial question with created_at in the past
         with client.application.app_context():
-            cur = run_db(
+            run_db(
                 "INSERT INTO questions (ticket_id, body, created_at) VALUES (?, ?, '2025-01-01 00:00:00')",
                 (ticket, "Old question?"),
             )
@@ -686,7 +686,7 @@ class TestTimestampBasedDismissal:
 
         # Create a NEW question with created_at after dismissed_at
         with client.application.app_context():
-            cur = run_db(
+            run_db(
                 "INSERT INTO questions (ticket_id, body, created_at) VALUES (?, ?, '2025-01-01 00:00:02')",
                 (ticket, "New question after dismiss?"),
             )

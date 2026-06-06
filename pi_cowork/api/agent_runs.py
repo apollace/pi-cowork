@@ -1,5 +1,6 @@
 """API: Agent Runs — logs, kill, live stream."""
 
+import contextlib
 import os
 import signal
 import time
@@ -120,10 +121,8 @@ def api_kill_agent_run(run_id):
         if not _agents_mod._is_our_process(pid):
             break
     else:
-        try:
+        with contextlib.suppress(ProcessLookupError):
             os.killpg(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
         escalated = True
 
     exit_code = -9 if escalated else -15

@@ -1,3 +1,4 @@
+/* exported initBoard */
 async function initBoard() {
   const board = document.getElementById("board");
   const showTerminal = document.getElementById("show-terminal");
@@ -7,7 +8,6 @@ async function initBoard() {
 
   let statuses = [];
   let tickets = [];
-  let workflowLabels = [];
   let currentBoardId = null;
   let currentBoardData = null;
   const collapsed = new Set();
@@ -33,7 +33,7 @@ async function initBoard() {
         showTerminal: showTerminal.checked,
       };
       localStorage.setItem(boardPrefsKey(currentBoardId), JSON.stringify(prefs));
-    } catch (e) {
+    } catch {
       // localStorage unavailable or full — silently ignore
     }
   }
@@ -61,7 +61,7 @@ async function initBoard() {
       if (typeof prefs.showTerminal === "boolean") {
         showTerminal.checked = prefs.showTerminal;
       }
-    } catch (e) {
+    } catch {
       // Corrupt or stale data — fall back to defaults
     }
   }
@@ -197,15 +197,13 @@ async function initBoard() {
         return;
       }
       currentBoardData = await boardRes.json();
-      const [sRes, tRes, rRes, lRes] = await Promise.all([
+      const [sRes, tRes, rRes] = await Promise.all([
         fetch(`/api/statuses?workflow_id=${currentBoardData.workflow_id}`),
         fetch(`/api/tickets?board_id=${currentBoardId}&include_terminal=${showTerminal.checked}`),
         fetch(`/api/running_agent_runs?board_id=${currentBoardId}`),
-        fetch(`/api/labels?workflow_id=${currentBoardData.workflow_id}`),
       ]);
       statuses = await sRes.json();
       tickets = await tRes.json();
-      workflowLabels = lRes.ok ? await lRes.json() : [];
       const runningRuns = rRes.ok ? await rRes.json() : [];
       if (newTicketBtn) {
         newTicketBtn.href = `/ticket/new?board_id=${currentBoardId}`;
@@ -221,7 +219,7 @@ async function initBoard() {
           const countEl = document.getElementById("board-knowledge-count");
           if (countEl) countEl.textContent = "(" + kEntries.length + ")";
         }
-      } catch(e) { /* silently ignore */ }
+      } catch { /* silently ignore */ }
       renderRunningPanel(runningRuns);
     } catch (e) {
       showToast("Failed to load board: " + e.message, "error");
@@ -244,7 +242,7 @@ async function initBoard() {
       const runningRuns = rRes.ok ? await rRes.json() : [];
       diffAndUpdateBoard(newTickets);
       renderRunningPanel(runningRuns);
-    } catch (e) {
+    } catch {
       // Silently ignore sync failures to avoid toast spam on rapid SSE events
     }
   }
@@ -393,7 +391,7 @@ async function initBoard() {
     const newMap = new Map(newTickets.map(t => [t.id, t]));
 
     // Removed tickets
-    for (const [id, oldTicket] of oldMap) {
+    for (const id of oldMap.keys()) {
       if (!newMap.has(id)) {
         removeCard(id);
       }
@@ -603,7 +601,6 @@ async function initBoard() {
     card.id = "ticket-card-" + ticket.id;
     const priorityClass = ticket.priority ? ` card-priority-${ticket.priority}` : "";
     card.className = `card${priorityClass}`;
-    const priorityColors = { Critical: "#dc2626", High: "#d97706", Medium: "#2563eb", Low: "#6b7280" };
     const statusOptions = statuses.map(s =>
       `<option value="${s.id}"${s.id === ticket.status_id ? " selected" : ""}>${escapeHtml(s.name)}</option>`
     ).join("");
@@ -807,17 +804,6 @@ async function initBoard() {
     return group;
   }
 
-
-  function updatePriorityToggles() {
-    priorityToggles.forEach(btn => {
-      const p = btn.dataset.priority;
-      if (filterState.selectedPriorities.has(p)) {
-        btn.classList.add("active");
-      } else {
-        btn.classList.remove("active");
-      }
-    });
-  }
 
   function render() {
     board.innerHTML = "";

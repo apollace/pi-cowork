@@ -336,7 +336,7 @@ class TestSSEUpdatedAt:
         assert len(events) >= 1
         frame = events[0]
         lines = frame.split("\n")
-        data_line = [l for l in lines if l.startswith("data: ")]
+        data_line = [line for line in lines if line.startswith("data: ")]
         assert len(data_line) == 1
         data = json.loads(data_line[0][6:])
         assert "updated_at" in data
@@ -390,7 +390,7 @@ class TestSSEUpdatedAt:
         assert len(event_data) >= 1
         frame = event_data[0]
         lines = frame.split("\n")
-        data_line = [l for l in lines if l.startswith("data: ")]
+        data_line = [line for line in lines if line.startswith("data: ")]
         data = json.loads(data_line[0][6:])
         assert "updated_at" in data
         assert data["updated_at"] > "2020-01-01 00:00:00"
@@ -428,7 +428,7 @@ class TestSSEUpdatedAt:
         if events:
             frame = events[0]
             lines = frame.split("\n")
-            data_line = [l for l in lines if l.startswith("data: ")]
+            data_line = [line for line in lines if line.startswith("data: ")]
             if data_line:
                 data = json.loads(data_line[0][6:])
                 # Should not have updated_at since there's no ticket_id
