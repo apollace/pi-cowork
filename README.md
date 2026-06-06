@@ -157,6 +157,18 @@ npx eslint static/
 npx jscpd --config .jscpd.json
 ```
 
+### Using lint as a Quality Gate
+
+You can wire `./scripts/lint.sh` into a workflow transition so a ticket cannot move past a stage unless lint passes. Because quality gates run in the **board's working directory** (usually `workspace/`), reference the script with a relative path from there:
+
+| Board working directory | Quality gate command |
+|------------------------|---------------------|
+| `workspace/` (default) | `../scripts/lint.sh` |
+| Repo root | `./scripts/lint.sh` |
+| Custom absolute path | Use absolute path to the script |
+
+The script finds the project root automatically, so it works regardless of where the board's working directory is located.
+
 ### 6. Project Structure for Contributors
 
 | Path | What to know |
