@@ -14,7 +14,7 @@ Retention priority:
 import logging
 import os
 import sqlite3
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
 from pi_cowork.config import get_config
 
@@ -24,10 +24,11 @@ logger = logging.getLogger(__name__)
 def _get_standalone_db():
     """Get a standalone DB connection (for use outside Flask request context)."""
     from pi_cowork import config
-    path = os.environ.get('DATABASE', config.DATABASE)
+
+    path = os.environ.get("DATABASE", config.DATABASE)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
-    conn.execute('PRAGMA foreign_keys = ON')
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
@@ -40,16 +41,18 @@ def cleanup_old_event_logs(max_age_days=None):
     Returns the number of rows deleted.
     """
     if max_age_days is None:
-        max_age_days = get_config('event_log_retention_days')
+        max_age_days = get_config("event_log_retention_days")
         if max_age_days is None:
             max_age_days = 30
 
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+    cutoff = (datetime.now(UTC) - timedelta(days=max_age_days)).isoformat()
 
     try:
         from flask import has_app_context
+
         if has_app_context():
             from pi_cowork.db import get_db
+
             db = get_db()
             cur = db.execute("DELETE FROM event_log WHERE created_at < ?", (cutoff,))
             db.commit()

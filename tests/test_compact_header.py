@@ -24,9 +24,7 @@ class TestBoardHtml:
 
     def test_page_header_has_board_page_header(self):
         html = read(BOARD_HTML_PATH)
-        assert 'class="page-header board-page-header"' in html, (
-            "Expected .board-page-header on .page-header wrapper"
-        )
+        assert 'class="page-header board-page-header"' in html, "Expected .board-page-header on .page-header wrapper"
 
     def test_new_ticket_btn_has_compact_primary(self):
         html = read(BOARD_HTML_PATH)
@@ -60,126 +58,98 @@ class TestCompactButtonCss:
         m = re.search(r"#new-ticket-btn\.btn-compact-primary\s*\{([^}]+)\}", css)
         assert m, "Missing #new-ticket-btn.btn-compact-primary rule"
         body = m.group(1)
-        assert "background: #2563EB" in body, (
-            f"Expected background: #2563EB, got:\n{body}"
-        )
+        assert "background: #2563EB" in body, f"Expected background: #2563EB, got:\n{body}"
 
     def test_new_ticket_btn_text_color(self):
         css = read(STYLE_CSS_PATH)
         m = re.search(r"#new-ticket-btn\.btn-compact-primary\s*\{([^}]+)\}", css)
         assert m
         body = m.group(1)
-        assert "color: #fff" in body, (
-            f"Expected color: #fff, got:\n{body}"
-        )
+        assert "color: #fff" in body, f"Expected color: #fff, got:\n{body}"
 
     def test_new_ticket_btn_font_size(self):
         css = read(STYLE_CSS_PATH)
         m = re.search(r"#new-ticket-btn\.btn-compact-primary\s*\{([^}]+)\}", css)
         assert m
         body = m.group(1)
-        assert "font-size: 13px" in body, (
-            f"Expected font-size: 13px, got:\n{body}"
-        )
+        assert "font-size: 13px" in body, f"Expected font-size: 13px, got:\n{body}"
 
     def test_new_ticket_btn_font_weight(self):
         css = read(STYLE_CSS_PATH)
         m = re.search(r"#new-ticket-btn\.btn-compact-primary\s*\{([^}]+)\}", css)
         assert m
         body = m.group(1)
-        assert "font-weight: 500" in body, (
-            f"Expected font-weight: 500, got:\n{body}"
-        )
+        assert "font-weight: 500" in body, f"Expected font-weight: 500, got:\n{body}"
 
     def test_new_ticket_btn_padding(self):
         css = read(STYLE_CSS_PATH)
         m = re.search(r"#new-ticket-btn\.btn-compact-primary\s*\{([^}]+)\}", css)
         assert m
         body = m.group(1)
-        assert "padding: 8px 14px" in body, (
-            f"Expected padding: 8px 14px, got:\n{body}"
-        )
+        assert "padding: 8px 14px" in body, f"Expected padding: 8px 14px, got:\n{body}"
 
     def test_new_ticket_btn_border_radius(self):
         css = read(STYLE_CSS_PATH)
         m = re.search(r"#new-ticket-btn\.btn-compact-primary\s*\{([^}]+)\}", css)
         assert m
         body = m.group(1)
-        assert "border-radius: 8px" in body, (
-            f"Expected border-radius: 8px, got:\n{body}"
-        )
+        assert "border-radius: 8px" in body, f"Expected border-radius: 8px, got:\n{body}"
 
     def test_new_ticket_btn_border_none(self):
         css = read(STYLE_CSS_PATH)
         m = re.search(r"#new-ticket-btn\.btn-compact-primary\s*\{([^}]+)\}", css)
         assert m
         body = m.group(1)
-        assert "border: none" in body, (
-            f"Expected border: none, got:\n{body}"
-        )
+        assert "border: none" in body, f"Expected border: none, got:\n{body}"
 
     def test_manage_boards_btn_background(self):
         css = read(STYLE_CSS_PATH)
         m = re.search(r"#manage-boards-btn\.btn-compact-secondary\s*\{([^}]+)\}", css)
         assert m, "Missing #manage-boards-btn.btn-compact-secondary rule"
         body = m.group(1)
-        assert "background: #FFFFFF" in body, (
-            f"Expected background: #FFFFFF, got:\n{body}"
-        )
+        assert "background: #FFFFFF" in body, f"Expected background: #FFFFFF, got:\n{body}"
 
     def test_manage_boards_btn_border(self):
         css = read(STYLE_CSS_PATH)
         m = re.search(r"#manage-boards-btn\.btn-compact-secondary\s*\{([^}]+)\}", css)
         assert m
         body = m.group(1)
-        assert "border: 1px solid #E2E8F0" in body, (
-            f"Expected border: 1px solid #E2E8F0, got:\n{body}"
-        )
+        assert "border: 1px solid #E2E8F0" in body, f"Expected border: 1px solid #E2E8F0, got:\n{body}"
 
     def test_manage_boards_btn_text_color(self):
         css = read(STYLE_CSS_PATH)
         m = re.search(r"#manage-boards-btn\.btn-compact-secondary\s*\{([^}]+)\}", css)
         assert m
         body = m.group(1)
-        assert "color: #334155" in body, (
-            f"Expected color: #334155, got:\n{body}"
-        )
+        assert "color: #334155" in body, f"Expected color: #334155, got:\n{body}"
 
     def test_manage_boards_btn_font_size(self):
         css = read(STYLE_CSS_PATH)
         m = re.search(r"#manage-boards-btn\.btn-compact-secondary\s*\{([^}]+)\}", css)
         assert m
         body = m.group(1)
-        assert "font-size: 13px" in body, (
-            f"Expected font-size: 13px, got:\n{body}"
-        )
+        assert "font-size: 13px" in body, f"Expected font-size: 13px, got:\n{body}"
 
     def test_manage_boards_btn_font_weight(self):
         css = read(STYLE_CSS_PATH)
         m = re.search(r"#manage-boards-btn\.btn-compact-secondary\s*\{([^}]+)\}", css)
         assert m
         body = m.group(1)
-        assert "font-weight: 500" in body, (
-            f"Expected font-weight: 500, got:\n{body}"
-        )
+        assert "font-weight: 500" in body, f"Expected font-weight: 500, got:\n{body}"
 
     def test_manage_boards_btn_padding(self):
         css = read(STYLE_CSS_PATH)
         m = re.search(r"#manage-boards-btn\.btn-compact-secondary\s*\{([^}]+)\}", css)
         assert m
         body = m.group(1)
-        assert "padding: 8px 14px" in body, (
-            f"Expected padding: 8px 14px, got:\n{body}"
-        )
+        assert "padding: 8px 14px" in body, f"Expected padding: 8px 14px, got:\n{body}"
 
     def test_manage_boards_btn_border_radius(self):
         css = read(STYLE_CSS_PATH)
         m = re.search(r"#manage-boards-btn\.btn-compact-secondary\s*\{([^}]+)\}", css)
         assert m
         body = m.group(1)
-        assert "border-radius: 8px" in body, (
-            f"Expected border-radius: 8px, got:\n{body}"
-        )
+        assert "border-radius: 8px" in body, f"Expected border-radius: 8px, got:\n{body}"
 
 
 class TestMobileOverride:
@@ -208,7 +178,7 @@ class TestMobileOverride:
                         break
             if end == -1:
                 continue
-            block = part[brace + 1:end]
+            block = part[brace + 1 : end]
             if needle in block:
                 return block
         return None
@@ -220,9 +190,7 @@ class TestMobileOverride:
         m = re.search(r"\.board-page-header\s*\{([^}]+)\}", block)
         assert m
         body = m.group(1)
-        assert "flex-direction: row" in body, (
-            f"Expected flex-direction: row in mobile .board-page-header, got:\n{body}"
-        )
+        assert "flex-direction: row" in body, f"Expected flex-direction: row in mobile .board-page-header, got:\n{body}"
 
     def test_board_page_header_mobile_align_items(self):
         css = read(STYLE_CSS_PATH)
@@ -231,9 +199,7 @@ class TestMobileOverride:
         m = re.search(r"\.board-page-header\s*\{([^}]+)\}", block)
         assert m
         body = m.group(1)
-        assert "align-items: center" in body, (
-            f"Expected align-items: center in mobile .board-page-header, got:\n{body}"
-        )
+        assert "align-items: center" in body, f"Expected align-items: center in mobile .board-page-header, got:\n{body}"
 
     def test_board_page_header_mobile_gap(self):
         css = read(STYLE_CSS_PATH)
@@ -242,9 +208,7 @@ class TestMobileOverride:
         m = re.search(r"\.board-page-header\s*\{([^}]+)\}", block)
         assert m
         body = m.group(1)
-        assert "gap: 0.5rem" in body, (
-            f"Expected gap: 0.5rem in mobile .board-page-header, got:\n{body}"
-        )
+        assert "gap: 0.5rem" in body, f"Expected gap: 0.5rem in mobile .board-page-header, got:\n{body}"
 
     def test_board_page_header_mobile_margin_bottom(self):
         css = read(STYLE_CSS_PATH)
@@ -262,15 +226,9 @@ class TestMobileOverride:
         m = re.search(r"\.board-page-header\s+h1\s*\{([^}]+)\}", css)
         assert m, "Missing .board-page-header h1 truncation rule"
         body = m.group(1)
-        assert "text-overflow: ellipsis" in body, (
-            f"Expected text-overflow: ellipsis, got:\n{body}"
-        )
-        assert "white-space: nowrap" in body, (
-            f"Expected white-space: nowrap, got:\n{body}"
-        )
-        assert "overflow: hidden" in body, (
-            f"Expected overflow: hidden, got:\n{body}"
-        )
+        assert "text-overflow: ellipsis" in body, f"Expected text-overflow: ellipsis, got:\n{body}"
+        assert "white-space: nowrap" in body, f"Expected white-space: nowrap, got:\n{body}"
+        assert "overflow: hidden" in body, f"Expected overflow: hidden, got:\n{body}"
 
     def test_board_page_header_h1_truncation_mobile(self):
         css = read(STYLE_CSS_PATH)
@@ -289,7 +247,6 @@ class TestNoRegression:
 
     def test_other_pages_do_not_have_board_page_header(self):
         """Other templates should not be forced to pick up these styles."""
-        import os
         import glob
 
         for path in glob.glob("templates/*.html"):
@@ -297,6 +254,4 @@ class TestNoRegression:
                 continue
             with open(path) as f:
                 content = f.read()
-            assert "board-page-header" not in content, (
-                f"{path} should not contain board-page-header class"
-            )
+            assert "board-page-header" not in content, f"{path} should not contain board-page-header class"

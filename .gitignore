@@ -13,3 +13,7 @@ __pycache__/
 *.pyc
 *.db-*
 end_at
+node_modules/
+jscpd-report/
+.eslintcache
+

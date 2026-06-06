@@ -1,25 +1,25 @@
+/* exported initBoard */
 async function initBoard() {
-  const board = document.getElementById('board');
-  const showTerminal = document.getElementById('show-terminal');
-  const newTicketBtn = document.getElementById('new-ticket-btn');
-  const boardTitle = document.getElementById('board-title');
-  const boardMeta = document.getElementById('board-meta');
+  const board = document.getElementById("board");
+  const showTerminal = document.getElementById("show-terminal");
+  const newTicketBtn = document.getElementById("new-ticket-btn");
+  const boardTitle = document.getElementById("board-title");
+  const boardMeta = document.getElementById("board-meta");
 
   let statuses = [];
   let tickets = [];
-  let workflowLabels = [];
   let currentBoardId = null;
   let currentBoardData = null;
   const collapsed = new Set();
   const filterState = {
-    searchQuery: '',
+    searchQuery: "",
     selectedPriorities: new Set(),
     selectedLabels: new Set(),
   };
 
   // ── Board preferences persistence (localStorage) ──
   function boardPrefsKey(boardId) {
-    return 'board_prefs_' + boardId;
+    return "board_prefs_" + boardId;
   }
 
   function saveBoardPrefs() {
@@ -33,7 +33,7 @@ async function initBoard() {
         showTerminal: showTerminal.checked,
       };
       localStorage.setItem(boardPrefsKey(currentBoardId), JSON.stringify(prefs));
-    } catch (e) {
+    } catch {
       // localStorage unavailable or full — silently ignore
     }
   }
@@ -44,7 +44,7 @@ async function initBoard() {
       const raw = localStorage.getItem(boardPrefsKey(currentBoardId));
       if (!raw) return;
       const prefs = JSON.parse(raw);
-      if (typeof prefs.searchQuery === 'string') {
+      if (typeof prefs.searchQuery === "string") {
         filterState.searchQuery = prefs.searchQuery;
         if (searchInput) searchInput.value = prefs.searchQuery;
       }
@@ -58,31 +58,31 @@ async function initBoard() {
         collapsed.clear();
         prefs.collapsedGroups.forEach(id => collapsed.add(id));
       }
-      if (typeof prefs.showTerminal === 'boolean') {
+      if (typeof prefs.showTerminal === "boolean") {
         showTerminal.checked = prefs.showTerminal;
       }
-    } catch (e) {
+    } catch {
       // Corrupt or stale data — fall back to defaults
     }
   }
-  const searchInput = document.getElementById('ticket-search');
-  const labelFiltersContainer = document.getElementById('label-filters');
-  const priorityToggles = document.querySelectorAll('.priority-toggle');
-  const filterDropdownBtn = document.getElementById('filter-dropdown-btn');
-  const filterDropdownPanel = document.getElementById('filter-dropdown-panel');
-  const filterBadge = document.getElementById('filter-badge');
+  const searchInput = document.getElementById("ticket-search");
+  const labelFiltersContainer = document.getElementById("label-filters");
+  const priorityToggles = document.querySelectorAll(".priority-toggle");
+  const filterDropdownBtn = document.getElementById("filter-dropdown-btn");
+  const filterDropdownPanel = document.getElementById("filter-dropdown-panel");
+  const filterBadge = document.getElementById("filter-badge");
 
   // Filter dropdown toggle with viewport-aware positioning
   let _dropdownOpen = false;
   function positionFilterDropdown() {
     // Reset to default positioning first so we can measure natural size
-    filterDropdownPanel.style.left = '';
-    filterDropdownPanel.style.right = '';
-    filterDropdownPanel.style.top = '';
-    filterDropdownPanel.style.bottom = '';
-    filterDropdownPanel.style.maxHeight = '';
-    filterDropdownPanel.style.overflowY = '';
-    filterDropdownPanel.classList.remove('dropdown-right', 'dropdown-above', 'scrollable');
+    filterDropdownPanel.style.left = "";
+    filterDropdownPanel.style.right = "";
+    filterDropdownPanel.style.top = "";
+    filterDropdownPanel.style.bottom = "";
+    filterDropdownPanel.style.maxHeight = "";
+    filterDropdownPanel.style.overflowY = "";
+    filterDropdownPanel.classList.remove("dropdown-right", "dropdown-above", "scrollable");
 
     const triggerRect = filterDropdownBtn.getBoundingClientRect();
     const panelRect = filterDropdownPanel.getBoundingClientRect();
@@ -92,34 +92,34 @@ async function initBoard() {
 
     // Horizontal: if panel overflows right, align to right edge of trigger
     if (triggerRect.left + panelRect.width > viewportW - 8) {
-      filterDropdownPanel.classList.add('dropdown-right');
+      filterDropdownPanel.classList.add("dropdown-right");
     }
     // Vertical: if panel overflows bottom, position above the trigger
     if (triggerRect.bottom + gap + panelRect.height > viewportH - 8) {
-      filterDropdownPanel.classList.add('dropdown-above');
+      filterDropdownPanel.classList.add("dropdown-above");
       // Re-check: if above also overflows, constrain max-height
       const aboveSpace = triggerRect.top - gap - 8;
       if (aboveSpace < panelRect.height) {
-        filterDropdownPanel.style.maxHeight = Math.max(aboveSpace, 120) + 'px';
-        filterDropdownPanel.classList.add('scrollable');
+        filterDropdownPanel.style.maxHeight = Math.max(aboveSpace, 120) + "px";
+        filterDropdownPanel.classList.add("scrollable");
       }
     } else {
       // Below: check if still too tall even when below trigger
       const belowSpace = viewportH - triggerRect.bottom - gap - 8;
       if (belowSpace < panelRect.height) {
-        filterDropdownPanel.style.maxHeight = Math.max(belowSpace, 120) + 'px';
-        filterDropdownPanel.classList.add('scrollable');
+        filterDropdownPanel.style.maxHeight = Math.max(belowSpace, 120) + "px";
+        filterDropdownPanel.classList.add("scrollable");
       }
     }
   }
   function toggleFilterDropdown(forceClose) {
     if (forceClose || _dropdownOpen) {
-      filterDropdownPanel.style.display = 'none';
-      filterDropdownBtn.classList.remove('active');
+      filterDropdownPanel.style.display = "none";
+      filterDropdownBtn.classList.remove("active");
       _dropdownOpen = false;
     } else {
-      filterDropdownPanel.style.display = 'block';
-      filterDropdownBtn.classList.add('active');
+      filterDropdownPanel.style.display = "block";
+      filterDropdownBtn.classList.add("active");
       positionFilterDropdown();
       _dropdownOpen = true;
     }
@@ -127,16 +127,16 @@ async function initBoard() {
   function updateFilterBadge() {
     const count = filterState.selectedPriorities.size + filterState.selectedLabels.size;
     filterBadge.textContent = count;
-    filterBadge.style.display = count > 0 ? 'inline-flex' : 'none';
+    filterBadge.style.display = count > 0 ? "inline-flex" : "none";
   }
   if (filterDropdownBtn) {
-    filterDropdownBtn.addEventListener('click', (e) => {
+    filterDropdownBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       toggleFilterDropdown();
     });
   }
   // Close dropdown on click outside
-  document.addEventListener('click', (e) => {
+  document.addEventListener("click", (e) => {
     if (_dropdownOpen && !filterDropdownPanel.contains(e.target) && !filterDropdownBtn.contains(e.target)) {
       toggleFilterDropdown(true);
     }
@@ -145,67 +145,65 @@ async function initBoard() {
   function _repositionIfOpen() {
     if (_dropdownOpen) positionFilterDropdown();
   }
-  window.addEventListener('resize', _repositionIfOpen);
-  window.addEventListener('scroll', _repositionIfOpen, true);
+  window.addEventListener("resize", _repositionIfOpen);
+  window.addEventListener("scroll", _repositionIfOpen, true);
   // Close dropdown on Escape
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && _dropdownOpen) {
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && _dropdownOpen) {
       toggleFilterDropdown(true);
     }
   });
   // Prevent clicks inside dropdown from closing it
   if (filterDropdownPanel) {
-    filterDropdownPanel.addEventListener('click', (e) => {
+    filterDropdownPanel.addEventListener("click", (e) => {
       e.stopPropagation();
     });
   }
 
   async function loadBoards() {
-    const res = await fetch('/api/boards');
+    const res = await fetch("/api/boards");
     const boards = await res.json();
     // Restore from localStorage
-    const saved = localStorage.getItem('activeBoard');
+    const saved = localStorage.getItem("activeBoard");
     if (saved && boards.some(b => b.id === parseInt(saved))) {
       currentBoardId = parseInt(saved);
     } else if (boards.length > 0) {
       currentBoardId = boards[0].id;
-      localStorage.setItem('activeBoard', currentBoardId);
+      localStorage.setItem("activeBoard", currentBoardId);
     }
     if (currentBoardId) {
       await refresh();
     } else {
       board.innerHTML = '<p class="empty">No boards yet. Click "Boards" to create one.</p>';
-      boardTitle.textContent = 'Board';
-      boardMeta.innerHTML = '';
+      boardTitle.textContent = "Board";
+      boardMeta.innerHTML = "";
     }
   }
 
   async function refresh() {
     if (!currentBoardId) {
-      board.textContent = 'Select a board.';
+      board.textContent = "Select a board.";
       return;
     }
     // Show skeleton loading
-    const skeleton = document.getElementById('board-skeleton');
-    if (skeleton) skeleton.style.display = 'block';
-    board.innerHTML = '';
+    const skeleton = document.getElementById("board-skeleton");
+    if (skeleton) skeleton.style.display = "block";
+    board.innerHTML = "";
     if (skeleton) board.appendChild(skeleton);
     try {
       const boardRes = await fetch(`/api/boards/${currentBoardId}`);
       if (!boardRes.ok) {
-        board.textContent = 'Board not found.';
+        board.textContent = "Board not found.";
         return;
       }
       currentBoardData = await boardRes.json();
-      const [sRes, tRes, rRes, lRes] = await Promise.all([
+      const [sRes, tRes, rRes] = await Promise.all([
         fetch(`/api/statuses?workflow_id=${currentBoardData.workflow_id}`),
         fetch(`/api/tickets?board_id=${currentBoardId}&include_terminal=${showTerminal.checked}`),
         fetch(`/api/running_agent_runs?board_id=${currentBoardId}`),
-        fetch(`/api/labels?workflow_id=${currentBoardData.workflow_id}`),
       ]);
       statuses = await sRes.json();
       tickets = await tRes.json();
-      workflowLabels = lRes.ok ? await lRes.json() : [];
       const runningRuns = rRes.ok ? await rRes.json() : [];
       if (newTicketBtn) {
         newTicketBtn.href = `/ticket/new?board_id=${currentBoardId}`;
@@ -215,19 +213,19 @@ async function initBoard() {
       boardMeta.innerHTML = `<span class="badge muted">${escapeHtml(currentBoardData.workflow_name)}</span> <a href="/knowledge" class="badge muted" style="cursor:pointer;text-decoration:none;">📚 Knowledge <span id="board-knowledge-count"></span></a>`;
       // Load knowledge count for this board
       try {
-        const kRes = await fetch('/api/knowledge?board_id=' + currentBoardId);
+        const kRes = await fetch("/api/knowledge?board_id=" + currentBoardId);
         if (kRes.ok) {
           const kEntries = await kRes.json();
-          const countEl = document.getElementById('board-knowledge-count');
-          if (countEl) countEl.textContent = '(' + kEntries.length + ')';
+          const countEl = document.getElementById("board-knowledge-count");
+          if (countEl) countEl.textContent = "(" + kEntries.length + ")";
         }
-      } catch(e) { /* silently ignore */ }
+      } catch { /* silently ignore */ }
       renderRunningPanel(runningRuns);
     } catch (e) {
-      showToast('Failed to load board: ' + e.message, 'error');
+      showToast("Failed to load board: " + e.message, "error");
       return;
     } finally {
-      if (skeleton) skeleton.style.display = 'none';
+      if (skeleton) skeleton.style.display = "none";
     }
     restoreBoardPrefs();
     render();
@@ -244,14 +242,14 @@ async function initBoard() {
       const runningRuns = rRes.ok ? await rRes.json() : [];
       diffAndUpdateBoard(newTickets);
       renderRunningPanel(runningRuns);
-    } catch (e) {
+    } catch {
       // Silently ignore sync failures to avoid toast spam on rapid SSE events
     }
   }
 
   function getCardsContainer(statusId) {
     const group = board.querySelector(`.group[data-status-id="${statusId}"]`);
-    return group ? group.querySelector('.cards') : null;
+    return group ? group.querySelector(".cards") : null;
   }
 
   function removeCard(ticketId) {
@@ -284,23 +282,23 @@ async function initBoard() {
 
   function updateCardInPlace(ticket, cardEl) {
     // Update priority class
-    const priorityClass = ticket.priority ? `card-priority-${ticket.priority}` : '';
+    const priorityClass = ticket.priority ? `card-priority-${ticket.priority}` : "";
     cardEl.className = `card ${priorityClass}`.trim();
 
     // Update priority label
-    const priorityLabelEl = cardEl.querySelector('.card-priority-label');
+    const priorityLabelEl = cardEl.querySelector(".card-priority-label");
     if (priorityLabelEl) {
       if (ticket.priority) {
         priorityLabelEl.className = `card-priority-label p-${ticket.priority}`;
         priorityLabelEl.textContent = `● ${ticket.priority}`;
-        priorityLabelEl.style.display = '';
+        priorityLabelEl.style.display = "";
       } else {
-        priorityLabelEl.style.display = 'none';
+        priorityLabelEl.style.display = "none";
       }
     }
 
     // Update title
-    const titleEl = cardEl.querySelector('.card-title');
+    const titleEl = cardEl.querySelector(".card-title");
     if (titleEl) {
       titleEl.textContent = ticket.title;
     }
@@ -310,30 +308,30 @@ async function initBoard() {
     if (labelsDiv) {
       const labelPills = (ticket.labels || []).map(l =>
         `<span class="badge label-pill" style="background:${escapeHtml(l.color)}33;color:${escapeHtml(l.color)};border:1px solid ${escapeHtml(l.color)}55;">${escapeHtml(l.name)}</span>`
-      ).join('');
+      ).join("");
       labelsDiv.innerHTML = labelPills + `<button type="button" class="card-label-add" id="card-label-btn-${ticket.id}" onclick="event.preventDefault(); event.stopPropagation(); toggleCardLabels(${ticket.id});">+</button>`;
     }
 
     // Update status select and footer badges
-    const footer = cardEl.querySelector('.card-footer');
+    const footer = cardEl.querySelector(".card-footer");
     if (footer) {
       const statusOptions = statuses.map(s =>
-        `<option value="${s.id}"${s.id === ticket.status_id ? ' selected' : ''}>${escapeHtml(s.name)}</option>`
-      ).join('');
+        `<option value="${s.id}"${s.id === ticket.status_id ? " selected" : ""}>${escapeHtml(s.name)}</option>`
+      ).join("");
       const statusSelectHTML = `<select class="card-status-select" data-id="${ticket.id}">${statusOptions}</select>`;
-      const hasAgent = ticket.agent_name ? `<span class="badge agent">🤖 ${escapeHtml(ticket.agent_name)}</span>` : '';
-      const queuedBadge = ticket.queued ? `<span class="badge queued" title="${escapeHtml(ticket.queue_reason || '')} limit">⏳ Queued</span>` : '';
-      const gateBadge = ticket.gate_pending ? `<span class="badge gate">🚧 Gate</span>` : '';
-      const questionBadge = ticket.question_count ? `<span class="badge question">❓ ${ticket.question_count}</span>` : '';
+      const hasAgent = ticket.agent_name ? `<span class="badge agent">🤖 ${escapeHtml(ticket.agent_name)}</span>` : "";
+      const queuedBadge = ticket.queued ? `<span class="badge queued" title="${escapeHtml(ticket.queue_reason || "")} limit">⏳ Queued</span>` : "";
+      const gateBadge = ticket.gate_pending ? "<span class=\"badge gate\">🚧 Gate</span>" : "";
+      const questionBadge = ticket.question_count ? `<span class="badge question">❓ ${ticket.question_count}</span>` : "";
       const recurringBadge = (ticket.recurring_parents && ticket.recurring_parents.length > 0)
-        ? `<span class="badge recurring" title="Created by recurring task: ${escapeHtml(ticket.recurring_parents[0].title)}">🔄 Recurring</span>` : '';
+        ? `<span class="badge recurring" title="Created by recurring task: ${escapeHtml(ticket.recurring_parents[0].title)}">🔄 Recurring</span>` : "";
 
-      let branchBadge = '';
+      let branchBadge = "";
       if (ticket.branch) {
         const autoPattern = new RegExp(`^ticket-${ticket.id}-[a-z0-9-]+$`);
         const isAuto = autoPattern.test(ticket.branch);
         const displayText = isAuto ? `#${ticket.id}` : escapeHtml(ticket.branch);
-        const textClass = isAuto ? '' : 'card-branch-text';
+        const textClass = isAuto ? "" : "card-branch-text";
         branchBadge = `
           <span class="card-branch-pill" title="Git branch: ${escapeHtml(ticket.branch)}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -354,23 +352,23 @@ async function initBoard() {
 
       footer.innerHTML = statusSelectHTML + hasAgent + queuedBadge + gateBadge + questionBadge + recurringBadge + branchBadge;
 
-      const statusSelectEl = footer.querySelector('.card-status-select');
+      const statusSelectEl = footer.querySelector(".card-status-select");
       if (statusSelectEl) {
-        statusSelectEl.addEventListener('change', (e) => {
+        statusSelectEl.addEventListener("change", (e) => {
           e.preventDefault();
           e.stopPropagation();
           moveTicket(ticket.id, parseInt(e.target.value));
         });
       }
 
-      const branchCopyBtn = footer.querySelector('.card-branch-copy');
+      const branchCopyBtn = footer.querySelector(".card-branch-copy");
       if (branchCopyBtn) {
-        branchCopyBtn.addEventListener('click', (e) => {
+        branchCopyBtn.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
-          const branch = branchCopyBtn.getAttribute('data-branch');
+          const branch = branchCopyBtn.getAttribute("data-branch");
           navigator.clipboard.writeText(branch).then(() => {
-            window.showToast('Branch copied', 'success');
+            window.showToast("Branch copied", "success");
           });
         });
       }
@@ -383,7 +381,7 @@ async function initBoard() {
       const group = board.querySelector(`.group[data-status-id="${status.id}"]`);
       if (!group) continue;
       const count = visibleTickets.filter(t => t.status_id === status.id).length;
-      const countEl = group.querySelector('.group-count');
+      const countEl = group.querySelector(".group-count");
       if (countEl) countEl.textContent = count;
     }
   }
@@ -393,7 +391,7 @@ async function initBoard() {
     const newMap = new Map(newTickets.map(t => [t.id, t]));
 
     // Removed tickets
-    for (const [id, oldTicket] of oldMap) {
+    for (const id of oldMap.keys()) {
       if (!newMap.has(id)) {
         removeCard(id);
       }
@@ -452,25 +450,25 @@ async function initBoard() {
     const m = Math.floor((totalSeconds % 3600) / 60);
     const s = totalSeconds % 60;
     const parts = [];
-    if (h) parts.push(h + 'h');
-    if (m || h) parts.push(m + 'm');
-    parts.push(s + 's');
-    return parts.join(' ');
+    if (h) parts.push(h + "h");
+    if (m || h) parts.push(m + "m");
+    parts.push(s + "s");
+    return parts.join(" ");
   }
 
   function renderRunningPanel(runs) {
-    const panel = document.getElementById('running-agents');
+    const panel = document.getElementById("running-agents");
     if (!panel) return;
     if (!runs || runs.length === 0) {
-      panel.style.display = 'none';
-      panel.innerHTML = '';
+      panel.style.display = "none";
+      panel.innerHTML = "";
       return;
     }
-    panel.style.display = 'flex';
+    panel.style.display = "flex";
 
     // Map existing cards by run ID for diffing
     const existingCards = new Map();
-    panel.querySelectorAll('.running-card').forEach(card => {
+    panel.querySelectorAll(".running-card").forEach(card => {
       const runId = card.dataset.runId;
       if (runId) existingCards.set(runId, card);
     });
@@ -489,8 +487,8 @@ async function initBoard() {
       const runIdStr = String(run.id);
       let card = existingCards.get(runIdStr);
       if (!card) {
-        card = document.createElement('div');
-        card.className = 'running-card';
+        card = document.createElement("div");
+        card.className = "running-card";
         card.dataset.runId = runIdStr;
         panel.appendChild(card);
       }
@@ -506,8 +504,8 @@ async function initBoard() {
         <button class="kill-btn" data-run-id="${run.id}" data-agent-name="${escapeHtml(run.agent_name)}" data-ticket-id="${run.ticket_id}" title="Kill agent">🛑</button>
       `;
       // Kill button handler
-      const killBtn = card.querySelector('.kill-btn');
-      killBtn.addEventListener('click', async function(e) {
+      const killBtn = card.querySelector(".kill-btn");
+      killBtn.addEventListener("click", async function(e) {
         e.stopPropagation();
         e.preventDefault();
         const rid = this.dataset.runId;
@@ -516,19 +514,19 @@ async function initBoard() {
         if (!confirm(`Kill agent '${agentName}' on ticket #${tid}?`)) return;
         this.disabled = true;
         try {
-          const res = await fetch('/api/agent_runs/' + rid + '/kill', { method: 'POST' });
+          const res = await fetch("/api/agent_runs/" + rid + "/kill", { method: "POST" });
           const data = await res.json();
           if (res.ok && data.success) {
-            this.textContent = '✓';
-            this.classList.add('killed');
+            this.textContent = "✓";
+            this.classList.add("killed");
             syncTickets();
           } else {
             this.disabled = false;
-            showToast(data.error || 'Failed to kill agent', 'error');
+            showToast(data.error || "Failed to kill agent", "error");
           }
         } catch (err) {
           this.disabled = false;
-          showToast('Error: ' + err.message, 'error');
+          showToast("Error: " + err.message, "error");
         }
       });
     }
@@ -536,13 +534,13 @@ async function initBoard() {
 
   async function moveTicket(ticketId, statusId) {
     const res = await fetch(`/api/tickets/${ticketId}`, {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
       body: JSON.stringify({status_id: statusId}),
     });
     if (!res.ok) {
       const data = await res.json();
-      showToast(data.error || 'Failed to move ticket', 'error');
+      showToast(data.error || "Failed to move ticket", "error");
     }
     // Let SSE sync update the board; trigger a lightweight sync after a short delay as fallback
     setTimeout(syncTickets, 300);
@@ -580,7 +578,7 @@ async function initBoard() {
       container: trigger,
       workflowId: currentBoardData.workflow_id,
       ticketId: ticketId,
-      mode: 'live',
+      mode: "live",
       popover: true,
       selectedIds: (ticket.labels || []).map(l => l.id),
       onChange: (ids) => {
@@ -589,7 +587,7 @@ async function initBoard() {
         const labelsDiv = document.getElementById(`card-labels-${ticketId}`);
         const pillsHtml = updatedLabels.map(l =>
           `<span class="badge label-pill" style="background:${escapeHtml(l.color)}33;color:${escapeHtml(l.color)};border:1px solid ${escapeHtml(l.color)}55;">${escapeHtml(l.name)}</span>`
-        ).join('');
+        ).join("");
         labelsDiv.innerHTML = pillsHtml + `<button type="button" class="card-label-add" id="card-label-btn-${ticketId}" onclick="event.preventDefault(); event.stopPropagation(); toggleCardLabels(${ticketId});">+</button>`;
       }
     });
@@ -599,30 +597,29 @@ async function initBoard() {
   };
 
   function buildCard(ticket) {
-    const card = document.createElement('div');
-    card.id = 'ticket-card-' + ticket.id;
-    const priorityClass = ticket.priority ? ` card-priority-${ticket.priority}` : '';
+    const card = document.createElement("div");
+    card.id = "ticket-card-" + ticket.id;
+    const priorityClass = ticket.priority ? ` card-priority-${ticket.priority}` : "";
     card.className = `card${priorityClass}`;
-    const priorityColors = { Critical: '#dc2626', High: '#d97706', Medium: '#2563eb', Low: '#6b7280' };
     const statusOptions = statuses.map(s =>
-      `<option value="${s.id}"${s.id === ticket.status_id ? ' selected' : ''}>${escapeHtml(s.name)}</option>`
-    ).join('');
+      `<option value="${s.id}"${s.id === ticket.status_id ? " selected" : ""}>${escapeHtml(s.name)}</option>`
+    ).join("");
     const priorityLabel = ticket.priority
       ? `<span class="card-priority-label p-${ticket.priority}">● ${escapeHtml(ticket.priority)}</span>`
-      : '';
+      : "";
     const statusSelect = `<select class="card-status-select" data-id="${ticket.id}">${statusOptions}</select>`;
-    const hasAgent = ticket.agent_name ? `<span class="badge agent">🤖 ${escapeHtml(ticket.agent_name)}</span>` : '';
-    const queuedBadge = ticket.queued ? `<span class="badge queued" title="${escapeHtml(ticket.queue_reason || '')} limit">⏳ Queued</span>` : '';
-    const gateBadge = ticket.gate_pending ? `<span class="badge gate">🚧 Gate</span>` : '';
-    const questionBadge = ticket.question_count ? `<span class="badge question">❓ ${ticket.question_count}</span>` : '';
+    const hasAgent = ticket.agent_name ? `<span class="badge agent">🤖 ${escapeHtml(ticket.agent_name)}</span>` : "";
+    const queuedBadge = ticket.queued ? `<span class="badge queued" title="${escapeHtml(ticket.queue_reason || "")} limit">⏳ Queued</span>` : "";
+    const gateBadge = ticket.gate_pending ? "<span class=\"badge gate\">🚧 Gate</span>" : "";
+    const questionBadge = ticket.question_count ? `<span class="badge question">❓ ${ticket.question_count}</span>` : "";
     const recurringBadge = (ticket.recurring_parents && ticket.recurring_parents.length > 0)
-      ? `<span class="badge recurring" title="Created by recurring task: ${escapeHtml(ticket.recurring_parents[0].title)}">🔄 Recurring</span>` : '';
-    let branchBadge = '';
+      ? `<span class="badge recurring" title="Created by recurring task: ${escapeHtml(ticket.recurring_parents[0].title)}">🔄 Recurring</span>` : "";
+    let branchBadge = "";
     if (ticket.branch) {
       const autoPattern = new RegExp(`^ticket-${ticket.id}-[a-z0-9-]+$`);
       const isAuto = autoPattern.test(ticket.branch);
       const displayText = isAuto ? `#${ticket.id}` : escapeHtml(ticket.branch);
-      const textClass = isAuto ? '' : 'card-branch-text';
+      const textClass = isAuto ? "" : "card-branch-text";
       branchBadge = `
         <span class="card-branch-pill" title="Git branch: ${escapeHtml(ticket.branch)}">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -642,7 +639,7 @@ async function initBoard() {
     }
     const labelPills = (ticket.labels || []).map(l =>
       `<span class="badge label-pill" style="background:${escapeHtml(l.color)}33;color:${escapeHtml(l.color)};border:1px solid ${escapeHtml(l.color)}55;">${escapeHtml(l.name)}</span>`
-    ).join('');
+    ).join("");
     card.innerHTML = `
       <div class="card-indicator"></div>
       <div class="card-inner">
@@ -674,9 +671,9 @@ async function initBoard() {
     `;
 
     // Attach change listener for the status select
-    const statusSelectEl = card.querySelector('.card-status-select');
+    const statusSelectEl = card.querySelector(".card-status-select");
     if (statusSelectEl) {
-      statusSelectEl.addEventListener('change', (e) => {
+      statusSelectEl.addEventListener("change", (e) => {
         e.preventDefault();
         e.stopPropagation();
         moveTicket(ticket.id, parseInt(e.target.value));
@@ -684,14 +681,14 @@ async function initBoard() {
     }
 
     // Attach copy listener for the branch copy button
-    const branchCopyBtn = card.querySelector('.card-branch-copy');
+    const branchCopyBtn = card.querySelector(".card-branch-copy");
     if (branchCopyBtn) {
-      branchCopyBtn.addEventListener('click', (e) => {
+      branchCopyBtn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const branch = branchCopyBtn.getAttribute('data-branch');
+        const branch = branchCopyBtn.getAttribute("data-branch");
         navigator.clipboard.writeText(branch).then(() => {
-          window.showToast('Branch copied', 'success');
+          window.showToast("Branch copied", "success");
         });
       });
     }
@@ -708,16 +705,16 @@ async function initBoard() {
       }
     }
     if (seen.size === 0) {
-      labelFiltersContainer.innerHTML = '';
+      labelFiltersContainer.innerHTML = "";
       updateFilterBadge();
       return;
     }
-    labelFiltersContainer.innerHTML = '';
+    labelFiltersContainer.innerHTML = "";
     for (const [name, color] of seen) {
-      const label = document.createElement('label');
-      label.className = 'filter-label-pill';
-      label.innerHTML = `<input type="checkbox" value="${escapeHtml(name)}" ${filterState.selectedLabels.has(name) ? 'checked' : ''}> <span style="color:${escapeHtml(color)};">●</span> ${escapeHtml(name)}`;
-      label.querySelector('input').addEventListener('change', (e) => {
+      const label = document.createElement("label");
+      label.className = "filter-label-pill";
+      label.innerHTML = `<input type="checkbox" value="${escapeHtml(name)}" ${filterState.selectedLabels.has(name) ? "checked" : ""}> <span style="color:${escapeHtml(color)};">●</span> ${escapeHtml(name)}`;
+      label.querySelector("input").addEventListener("change", (e) => {
         if (e.target.checked) {
           filterState.selectedLabels.add(e.target.value);
         } else {
@@ -736,7 +733,7 @@ async function initBoard() {
     const q = filterState.searchQuery.trim().toLowerCase();
     if (q) {
       const inTitle = ticket.title.toLowerCase().includes(q);
-      const inBody = (ticket.body || '').toLowerCase().includes(q);
+      const inBody = (ticket.body || "").toLowerCase().includes(q);
       if (!inTitle && !inBody) return false;
     }
     if (filterState.selectedPriorities.size > 0 && !filterState.selectedPriorities.has(ticket.priority)) {
@@ -751,21 +748,21 @@ async function initBoard() {
   }
 
   function buildGroup(status, visibleTickets) {
-    const group = document.createElement('div');
-    group.className = 'group';
-    if (collapsed.has(status.id)) group.classList.add('collapsed');
-    if (status.is_terminal) group.classList.add('terminal');
+    const group = document.createElement("div");
+    group.className = "group";
+    if (collapsed.has(status.id)) group.classList.add("collapsed");
+    if (status.is_terminal) group.classList.add("terminal");
     group.dataset.statusId = status.id;
 
     const filtered = visibleTickets.filter(t => t.status_id === status.id);
     const isCollapsed = collapsed.has(status.id);
 
-    const agentBadge = status.agent_name ? `<span class="badge agent">🤖 ${escapeHtml(status.agent_name)}</span>` : '';
+    const agentBadge = status.agent_name ? `<span class="badge agent">🤖 ${escapeHtml(status.agent_name)}</span>` : "";
 
     group.innerHTML = `
       <div class="group-header" role="button" tabindex="0" aria-expanded="${!isCollapsed}">
         <div class="group-header-content">
-          <span class="group-chevron" aria-hidden="true">${isCollapsed ? '▶' : '▼'}</span>
+          <span class="group-chevron" aria-hidden="true">${isCollapsed ? "▶" : "▼"}</span>
           <span class="group-title">${escapeHtml(status.name)}</span>
           ${agentBadge}
           <span class="group-count">${filtered.length}</span>
@@ -775,9 +772,9 @@ async function initBoard() {
       <div class="cards"></div>
     `;
 
-    const header = group.querySelector('.group-header');
-    header.addEventListener('click', (e) => {
-      if (e.target.closest('a.add-btn')) return;
+    const header = group.querySelector(".group-header");
+    header.addEventListener("click", (e) => {
+      if (e.target.closest("a.add-btn")) return;
       e.preventDefault();
       if (collapsed.has(status.id)) {
         collapsed.delete(status.id);
@@ -787,8 +784,8 @@ async function initBoard() {
       saveBoardPrefs();
       render();
     });
-    header.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
+    header.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
         if (collapsed.has(status.id)) {
           collapsed.delete(status.id);
@@ -800,7 +797,7 @@ async function initBoard() {
       }
     });
 
-    const cardsContainer = group.querySelector('.cards');
+    const cardsContainer = group.querySelector(".cards");
     for (const t of filtered) {
       cardsContainer.appendChild(buildCard(t));
     }
@@ -808,28 +805,17 @@ async function initBoard() {
   }
 
 
-  function updatePriorityToggles() {
-    priorityToggles.forEach(btn => {
-      const p = btn.dataset.priority;
-      if (filterState.selectedPriorities.has(p)) {
-        btn.classList.add('active');
-      } else {
-        btn.classList.remove('active');
-      }
-    });
-  }
-
   function render() {
-    board.innerHTML = '';
+    board.innerHTML = "";
     const visibleTickets = tickets.filter(matchesFilters);
     updateLabelFilters();
     // Update priority toggle visibility based on available priorities
     const availablePriorities = new Set(tickets.map(t => t.priority).filter(Boolean));
     priorityToggles.forEach(btn => {
       const p = btn.dataset.priority;
-      btn.style.display = availablePriorities.has(p) ? 'inline-flex' : 'none';
-      if (filterState.selectedPriorities.has(p)) btn.classList.add('active');
-      else btn.classList.remove('active');
+      btn.style.display = availablePriorities.has(p) ? "inline-flex" : "none";
+      if (filterState.selectedPriorities.has(p)) btn.classList.add("active");
+      else btn.classList.remove("active");
     });
     for (const status of statuses) {
       if (status.is_terminal && !showTerminal.checked) continue;
@@ -838,13 +824,13 @@ async function initBoard() {
     updateFilterBadge();
   }
 
-  showTerminal.addEventListener('change', () => {
+  showTerminal.addEventListener("change", () => {
     saveBoardPrefs();
     refresh();
   });
 
   if (searchInput) {
-    searchInput.addEventListener('input', (e) => {
+    searchInput.addEventListener("input", (e) => {
       filterState.searchQuery = e.target.value;
       saveBoardPrefs();
       render();
@@ -852,14 +838,14 @@ async function initBoard() {
   }
 
   priorityToggles.forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener("click", () => {
       const p = btn.dataset.priority;
       if (filterState.selectedPriorities.has(p)) {
         filterState.selectedPriorities.delete(p);
-        btn.classList.remove('active');
+        btn.classList.remove("active");
       } else {
         filterState.selectedPriorities.add(p);
-        btn.classList.add('active');
+        btn.classList.add("active");
       }
       updateFilterBadge();
       saveBoardPrefs();
@@ -869,7 +855,7 @@ async function initBoard() {
 
   // Read search query from URL params
   const urlParams = new URLSearchParams(window.location.search);
-  const urlSearch = urlParams.get('search');
+  const urlSearch = urlParams.get("search");
   if (urlSearch && searchInput) {
     searchInput.value = urlSearch;
     filterState.searchQuery = urlSearch;
@@ -882,7 +868,7 @@ async function initBoard() {
   function debounceRefresh(delay) {
     clearTimeout(_refreshDebounce);
     _refreshDebounce = setTimeout(function() {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === "visible") {
         refresh();
       }
     }, delay || 500);
@@ -892,7 +878,7 @@ async function initBoard() {
   function debounceSync(delay) {
     clearTimeout(_syncDebounce);
     _syncDebounce = setTimeout(function() {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === "visible") {
         syncTickets();
       }
     }, delay || 500);
@@ -900,19 +886,19 @@ async function initBoard() {
 
   // Board-relevant SSE events trigger a debounced sync (surgical DOM updates)
   const boardEvents = [
-    'ticket.created', 'ticket.status_changed', 'ticket.updated',
-    'comment.added', 'agent.spawned', 'agent.completed', 'agent.failed',
-    'gate.pending', 'gate.passed', 'gate.failed',
-    'question.asked', 'question.answered'
+    "ticket.created", "ticket.status_changed", "ticket.updated",
+    "comment.added", "agent.spawned", "agent.completed", "agent.failed",
+    "gate.pending", "gate.passed", "gate.failed",
+    "question.asked", "question.answered"
   ];
   boardEvents.forEach(function(type) {
-    window.addEventListener('sse:' + type, function(e) {
+    window.addEventListener("sse:" + type, function(e) {
       debounceSync(500);
     });
   });
 
   // Re-sync on SSE reconnect — full refresh to re-sync state
-  window.addEventListener('sse:open', function() {
+  window.addEventListener("sse:open", function() {
     debounceRefresh(100);
   });
 }

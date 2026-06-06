@@ -1,0 +1,19 @@
+{
+  "threshold": 5,
+  "reporters": ["html", "console", "json"],
+  "ignore": [
+    "**/__pycache__/**",
+    "**/.git/**",
+    "**/.pytest_cache/**",
+    "**/.pi-logs/**",
+    "**/.pi-sessions/**",
+    "**/node_modules/**",
+    "**/pi-cowork.db",
+    "**/backups/**",
+    "**/workspace/**",
+    "**/tests/**",
+    "**/report/**"
+  ],
+  "absolute": false,
+  "gitignore": true
+}

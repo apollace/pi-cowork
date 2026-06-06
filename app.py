@@ -10,42 +10,50 @@ For module-internal functions like ``_is_our_process`` that moved to
 ``pi_cowork.agents``, tests must patch the correct module path.
 """
 
+import datetime
 import os
 import shutil
 import signal
 import subprocess
-import sys
 import threading
 import time
-from datetime import datetime, timezone
 
-from pi_cowork import create_app, config
+from pi_cowork import config, create_app
+from pi_cowork.agents import (
+    _start_watcher,
+    _watch_agent,
+    cleanup_runs,
+    drain_queue,
+    spawn_agent,
+    spawn_agent_for_ticket,
+    try_spawn_or_queue,
+)
 from pi_cowork.config import get_config
 from pi_cowork.db import get_db, init_db, query_db, run_db
-from pi_cowork.models import (
-    get_comments, add_comment, get_questions, count_unanswered_questions,
-    has_unanswered_questions, get_workflow, get_board, get_board_with_workflow,
-    get_statuses, get_status, get_agents, get_agent, get_transitions_from,
-    get_quality_gates, get_ticket_labels, get_labels, get_label, get_setting,
-    set_setting, set_ticket_labels, get_all_quality_gates,
-    get_pending_gate_reviews, has_pending_gate_reviews, run_cli_gate,
-    row_to_dict,
-    get_recurring_tasks, get_recurring_task, create_recurring_task,
-    update_recurring_task, delete_recurring_task, toggle_recurring_task,
-    get_recurring_parents, compute_next_trigger, process_recurring_tasks,
-    cron_human_readable,
-)
-from pi_cowork.agents import (
-    _is_our_process, _read_log, _start_log_reader, _start_watcher,
-    _watch_agent,
-    cleanup_runs, count_running, count_hourly, queue_agent, drain_queue,
-    try_spawn_or_queue, spawn_agent,
-)
-from pi_cowork.update import (
-    _update_state_path, _read_and_clear_update_state, _git_available,
-    _git_dir_exists, _run_git, _get_git_info,
-)
-from pi_cowork.events import bus
+from pi_cowork.models import process_recurring_tasks
+
+# Self-assignments keep imports "used" for ruff while re-exporting for tests
+_start_watcher = _start_watcher
+_watch_agent = _watch_agent
+cleanup_runs = cleanup_runs
+drain_queue = drain_queue
+spawn_agent = spawn_agent
+spawn_agent_for_ticket = spawn_agent_for_ticket
+try_spawn_or_queue = try_spawn_or_queue
+get_db = get_db
+init_db = init_db
+query_db = query_db
+run_db = run_db
+process_recurring_tasks = process_recurring_tasks
+
+# Backwards-compat re-exports for tests that patch app.<module> directly
+datetime = datetime
+subprocess = subprocess
+os = os
+signal = signal
+shutil = shutil
+threading = threading
+time = time
 
 app = create_app()
 
@@ -62,9 +70,10 @@ ASSISTANT_SESSION_DIR = config.ASSISTANT_SESSION_DIR
 ASSISTANT_WORK_DIR = config.ASSISTANT_WORK_DIR
 DEFAULT_ASSISTANT_SYSTEM_PROMPT = config.DEFAULT_ASSISTANT_SYSTEM_PROMPT
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import os as _os
-    _debug = _os.environ.get('FLASK_DEBUG', '').lower() in ('1', 'true')
+
+    _debug = _os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true")
     with app.app_context():
-        _port = get_config('port')
-    app.run(debug=_debug, host='0.0.0.0', port=_port)
+        _port = get_config("port")
+    app.run(debug=_debug, host="0.0.0.0", port=_port)

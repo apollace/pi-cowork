@@ -46,7 +46,7 @@ class TestMobileZoomPreventionCSS:
         assert match is not None
         block = match.group(1)
         # Core form elements
-        assert "input[type=\"text\"]" in block
+        assert 'input[type="text"]' in block
         assert "textarea," in block or "textarea\n" in block
         assert "select," in block or "select\n" in block or ".card-status-select," in block
         # Known small-font hotspots from ticket analysis

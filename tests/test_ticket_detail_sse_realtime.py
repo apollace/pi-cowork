@@ -10,10 +10,8 @@ Verifies that:
 
 import re
 
-import pytest
-
-TICKET_DETAIL_PATH = 'templates/ticket_detail.html'
-BASE_HTML_PATH = 'templates/base.html'
+TICKET_DETAIL_PATH = "templates/ticket_detail.html"
+BASE_HTML_PATH = "templates/base.html"
 
 
 def read(path):
@@ -34,9 +32,7 @@ class TestTicketDetailSSEConnection:
             "Expected localStorage.setItem('activeBoard', ...) on ticket detail page"
         )
         # Should read the current ticket's board_id from the template context
-        assert "currentBoardId" in html, (
-            "Expected currentBoardId variable derived from ticket.board_id"
-        )
+        assert "currentBoardId" in html, "Expected currentBoardId variable derived from ticket.board_id"
 
     def test_reads_board_id_from_template_context(self):
         """The currentBoardId should be set from the Jinja template variable
@@ -71,9 +67,7 @@ class TestTicketDetailTicketUpdatedListener:
     def test_has_ticket_updated_listener(self):
         """The page should have an event listener for sse:ticket.updated."""
         html = read(TICKET_DETAIL_PATH)
-        assert "sse:ticket.updated" in html, (
-            "Expected sse:ticket.updated event listener on ticket detail page"
-        )
+        assert "sse:ticket.updated" in html, "Expected sse:ticket.updated event listener on ticket detail page"
 
     def test_ticket_updated_calls_refresh_ticket_status(self):
         """The sse:ticket.updated handler should call refreshTicketStatus()."""
@@ -100,9 +94,7 @@ class TestTicketDetailTicketUpdatedListener:
         )
         assert m, "Expected debounceDetailRefresh callback in sse:ticket.updated handler"
         body = m.group(1)
-        assert "loadLabels" in body, (
-            f"Expected loadLabels() in sse:ticket.updated handler, got: {body}"
-        )
+        assert "loadLabels" in body, f"Expected loadLabels() in sse:ticket.updated handler, got: {body}"
 
     def test_ticket_updated_calls_load_comments(self):
         """The sse:ticket.updated handler should reload comments."""
@@ -114,9 +106,7 @@ class TestTicketDetailTicketUpdatedListener:
         )
         assert m, "Expected debounceDetailRefresh callback in sse:ticket.updated handler"
         body = m.group(1)
-        assert "loadComments" in body, (
-            f"Expected loadComments() in sse:ticket.updated handler, got: {body}"
-        )
+        assert "loadComments" in body, f"Expected loadComments() in sse:ticket.updated handler, got: {body}"
 
     def test_ticket_updated_filters_by_ticket_id(self):
         """The sse:ticket.updated handler should filter events by currentTicketId."""
@@ -130,10 +120,8 @@ class TestTicketDetailTicketUpdatedListener:
         # The next line should check isForThisTicket(e)
         # Extract the block around the addEventListener
         start = m.start()
-        block = html[start:start + 300]
-        assert "isForThisTicket" in block, (
-            "Expected isForThisTicket(e) check in sse:ticket.updated handler"
-        )
+        block = html[start : start + 300]
+        assert "isForThisTicket" in block, "Expected isForThisTicket(e) check in sse:ticket.updated handler"
 
 
 class TestAgentEventHandlersRefreshStatus:
@@ -141,7 +129,8 @@ class TestAgentEventHandlersRefreshStatus:
 
     def _extract_handler_body(self, html, event_name):
         """Extract the debounceDetailRefresh callback body for a given SSE event."""
-        # Match the pattern: addEventListener('sse:EVENT', function(e) { ... debounceDetailRefresh(function() { BODY }, ...); });
+        # Match the pattern: addEventListener('sse:EVENT', function(e) { ...
+        # debounceDetailRefresh(function() { BODY }, ...); });
         # We need a regex that captures the body inside debounceDetailRefresh
         pattern = (
             r"addEventListener\('sse:" + re.escape(event_name) + r"',\s*function\(e\)\s*\{"
@@ -174,30 +163,22 @@ class TestAgentEventHandlersRefreshStatus:
         html = read(TICKET_DETAIL_PATH)
         body = self._extract_handler_body(html, "agent.failed")
         assert body is not None, "Could not find sse:agent.failed handler"
-        assert "refreshTicketStatus" in body, (
-            f"Expected refreshTicketStatus() in sse:agent.failed handler, got: {body}"
-        )
+        assert "refreshTicketStatus" in body, f"Expected refreshTicketStatus() in sse:agent.failed handler, got: {body}"
 
     def test_agent_spawned_also_calls_load_agent_runs(self):
         """sse:agent.spawned should still call loadAgentRuns() and initRunAgentButton()."""
         html = read(TICKET_DETAIL_PATH)
         body = self._extract_handler_body(html, "agent.spawned")
         assert body is not None, "Could not find sse:agent.spawned handler"
-        assert "loadAgentRuns" in body, (
-            f"Expected loadAgentRuns() in sse:agent.spawned handler, got: {body}"
-        )
-        assert "initRunAgentButton" in body, (
-            f"Expected initRunAgentButton() in sse:agent.spawned handler, got: {body}"
-        )
+        assert "loadAgentRuns" in body, f"Expected loadAgentRuns() in sse:agent.spawned handler, got: {body}"
+        assert "initRunAgentButton" in body, f"Expected initRunAgentButton() in sse:agent.spawned handler, got: {body}"
 
     def test_agent_completed_also_calls_load_comments(self):
         """sse:agent.completed should still call loadComments()."""
         html = read(TICKET_DETAIL_PATH)
         body = self._extract_handler_body(html, "agent.completed")
         assert body is not None, "Could not find sse:agent.completed handler"
-        assert "loadComments" in body, (
-            f"Expected loadComments() in sse:agent.completed handler, got: {body}"
-        )
+        assert "loadComments" in body, f"Expected loadComments() in sse:agent.completed handler, got: {body}"
 
 
 class TestSSEOpenReconnect:
@@ -214,9 +195,7 @@ class TestSSEOpenReconnect:
         )
         assert m, "Could not find sse:open handler with debounceDetailRefresh"
         body = m.group(1)
-        assert "refreshTicketStatus" in body, (
-            f"Expected refreshTicketStatus() in sse:open handler, got: {body}"
-        )
+        assert "refreshTicketStatus" in body, f"Expected refreshTicketStatus() in sse:open handler, got: {body}"
 
 
 class TestIntegration:
@@ -225,56 +204,62 @@ class TestIntegration:
     def test_ticket_detail_page_contains_board_id(self, client, default_board):
         """The ticket detail page HTML should contain the board_id for SSE setup."""
         import json
-        res = client.post('/api/tickets', json={
-            'title': 'SSE Test Ticket',
-            'board_id': default_board['id'],
-        })
-        ticket_id = json.loads(res.data)['id']
 
-        rv = client.get(f'/ticket/{ticket_id}')
+        res = client.post(
+            "/api/tickets",
+            json={
+                "title": "SSE Test Ticket",
+                "board_id": default_board["id"],
+            },
+        )
+        ticket_id = json.loads(res.data)["id"]
+
+        rv = client.get(f"/ticket/{ticket_id}")
         html = rv.data.decode()
         # Should contain currentBoardId with the ticket's board_id
-        assert "currentBoardId" in html, (
-            f"Ticket detail page should contain currentBoardId variable"
-        )
+        assert "currentBoardId" in html, "Ticket detail page should contain currentBoardId variable"
         # Should reference ticket.board_id via Jinja template
         # The rendered HTML should contain the actual board ID value
-        assert str(default_board['id']) in html, (
+        assert str(default_board["id"]) in html, (
             f"Ticket detail page should contain the board_id '{default_board['id']}'"
         )
 
     def test_ticket_detail_page_contains_ticket_updated_listener(self, client, default_board):
         """The ticket detail page should include the sse:ticket.updated listener."""
         import json
-        res = client.post('/api/tickets', json={
-            'title': 'SSE Listener Test',
-            'board_id': default_board['id'],
-        })
-        ticket_id = json.loads(res.data)['id']
 
-        rv = client.get(f'/ticket/{ticket_id}')
-        html = rv.data.decode()
-        assert "sse:ticket.updated" in html, (
-            "Ticket detail page should have sse:ticket.updated event listener"
+        res = client.post(
+            "/api/tickets",
+            json={
+                "title": "SSE Listener Test",
+                "board_id": default_board["id"],
+            },
         )
+        ticket_id = json.loads(res.data)["id"]
+
+        rv = client.get(f"/ticket/{ticket_id}")
+        html = rv.data.decode()
+        assert "sse:ticket.updated" in html, "Ticket detail page should have sse:ticket.updated event listener"
 
     def test_direct_url_sse_connection_scenario(self, client, default_board):
         """When a user navigates directly to a ticket URL, the page should
         still ensure SSE is connected by setting activeBoard and reconnecting."""
         import json
-        res = client.post('/api/tickets', json={
-            'title': 'Direct URL Test',
-            'board_id': default_board['id'],
-        })
-        ticket_id = json.loads(res.data)['id']
 
-        rv = client.get(f'/ticket/{ticket_id}')
+        res = client.post(
+            "/api/tickets",
+            json={
+                "title": "Direct URL Test",
+                "board_id": default_board["id"],
+            },
+        )
+        ticket_id = json.loads(res.data)["id"]
+
+        rv = client.get(f"/ticket/{ticket_id}")
         html = rv.data.decode()
         # Should contain localStorage.setItem for activeBoard
         assert "localStorage.setItem('activeBoard'" in html, (
             "Ticket detail page should set localStorage.activeBoard on page load"
         )
         # Should call _reconnectSSE
-        assert "_reconnectSSE" in html, (
-            "Ticket detail page should call _reconnectSSE() to establish SSE connection"
-        )
+        assert "_reconnectSSE" in html, "Ticket detail page should call _reconnectSSE() to establish SSE connection"

@@ -13,7 +13,7 @@ confirm flag are rejected with 403/400 respectively.
 import os
 import re
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify, request
@@ -22,22 +22,22 @@ from pi_cowork import config
 from pi_cowork.models import get_setting
 from pi_cowork.system_logs import add_log
 
-db_backup_bp = Blueprint('db_backup', __name__)
+db_backup_bp = Blueprint("db_backup", __name__)
 
 # Pattern to match backup filenames with embedded timestamps
-_BACKUP_RE = re.compile(r'^(?:pi-cowork|pre-restore)_(\d{8}_\d{6})\.db$')
+_BACKUP_RE = re.compile(r"^(?:pi-cowork|pre-restore)_(\d{8}_\d{6})\.db$")
 
 
 def _backup_dir():
     """Return the backups directory path, creating it if needed."""
-    d = Path(config.PROJECT_ROOT) / 'backups'
+    d = Path(config.PROJECT_ROOT) / "backups"
     d.mkdir(exist_ok=True)
     return d
 
 
 def _db_path():
     """Return the current database file path."""
-    return Path(current_app.config.get('DATABASE', config.DATABASE))
+    return Path(current_app.config.get("DATABASE", config.DATABASE))
 
 
 def _safe_filename(filename):
@@ -45,12 +45,10 @@ def _safe_filename(filename):
     if not filename:
         return False
     # Must not contain path separators or parent references
-    if '/' in filename or '\\' in filename or '..' in filename:
+    if "/" in filename or "\\" in filename or ".." in filename:
         return False
     # Must match the expected backup filename pattern
-    if not _BACKUP_RE.match(filename):
-        return False
-    return True
+    return _BACKUP_RE.match(filename)
 
 
 def _timestamp_from_filename(filename):
@@ -63,7 +61,7 @@ def _timestamp_from_filename(filename):
         return None
     ts_str = m.group(1)
     try:
-        dt = datetime.strptime(ts_str, '%Y%m%d_%H%M%S').replace(tzinfo=timezone.utc)
+        dt = datetime.strptime(ts_str, "%Y%m%d_%H%M%S").replace(tzinfo=UTC)
         return dt.isoformat()
     except ValueError:
         return None
@@ -76,7 +74,7 @@ def _retention_cleanup(backup_dir):
     Sorts backups by timestamp descending, deletes oldest exceeding limit.
     """
     try:
-        max_count = int(get_setting('db_backup_max_count', 10))
+        max_count = int(get_setting("db_backup_max_count", 10))
     except (ValueError, TypeError):
         max_count = 10
 
@@ -86,7 +84,7 @@ def _retention_cleanup(backup_dir):
     # Gather all .db backup files
     backup_files = []
     for f in backup_dir.iterdir():
-        if f.is_file() and f.suffix == '.db' and _BACKUP_RE.match(f.name):
+        if f.is_file() and f.suffix == ".db" and _BACKUP_RE.match(f.name):
             ts = _timestamp_from_filename(f.name)
             if ts:
                 backup_files.append((ts, f))
@@ -101,64 +99,68 @@ def _retention_cleanup(backup_dir):
     for _, fpath in backup_files[max_count:]:
         try:
             fpath.unlink()
-            add_log('INFO', 'db_change', f'Retention cleanup deleted backup: {fpath.name}')
+            add_log("INFO", "db_change", f"Retention cleanup deleted backup: {fpath.name}")
         except OSError as e:
-            add_log('WARNING', 'db_change', f'Retention cleanup failed for {fpath.name}: {e}')
+            add_log("WARNING", "db_change", f"Retention cleanup failed for {fpath.name}: {e}")
 
 
-@db_backup_bp.route('/api/db-backup/list', methods=['GET'])
+@db_backup_bp.route("/api/db-backup/list", methods=["GET"])
 def api_list_backups():
     """List all backup files with name, size, and timestamp."""
     backup_dir = _backup_dir()
     backups = []
 
     for f in sorted(backup_dir.iterdir(), key=lambda x: x.name, reverse=True):
-        if f.is_file() and f.suffix == '.db' and _BACKUP_RE.match(f.name):
+        if f.is_file() and f.suffix == ".db" and _BACKUP_RE.match(f.name):
             ts = _timestamp_from_filename(f.name)
             try:
                 size = os.path.getsize(f)
             except OSError:
                 size = 0
-            backups.append({
-                'filename': f.name,
-                'size': size,
-                'timestamp': ts,
-            })
+            backups.append(
+                {
+                    "filename": f.name,
+                    "size": size,
+                    "timestamp": ts,
+                }
+            )
 
     return jsonify(backups)
 
 
-@db_backup_bp.route('/api/db-backup/create', methods=['POST'])
+@db_backup_bp.route("/api/db-backup/create", methods=["POST"])
 def api_create_backup():
     """Create a manual backup of the current database."""
     db_file = _db_path()
     if not db_file.exists():
-        add_log('ERROR', 'db_change', 'Backup failed: database file not found')
+        add_log("ERROR", "db_change", "Backup failed: database file not found")
         return jsonify({"error": "Database file not found"}), 404
 
     backup_dir = _backup_dir()
-    timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
-    backup_name = f'pi-cowork_{timestamp}.db'
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    backup_name = f"pi-cowork_{timestamp}.db"
     backup_path = backup_dir / backup_name
 
     try:
         shutil.copy2(str(db_file), str(backup_path))
-        add_log('INFO', 'db_change', f'Database backup created: {backup_name}')
+        add_log("INFO", "db_change", f"Database backup created: {backup_name}")
     except Exception as e:
-        add_log('ERROR', 'db_change', f'Backup failed: {e}')
+        add_log("ERROR", "db_change", f"Backup failed: {e}")
         return jsonify({"error": f"Backup failed: {e}"}), 500
 
     # Run retention cleanup
     _retention_cleanup(backup_dir)
 
-    return jsonify({
-        "success": True,
-        "filename": backup_name,
-        "size": os.path.getsize(backup_path),
-    })
+    return jsonify(
+        {
+            "success": True,
+            "filename": backup_name,
+            "size": os.path.getsize(backup_path),
+        }
+    )
 
 
-@db_backup_bp.route('/api/db-backup/restore', methods=['POST'])
+@db_backup_bp.route("/api/db-backup/restore", methods=["POST"])
 def api_restore_backup():
     """Restore the database from a specified backup file.
 
@@ -171,20 +173,20 @@ def api_restore_backup():
     # web UI (a human), not from an AI agent.  The UI sends a random
     # per-instance secret in the X-Human-Action header; agents never
     # receive this secret.
-    secret = current_app.config.get('HUMAN_ACTION_SECRET', '')
-    provided = request.headers.get('X-Human-Action', '')
+    secret = current_app.config.get("HUMAN_ACTION_SECRET", "")
+    provided = request.headers.get("X-Human-Action", "")
     if not secret or provided != secret:
-        add_log('WARNING', 'http_request', 'DB restore blocked — missing or invalid X-Human-Action header')
+        add_log("WARNING", "http_request", "DB restore blocked — missing or invalid X-Human-Action header")
         return jsonify({"error": "Database restore requires human action. Missing or invalid authentication."}), 403
     # ─────────────────────────────────────────────────────────────────
 
     data = request.get_json() or {}
 
     # Require explicit confirmation
-    if not data.get('confirm'):
+    if not data.get("confirm"):
         return jsonify({"error": "confirm must be true to perform a destructive restore"}), 400
 
-    filename = data.get('filename')
+    filename = data.get("filename")
 
     if not filename:
         return jsonify({"error": "filename is required"}), 400
@@ -199,42 +201,44 @@ def api_restore_backup():
         return jsonify({"error": "Backup file not found"}), 404
 
     # Ensure source is within backups dir (resolve symlinks)
-    if not source_path.resolve().parent == backup_dir.resolve():
+    if source_path.resolve().parent != backup_dir.resolve():
         return jsonify({"error": "Invalid backup path"}), 400
 
     db_file = _db_path()
 
     # Create pre-restore safety backup
     if db_file.exists():
-        timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
-        safety_name = f'pre-restore_{timestamp}.db'
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        safety_name = f"pre-restore_{timestamp}.db"
         safety_path = backup_dir / safety_name
         try:
             shutil.copy2(str(db_file), str(safety_path))
-            add_log('INFO', 'db_change', f'Pre-restore safety backup created: {safety_name}')
+            add_log("INFO", "db_change", f"Pre-restore safety backup created: {safety_name}")
         except Exception as e:
-            add_log('ERROR', 'db_change', f'Pre-restore safety backup failed: {e}')
+            add_log("ERROR", "db_change", f"Pre-restore safety backup failed: {e}")
             return jsonify({"error": f"Pre-restore safety backup failed: {e}"}), 500
 
     # Restore from backup
     try:
         shutil.copy2(str(source_path), str(db_file))
-        add_log('INFO', 'db_change', f'Database restored from backup: {filename}')
+        add_log("INFO", "db_change", f"Database restored from backup: {filename}")
     except Exception as e:
-        add_log('ERROR', 'db_change', f'Restore failed: {e}')
+        add_log("ERROR", "db_change", f"Restore failed: {e}")
         return jsonify({"error": f"Restore failed: {e}"}), 500
 
-    return jsonify({
-        "success": True,
-        "restored_from": filename,
-    })
+    return jsonify(
+        {
+            "success": True,
+            "restored_from": filename,
+        }
+    )
 
 
-@db_backup_bp.route('/api/db-backup/delete', methods=['DELETE'])
+@db_backup_bp.route("/api/db-backup/delete", methods=["DELETE"])
 def api_delete_backup():
     """Delete a specific backup file. Requires {"filename": "..."} in request body."""
     data = request.get_json() or {}
-    filename = data.get('filename')
+    filename = data.get("filename")
 
     if not filename:
         return jsonify({"error": "filename is required"}), 400
@@ -249,14 +253,14 @@ def api_delete_backup():
         return jsonify({"error": "Backup file not found"}), 404
 
     # Ensure target is within backups dir (resolve symlinks)
-    if not target_path.resolve().parent == backup_dir.resolve():
+    if target_path.resolve().parent != backup_dir.resolve():
         return jsonify({"error": "Invalid backup path"}), 400
 
     try:
         target_path.unlink()
-        add_log('INFO', 'db_change', f'Backup deleted: {filename}')
+        add_log("INFO", "db_change", f"Backup deleted: {filename}")
     except Exception as e:
-        add_log('ERROR', 'db_change', f'Backup delete failed: {e}')
+        add_log("ERROR", "db_change", f"Backup delete failed: {e}")
         return jsonify({"error": f"Delete failed: {e}"}), 500
 
     return jsonify({"success": True})

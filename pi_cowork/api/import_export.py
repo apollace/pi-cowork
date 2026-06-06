@@ -1,59 +1,73 @@
 """API: Import/Export workflows."""
 
-import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from flask import Blueprint, jsonify, request
 
-from pi_cowork.db import query_db, run_db, row_to_dict
+from pi_cowork.db import query_db, row_to_dict
 from pi_cowork.models import get_workflow
 
-import_export_bp = Blueprint('import_export', __name__)
+import_export_bp = Blueprint("import_export", __name__)
 
 
-@import_export_bp.route('/api/workflows/<int:workflow_id>/export', methods=['GET'])
+@import_export_bp.route("/api/workflows/<int:workflow_id>/export", methods=["GET"])
 def api_export_workflow(workflow_id):
     wf = get_workflow(workflow_id)
     if not wf:
         return jsonify({"error": "Workflow not found"}), 404
-    agents = query_db("""
+    agents = query_db(
+        """
         SELECT name, description, model, thinking
         FROM agents WHERE workflow_id = ? ORDER BY name
-    """, (workflow_id,))
-    statuses_rows = query_db("""
+    """,
+        (workflow_id,),
+    )
+    statuses_rows = query_db(
+        """
         SELECT s.name, s.sort_order, s.is_default, s.is_terminal, s.goal, s.model, s.thinking, a.name AS agent_name
         FROM statuses s
         LEFT JOIN agents a ON s.agent_id = a.id
         WHERE s.workflow_id = ?
         ORDER BY s.sort_order
-    """, (workflow_id,))
-    transitions = query_db("""
+    """,
+        (workflow_id,),
+    )
+    transitions = query_db(
+        """
         SELECT fs.name AS from_status_name, ts.name AS to_status_name, t.instructions
         FROM transitions t
         JOIN statuses fs ON t.from_status_id = fs.id
         JOIN statuses ts ON t.to_status_id = ts.id
         WHERE t.workflow_id = ?
         ORDER BY fs.sort_order, ts.sort_order
-    """, (workflow_id,))
-    quality_gates = query_db("""
+    """,
+        (workflow_id,),
+    )
+    quality_gates = query_db(
+        """
         SELECT qg.*, fs.name AS from_status_name, ts.name AS to_status_name
         FROM quality_gates qg
         JOIN statuses fs ON qg.from_status_id = fs.id
         JOIN statuses ts ON qg.to_status_id = ts.id
         WHERE qg.workflow_id = ?
         ORDER BY qg.sort_order
-    """, (workflow_id,))
-    labels = query_db("""
+    """,
+        (workflow_id,),
+    )
+    labels = query_db(
+        """
         SELECT name, color
         FROM labels WHERE workflow_id = ?
         ORDER BY name
-    """, (workflow_id,))
+    """,
+        (workflow_id,),
+    )
     payload = {
         "version": "1.0",
-        "exported_at": datetime.now(timezone.utc).isoformat(),
-        "name": wf['name'],
-        "description": wf.get('description') or '',
+        "exported_at": datetime.now(UTC).isoformat(),
+        "name": wf["name"],
+        "description": wf.get("description") or "",
         "agents": [row_to_dict(r) for r in agents],
         "statuses": [row_to_dict(r) for r in statuses_rows],
         "transitions": [row_to_dict(r) for r in transitions],
@@ -63,8 +77,8 @@ def api_export_workflow(workflow_id):
     return jsonify(payload)
 
 
-@import_export_bp.route('/api/workflows/import', methods=['POST'])
-def api_import_workflow():
+@import_export_bp.route("/api/workflows/import", methods=["POST"])
+def api_import_workflow():  # noqa: C901
     data = request.get_json()
     if not data:
         return jsonify({"error": "No JSON body provided"}), 400
@@ -74,7 +88,11 @@ def api_import_workflow():
     agents_data = data.get("agents")
     statuses_data = data.get("statuses")
     transitions_data = data.get("transitions")
-    if not isinstance(agents_data, list) or not isinstance(statuses_data, list) or not isinstance(transitions_data, list):
+    if (
+        not isinstance(agents_data, list)
+        or not isinstance(statuses_data, list)
+        or not isinstance(transitions_data, list)
+    ):
         return jsonify({"error": "agents, statuses, and transitions must be arrays"}), 400
 
     defaults = [s for s in statuses_data if s.get("is_default")]
@@ -102,11 +120,12 @@ def api_import_workflow():
         wf_name = "Imported Workflow"
     existing = query_db("SELECT 1 FROM workflows WHERE name = ? LIMIT 1", (wf_name,), one=True)
     if existing:
-        wf_name = f"{wf_name} {datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
-    wf_desc = (data.get("description") or '').strip() or None
+        wf_name = f"{wf_name} {datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
+    wf_desc = (data.get("description") or "").strip() or None
 
     # Actually we need the connection directly
     from pi_cowork.db import get_db
+
     db = get_db()
     try:
         cur = db.execute("INSERT INTO workflows (name, description) VALUES (?, ?)", (wf_name, wf_desc))
@@ -121,7 +140,7 @@ def api_import_workflow():
             thinking = a.get("thinking") or None
             cur = db.execute(
                 "INSERT INTO agents (name, description, workflow_id, model, thinking) VALUES (?, ?, ?, ?, ?)",
-                (name, description, workflow_id, model, thinking)
+                (name, description, workflow_id, model, thinking),
             )
             agent_id_map[name] = cur.lastrowid
 
@@ -138,8 +157,9 @@ def api_import_workflow():
             model = s.get("model") or None
             thinking = s.get("thinking") or None
             cur = db.execute(
-                "INSERT INTO statuses (name, sort_order, is_default, is_terminal, agent_id, goal, model, thinking, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (name, sort_order, is_default, is_terminal, agent_id, goal, model, thinking, workflow_id)
+                "INSERT INTO statuses (name, sort_order, is_default, is_terminal, "
+                "agent_id, goal, model, thinking, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (name, sort_order, is_default, is_terminal, agent_id, goal, model, thinking, workflow_id),
             )
             status_id_map[name] = cur.lastrowid
 
@@ -150,7 +170,7 @@ def api_import_workflow():
             instructions = (t.get("instructions") or "").strip() or None
             db.execute(
                 "INSERT INTO transitions (from_status_id, to_status_id, instructions, workflow_id) VALUES (?, ?, ?, ?)",
-                (from_id, to_id, instructions, workflow_id)
+                (from_id, to_id, instructions, workflow_id),
             )
 
         # Insert quality gates
@@ -169,8 +189,18 @@ def api_import_workflow():
             sort_order = int(g.get("sort_order", 0))
             enabled = 1 if g.get("enabled", True) else 0
             db.execute(
-                "INSERT INTO quality_gates (from_status_id, to_status_id, gate_type, name, config, sort_order, enabled, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (status_id_map[from_status_name], status_id_map[to_status_name], gate_type, name, config, sort_order, enabled, workflow_id)
+                "INSERT INTO quality_gates (from_status_id, to_status_id, gate_type, name, "
+                "config, sort_order, enabled, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    status_id_map[from_status_name],
+                    status_id_map[to_status_name],
+                    gate_type,
+                    name,
+                    config,
+                    sort_order,
+                    enabled,
+                    workflow_id,
+                ),
             )
             gate_count += 1
 
@@ -179,22 +209,21 @@ def api_import_workflow():
         for lbl in labels_data:
             name = lbl.get("name", "").strip()
             color = (lbl.get("color") or "").strip() or "#6b7280"
-            db.execute(
-                "INSERT INTO labels (name, color, workflow_id) VALUES (?, ?, ?)",
-                (name, color, workflow_id)
-            )
+            db.execute("INSERT INTO labels (name, color, workflow_id) VALUES (?, ?, ?)", (name, color, workflow_id))
 
         db.commit()
     except (sqlite3.IntegrityError, sqlite3.OperationalError, KeyError, ValueError) as e:
         db.rollback()
         return jsonify({"error": f"Import failed: {e}"}), 400
 
-    return jsonify({
-        "success": True,
-        "workflow_id": workflow_id,
-        "agents": len(agents_data),
-        "statuses": len(statuses_data),
-        "transitions": len(transitions_data),
-        "quality_gates": gate_count,
-        "labels": len(labels_data)
-    }), 200
+    return jsonify(
+        {
+            "success": True,
+            "workflow_id": workflow_id,
+            "agents": len(agents_data),
+            "statuses": len(statuses_data),
+            "transitions": len(transitions_data),
+            "quality_gates": gate_count,
+            "labels": len(labels_data),
+        }
+    ), 200

@@ -1,41 +1,41 @@
 (function () {
-  const bubble = document.getElementById('assistant-bubble');
-  const panel = document.getElementById('assistant-panel');
-  const closeBtn = document.getElementById('assistant-close');
-  const messagesEl = document.getElementById('assistant-messages');
-  const inputEl = document.getElementById('assistant-input');
-  const sendBtn = document.getElementById('assistant-send');
-  const compactBtn = document.getElementById('assistant-compact');
-  const resetBtn = document.getElementById('assistant-reset');
-  const settingsBtn = document.getElementById('assistant-settings-btn');
+  const bubble = document.getElementById("assistant-bubble");
+  const panel = document.getElementById("assistant-panel");
+  const closeBtn = document.getElementById("assistant-close");
+  const messagesEl = document.getElementById("assistant-messages");
+  const inputEl = document.getElementById("assistant-input");
+  const sendBtn = document.getElementById("assistant-send");
+  const compactBtn = document.getElementById("assistant-compact");
+  const resetBtn = document.getElementById("assistant-reset");
+  const settingsBtn = document.getElementById("assistant-settings-btn");
 
   let config = {};
   let savedScrollY = 0;
 
-  const savedPromptsEl = document.getElementById('assistant-saved-prompts');
+  const savedPromptsEl = document.getElementById("assistant-saved-prompts");
 
   async function loadSavedPrompts() {
     try {
-      const res = await fetch('/api/assistant/saved-prompts');
+      const res = await fetch("/api/assistant/saved-prompts");
       if (!res.ok) return;
       const rows = await res.json();
       renderSavedPrompts(rows);
     } catch (e) {
-      console.error('Failed to load saved prompts', e);
+      console.error("Failed to load saved prompts", e);
     }
   }
 
   function renderSavedPrompts(rows) {
     if (!savedPromptsEl) return;
-    savedPromptsEl.innerHTML = '';
+    savedPromptsEl.innerHTML = "";
     if (rows.length === 0) {
       savedPromptsEl.innerHTML = '<span class="muted" style="font-size:0.8rem;">No saved prompts</span>';
       return;
     }
     rows.forEach(function (r) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'saved-prompt-btn';
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "saved-prompt-btn";
       btn.textContent = r.name;
       btn.title = r.prompt_text;
       btn.onclick = function () {
@@ -50,10 +50,10 @@
 
   async function loadConfig() {
     try {
-      const res = await fetch('/api/assistant/config');
+      const res = await fetch("/api/assistant/config");
       config = await res.json();
     } catch (e) {
-      console.error('Failed to load assistant config', e);
+      console.error("Failed to load assistant config", e);
       config = { enabled: 1, auto_context: 1 };
     }
     updateUIFromConfig();
@@ -61,38 +61,38 @@
 
   function updateUIFromConfig() {
     if (!config.enabled) {
-      bubble.style.display = 'none';
-      panel.classList.remove('open');
+      bubble.style.display = "none";
+      panel.classList.remove("open");
     } else {
-      bubble.style.display = '';
+      bubble.style.display = "";
     }
   }
 
   function openPanel() {
-    panel.classList.add('open');
-    bubble.classList.add('panel-open');
+    panel.classList.add("open");
+    bubble.classList.add("panel-open");
     loadHistory();
     loadSavedPrompts();
     inputEl.focus();
     if (window.innerWidth <= 640) {
       savedScrollY = window.scrollY;
-      document.documentElement.style.overflow = 'hidden';
-      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = "hidden";
+      document.body.style.overflow = "hidden";
     }
   }
 
   function closePanel() {
-    panel.classList.remove('open');
-    bubble.classList.remove('panel-open');
+    panel.classList.remove("open");
+    bubble.classList.remove("panel-open");
     if (window.innerWidth <= 640) {
-      document.documentElement.style.overflow = '';
-      document.body.style.overflow = '';
+      document.documentElement.style.overflow = "";
+      document.body.style.overflow = "";
       window.scrollTo(0, savedScrollY);
     }
   }
 
   function togglePanel() {
-    if (panel.classList.contains('open')) {
+    if (panel.classList.contains("open")) {
       closePanel();
     } else {
       openPanel();
@@ -100,9 +100,9 @@
   }
 
   function appendMessage(role, content, temporary) {
-    const msg = document.createElement('div');
-    msg.className = 'assistant-message assistant-message-' + role;
-    if (temporary) msg.classList.add('assistant-temporary');
+    const msg = document.createElement("div");
+    msg.className = "assistant-message assistant-message-" + role;
+    if (temporary) msg.classList.add("assistant-temporary");
     msg.textContent = content;
     messagesEl.appendChild(msg);
     messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -115,17 +115,17 @@
 
   async function loadHistory() {
     try {
-      const res = await fetch('/api/assistant/history');
+      const res = await fetch("/api/assistant/history");
       const rows = await res.json();
       if (rows.length === 0) {
         clearMessages();
         return;
       }
-      messagesEl.innerHTML = '';
+      messagesEl.innerHTML = "";
       rows.forEach(function (r) {
         appendMessage(r.role, r.content);
       });
-    } catch (e) {
+    } catch {
       messagesEl.innerHTML = '<div class="assistant-error">Failed to load history</div>';
     }
   }
@@ -134,35 +134,35 @@
     const elapsed = Math.floor((Date.now() - startMs) / 1000);
     const m = Math.floor(elapsed / 60);
     const s = elapsed % 60;
-    return m + ':' + (s < 10 ? '0' + s : s);
+    return m + ":" + (s < 10 ? "0" + s : s);
   }
 
   function createStreamPlaceholder() {
-    const msg = document.createElement('div');
-    msg.className = 'assistant-message assistant-message-assistant assistant-temporary';
+    const msg = document.createElement("div");
+    msg.className = "assistant-message assistant-message-assistant assistant-temporary";
 
-    const header = document.createElement('div');
-    header.className = 'assistant-stream-header';
+    const header = document.createElement("div");
+    header.className = "assistant-stream-header";
 
-    const thinking = document.createElement('span');
-    thinking.className = 'thinking-indicator';
-    thinking.textContent = 'Thinking';
+    const thinking = document.createElement("span");
+    thinking.className = "thinking-indicator";
+    thinking.textContent = "Thinking";
 
-    const timer = document.createElement('span');
-    timer.className = 'assistant-timer';
-    timer.textContent = '0:00';
+    const timer = document.createElement("span");
+    timer.className = "assistant-timer";
+    timer.textContent = "0:00";
 
-    const stopBtn = document.createElement('button');
-    stopBtn.className = 'assistant-stop-btn';
-    stopBtn.textContent = 'Stop';
-    stopBtn.title = 'Stop generation';
+    const stopBtn = document.createElement("button");
+    stopBtn.className = "assistant-stop-btn";
+    stopBtn.textContent = "Stop";
+    stopBtn.title = "Stop generation";
 
     header.appendChild(thinking);
     header.appendChild(timer);
     header.appendChild(stopBtn);
 
-    const body = document.createElement('div');
-    body.className = 'assistant-stream-body';
+    const body = document.createElement("div");
+    body.className = "assistant-stream-body";
 
     msg.appendChild(header);
     msg.appendChild(body);
@@ -177,8 +177,8 @@
       stopBtn: stopBtn,
       startTime: Date.now(),
       timerInterval: null,
-      rawText: '',
-      thinkingText: '',
+      rawText: "",
+      thinkingText: "",
       error: null,
       stopped: false,
     };
@@ -186,63 +186,63 @@
 
   function handleStreamEvent(placeholder, eventName, payload) {
     const type = payload.type;
-    if (type === 'text_delta') {
-      const chunk = payload.chunk || '';
+    if (type === "text_delta") {
+      const chunk = payload.chunk || "";
       placeholder.rawText += chunk;
-      const span = document.createElement('span');
+      const span = document.createElement("span");
       span.textContent = chunk;
       placeholder.body.appendChild(span);
       messagesEl.scrollTop = messagesEl.scrollHeight;
-    } else if (type === 'thinking_delta') {
-      const chunk = payload.chunk || '';
+    } else if (type === "thinking_delta") {
+      const chunk = payload.chunk || "";
       placeholder.thinkingText += chunk;
-      let block = placeholder.msg.querySelector('.assistant-thinking-block');
+      let block = placeholder.msg.querySelector(".assistant-thinking-block");
       if (!block) {
-        block = document.createElement('div');
-        block.className = 'assistant-thinking-block';
-        const label = document.createElement('div');
-        label.className = 'assistant-thinking-label';
-        label.textContent = 'Thinking';
+        block = document.createElement("div");
+        block.className = "assistant-thinking-block";
+        const label = document.createElement("div");
+        label.className = "assistant-thinking-label";
+        label.textContent = "Thinking";
         block.appendChild(label);
-        const content = document.createElement('div');
-        content.className = 'assistant-thinking-content';
+        const content = document.createElement("div");
+        content.className = "assistant-thinking-content";
         block.appendChild(content);
         placeholder.msg.insertBefore(block, placeholder.body);
       }
-      block.querySelector('.assistant-thinking-content').textContent = placeholder.thinkingText;
-    } else if (type === 'tool_start') {
-      let badge = placeholder.msg.querySelector('.assistant-tool-badge[data-name="' + (payload.name || '') + '"]');
+      block.querySelector(".assistant-thinking-content").textContent = placeholder.thinkingText;
+    } else if (type === "tool_start") {
+      let badge = placeholder.msg.querySelector('.assistant-tool-badge[data-name="' + (payload.name || "") + '"]');
       if (!badge) {
-        badge = document.createElement('span');
-        badge.className = 'assistant-tool-badge';
-        badge.dataset.name = payload.name || '';
-        badge.textContent = (payload.name || 'tool') + '…';
-        placeholder.msg.querySelector('.assistant-stream-header').appendChild(badge);
+        badge = document.createElement("span");
+        badge.className = "assistant-tool-badge";
+        badge.dataset.name = payload.name || "";
+        badge.textContent = (payload.name || "tool") + "…";
+        placeholder.msg.querySelector(".assistant-stream-header").appendChild(badge);
       }
-    } else if (type === 'tool_end') {
-      const badge = placeholder.msg.querySelector('.assistant-tool-badge[data-name="' + (payload.name || '') + '"]');
+    } else if (type === "tool_end") {
+      const badge = placeholder.msg.querySelector('.assistant-tool-badge[data-name="' + (payload.name || "") + '"]');
       if (badge) {
-        badge.textContent = (payload.name || 'tool') + ' ✅';
+        badge.textContent = (payload.name || "tool") + " ✅";
       }
-    } else if (type === 'done') {
+    } else if (type === "done") {
       // Final text is accumulated in rawText; payload.full_text is available if needed
-    } else if (type === 'error') {
-      placeholder.error = payload.error || 'Unknown error';
-    } else if (type === 'stopped') {
+    } else if (type === "error") {
+      placeholder.error = payload.error || "Unknown error";
+    } else if (type === "stopped") {
       placeholder.stopped = true;
     }
   }
 
   function finalizePlaceholder(placeholder) {
-    placeholder.msg.classList.remove('assistant-temporary');
-    const thinking = placeholder.msg.querySelector('.thinking-indicator');
+    placeholder.msg.classList.remove("assistant-temporary");
+    const thinking = placeholder.msg.querySelector(".thinking-indicator");
     if (thinking) thinking.remove();
-    const stopBtn = placeholder.msg.querySelector('.assistant-stop-btn');
+    const stopBtn = placeholder.msg.querySelector(".assistant-stop-btn");
     if (stopBtn) stopBtn.remove();
 
     if (placeholder.error) {
-      placeholder.msg.classList.add('assistant-error');
-      placeholder.body.innerHTML = window.renderMarkdown ? window.renderMarkdown('Error: ' + placeholder.error) : 'Error: ' + placeholder.error;
+      placeholder.msg.classList.add("assistant-error");
+      placeholder.body.innerHTML = window.renderMarkdown ? window.renderMarkdown("Error: " + placeholder.error) : "Error: " + placeholder.error;
     } else {
       if (window.renderMarkdown) {
         placeholder.body.innerHTML = window.renderMarkdown(placeholder.rawText);
@@ -255,8 +255,8 @@
   async function sendMessage() {
     const text = inputEl.value.trim();
     if (!text) return;
-    inputEl.value = '';
-    appendMessage('user', text);
+    inputEl.value = "";
+    appendMessage("user", text);
 
     const placeholder = createStreamPlaceholder();
     placeholder.timerInterval = setInterval(function () {
@@ -264,31 +264,31 @@
     }, 1000);
 
     sendBtn.disabled = true;
-    bubble.classList.add('assistant-bubble-active');
+    bubble.classList.add("assistant-bubble-active");
 
     placeholder.stopBtn.onclick = async function () {
       try {
-        await fetch('/api/assistant/stop', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        await fetch("/api/assistant/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({}),
         });
       } catch (e) {
-        console.error('Stop failed', e);
+        console.error("Stop failed", e);
       }
     };
 
-    let buffer = '';
+    let buffer = "";
 
     try {
-      const res = await fetch('/api/assistant/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/assistant/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, page_url: window.location.pathname }),
       });
       if (!res.ok) {
-        const data = await res.json().catch(function () { return { error: 'Request failed' }; });
-        throw new Error(data.error || 'Request failed');
+        const data = await res.json().catch(function () { return { error: "Request failed" }; });
+        throw new Error(data.error || "Request failed");
       }
 
       const reader = res.body.getReader();
@@ -302,19 +302,19 @@
 
         let start = 0;
         while (true) {
-          const sep = buffer.indexOf('\n\n', start);
+          const sep = buffer.indexOf("\n\n", start);
           if (sep === -1) break;
           const block = buffer.slice(start, sep);
           start = sep + 2;
 
-          const lines = block.split('\n');
-          let eventName = 'message';
+          const lines = block.split("\n");
+          let eventName = "message";
           const dataLines = [];
           for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
-            if (line.startsWith('event:')) {
+            if (line.startsWith("event:")) {
               eventName = line.slice(6).trim();
-            } else if (line.startsWith('data:')) {
+            } else if (line.startsWith("data:")) {
               dataLines.push(line.slice(5));
             }
           }
@@ -322,9 +322,9 @@
 
           let payload;
           try {
-            payload = JSON.parse(dataLines.join('\n'));
+            payload = JSON.parse(dataLines.join("\n"));
           } catch (e) {
-            console.error('SSE JSON parse error', e, dataLines);
+            console.error("SSE JSON parse error", e, dataLines);
             continue;
           }
           handleStreamEvent(placeholder, eventName, payload);
@@ -337,58 +337,58 @@
       clearInterval(placeholder.timerInterval);
       sendBtn.disabled = false;
       inputEl.focus();
-      bubble.classList.remove('assistant-bubble-active');
+      bubble.classList.remove("assistant-bubble-active");
       finalizePlaceholder(placeholder);
     }
   }
 
   async function doCompact() {
-    if (!confirm('Compact conversation into a summary and clear history?')) return;
+    if (!confirm("Compact conversation into a summary and clear history?")) return;
     try {
-      const res = await fetch('/api/assistant/compact', { method: 'POST' });
+      const res = await fetch("/api/assistant/compact", { method: "POST" });
       const data = await res.json();
       clearMessages();
-      appendMessage('assistant', 'Compacted: ' + (data.summary || '(empty)'));
+      appendMessage("assistant", "Compacted: " + (data.summary || "(empty)"));
     } catch (e) {
-      appendMessage('assistant', 'Compact failed: ' + e.message);
+      appendMessage("assistant", "Compact failed: " + e.message);
     }
   }
 
   async function doReset() {
-    if (!confirm('Reset assistant and clear all history?')) return;
+    if (!confirm("Reset assistant and clear all history?")) return;
     try {
-      const res = await fetch('/api/assistant/reset', { method: 'POST' });
+      const res = await fetch("/api/assistant/reset", { method: "POST" });
       await res.json();
       clearMessages();
-      appendMessage('assistant', 'Assistant has been reset.');
+      appendMessage("assistant", "Assistant has been reset.");
     } catch (e) {
-      appendMessage('assistant', 'Reset failed: ' + e.message);
+      appendMessage("assistant", "Reset failed: " + e.message);
     }
   }
 
-  bubble.addEventListener('click', togglePanel);
-  closeBtn.addEventListener('click', function (e) {
+  bubble.addEventListener("click", togglePanel);
+  closeBtn.addEventListener("click", function (e) {
     e.stopPropagation();
     closePanel();
   });
-  sendBtn.addEventListener('click', sendMessage);
-  inputEl.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+  sendBtn.addEventListener("click", sendMessage);
+  inputEl.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
     }
   });
-  compactBtn.addEventListener('click', doCompact);
-  resetBtn.addEventListener('click', doReset);
-  settingsBtn.addEventListener('click', function () {
-    window.location.href = '/settings';
+  compactBtn.addEventListener("click", doCompact);
+  resetBtn.addEventListener("click", doReset);
+  settingsBtn.addEventListener("click", function () {
+    window.location.href = "/settings";
   });
 
-  if (typeof ResizeObserver !== 'undefined') {
+  if (typeof ResizeObserver !== "undefined") {
     const ro = new ResizeObserver(function (entries) {
       for (let i = 0; i < entries.length; i++) {
         const w = entries[i].contentRect.width;
-        document.body.style.setProperty('--assistant-panel-width', w + 'px');
+        document.body.style.setProperty("--assistant-panel-width", w + "px");
       }
     });
     ro.observe(panel);
