@@ -649,12 +649,47 @@ body {
     overflow-y: auto;
     min-height: 0;
   }
-  /* A collapsed column shrinks to a slim header pill instead of an empty
-     full-width column. */
+  .board > .group .cards > .card {
+    flex-shrink: 0;
+  }
+  .board > .group .group-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* Horizontal collapse: narrow vertical strip with rotated title */
   .board > .group.collapsed {
-    flex: 0 0 auto;
-    width: auto;
-    max-width: 300px;
+    flex: 0 0 48px;
+    width: 48px;
+    max-width: 48px;
+  }
+  .board > .group.collapsed .group-header {
+    flex-direction: column;
+    align-items: center;
+    padding: 0.5rem 0.25rem;
+  }
+  .board > .group.collapsed .group-header-content {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .board > .group.collapsed .group-title {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-height: calc(100vh - 16rem);
+    font-size: 0.85rem;
+  }
+  .board > .group.collapsed .group-count,
+  .board > .group.collapsed .add-btn,
+  .board > .group.collapsed .badge.agent {
+    display: none;
+  }
+  .board > .group.collapsed .group-chevron {
+    transform: rotate(180deg);
   }
 }
 
