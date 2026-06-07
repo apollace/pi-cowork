@@ -326,20 +326,47 @@ def has_pending_gate_reviews(ticket_id):
     return row is not None
 
 
+def _truncate(text, max_bytes=50 * 1024):
+    """Truncate text to max_bytes UTF-8 length, appending a marker."""
+    encoded = text.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return text
+    # Leave room for the truncation marker
+    marker = "\n... (truncated, N more bytes)"
+    marker_len = len(marker.encode("utf-8")) + 6  # rough room for number
+    cut = max_bytes - marker_len
+    while cut > 0:
+        try:
+            return encoded[:cut].decode("utf-8") + f"\n... (truncated, {len(encoded) - cut} more bytes)"
+        except UnicodeDecodeError:
+            cut -= 1
+    return encoded[:max_bytes].decode("utf-8", errors="replace") + "\n... (truncated)"
+
+
 def run_cli_gate(command, working_directory):
     """Run a CLI gate command and return (passed, output)."""
     try:
         result = subprocess.run(command, shell=True, cwd=working_directory, capture_output=True, text=True, timeout=60)  # noqa: S602
-        output = result.stdout.strip() if result.stdout else ""
+        stdout = (result.stdout or "").strip()
+        stderr = (result.stderr or "").strip()
         if result.returncode != 0:
-            err = result.stderr.strip() if result.stderr else ""
-            output = f"Exit code: {result.returncode}\n{err}" if err else f"Exit code: {result.returncode}"
+            parts = [f"Exit code: {result.returncode}"]
+            if stdout:
+                parts.append(f"--- stdout ---\n{stdout}")
+            if stderr:
+                parts.append(f"--- stderr ---\n{stderr}")
+            output = _truncate("\n".join(parts))
             return False, output
-        return True, output
-    except subprocess.TimeoutExpired:
-        return False, "Command timed out after 60 seconds"
-    except Exception as e:
-        return False, f"Failed to run command: {e}"
+        return True, _truncate(stdout)
+    except subprocess.TimeoutExpired as e:
+        parts = ["Command timed out after 60 seconds"]
+        stderr = (e.stderr or "").strip() if hasattr(e, "stderr") else ""
+        if stderr:
+            parts.append(f"--- stderr ---\n{stderr}")
+        output = _truncate("\n".join(parts))
+        return False, output
+    except Exception as exc:
+        return False, f"Failed to run command: {exc}"
 
 
 # ---------------------------------------------------------------------------
