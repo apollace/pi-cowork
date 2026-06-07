@@ -1098,3 +1098,159 @@ def test_priority_update_persisted_with_pending_manual_gate(client):
     assert ticket["status_id"] == status_ids[0]
     # Priority must have been saved despite the pending gate
     assert ticket.get("priority") == "Critical"
+
+
+# 24. Regression: CLI gate failure must include stdout in output and comment
+# Bug: run_cli_gate dropped stdout on non-zero exit, so lint.sh diagnostics were lost.
+def test_cli_gate_failure_includes_stdout(client):
+    wf_id, status_ids = _create_workflow_with_statuses(client)
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+
+    client.post(
+        "/api/quality_gates",
+        json={
+            "from_status_id": status_ids[0],
+            "to_status_id": status_ids[1],
+            "gate_type": "cli",
+            "name": "Lint",
+            "config": json.dumps({"command": "scripts/lint.sh"}),
+            "workflow_id": wf_id,
+        },
+    )
+
+    with patch("app.subprocess.Popen"), patch("app.subprocess.run") as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stdout = "diagnostic on stdout"
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        res = client.put(f"/api/tickets/{ticket_id}", json={"status_id": status_ids[1]})
+
+    assert res.status_code == 200
+
+    # Ticket should still be in old status
+    ticket = json.loads(client.get(f"/api/tickets/{ticket_id}").data)
+    assert ticket["status_id"] == status_ids[0]
+
+    # Ticket comment must contain the stdout diagnostic
+    # (Gate reviews are cleaned up on failure, so we inspect the comment.)
+    comments = json.loads(client.get(f"/api/tickets/{ticket_id}/comments").data)
+    fail_comments = [c for c in comments if "❌ Gate 'Lint' (CLI) failed" in c["body"]]
+    assert len(fail_comments) == 1
+    assert "diagnostic on stdout" in fail_comments[0]["body"]
+    assert "Exit code: 1" in fail_comments[0]["body"]
+
+
+# 25. Regression: CLI gate failure with both stdout and stderr shows both
+def test_cli_gate_failure_shows_stdout_and_stderr(client):
+    wf_id, status_ids = _create_workflow_with_statuses(client)
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+
+    client.post(
+        "/api/quality_gates",
+        json={
+            "from_status_id": status_ids[0],
+            "to_status_id": status_ids[1],
+            "gate_type": "cli",
+            "name": "Build",
+            "config": json.dumps({"command": "make"}),
+            "workflow_id": wf_id,
+        },
+    )
+
+    with patch("app.subprocess.Popen"), patch("app.subprocess.run") as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 2
+        mock_result.stdout = "compiling main.c"
+        mock_result.stderr = "error: undefined symbol"
+        mock_run.return_value = mock_result
+
+        res = client.put(f"/api/tickets/{ticket_id}", json={"status_id": status_ids[1]})
+
+    assert res.status_code == 200
+
+    comments = json.loads(client.get(f"/api/tickets/{ticket_id}/comments").data)
+    fail_comments = [c for c in comments if "❌ Gate 'Build' (CLI) failed" in c["body"]]
+    assert len(fail_comments) == 1
+    body = fail_comments[0]["body"]
+    assert "--- stdout ---" in body
+    assert "compiling main.c" in body
+    assert "--- stderr ---" in body
+    assert "error: undefined symbol" in body
+    assert "Exit code: 2" in body
+
+
+# 26. Regression: CLI gate success path still captures stdout
+def test_cli_gate_success_captures_stdout(client):
+    wf_id, status_ids = _create_workflow_with_statuses(client)
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+
+    client.post(
+        "/api/quality_gates",
+        json={
+            "from_status_id": status_ids[0],
+            "to_status_id": status_ids[1],
+            "gate_type": "cli",
+            "name": "Test Suite",
+            "config": json.dumps({"command": "pytest"}),
+            "workflow_id": wf_id,
+        },
+    )
+
+    with patch("app.subprocess.Popen"), patch("app.subprocess.run") as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "All tests passed\n42 tests, 0 failures"
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        res = client.put(f"/api/tickets/{ticket_id}", json={"status_id": status_ids[1]})
+
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    assert data.get("gate_pending") is not True
+
+    ticket = json.loads(client.get(f"/api/tickets/{ticket_id}").data)
+    assert ticket["status_id"] == status_ids[1]
+
+    comments = json.loads(client.get(f"/api/tickets/{ticket_id}/comments").data)
+    pass_comments = [c for c in comments if "✅ Gate 'Test Suite' (CLI) passed" in c["body"]]
+    assert len(pass_comments) == 1
+    assert "All tests passed" in pass_comments[0]["body"]
+
+
+# 27. Regression: CLI gate timeout includes stderr if available
+def test_cli_gate_timeout_includes_stderr(client):
+    import subprocess as _subprocess
+
+    wf_id, status_ids = _create_workflow_with_statuses(client)
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+
+    client.post(
+        "/api/quality_gates",
+        json={
+            "from_status_id": status_ids[0],
+            "to_status_id": status_ids[1],
+            "gate_type": "cli",
+            "name": "Slow Check",
+            "config": json.dumps({"command": "sleep 999"}),
+            "workflow_id": wf_id,
+        },
+    )
+
+    with patch("app.subprocess.Popen"), patch("app.subprocess.run") as mock_run:
+        mock_run.side_effect = _subprocess.TimeoutExpired(
+            cmd="sleep 999", timeout=60, output="partial stdout", stderr="partial stderr"
+        )
+
+        res = client.put(f"/api/tickets/{ticket_id}", json={"status_id": status_ids[1]})
+
+    assert res.status_code == 200
+
+    comments = json.loads(client.get(f"/api/tickets/{ticket_id}/comments").data)
+    fail_comments = [c for c in comments if "❌ Gate 'Slow Check' (CLI) failed" in c["body"]]
+    assert len(fail_comments) == 1
+    body = fail_comments[0]["body"]
+    assert "timed out" in body.lower()
+    assert "partial stderr" in body
