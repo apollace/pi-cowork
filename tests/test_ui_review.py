@@ -162,6 +162,8 @@ def test_ticket_detail_has_markdown_description(client, default_board):
     html = res.data.decode("utf-8")
     assert "markdown-content" in html
     assert "ticket-description" in html
+    assert "renderMarkdown(rawBody)" in html
+    assert "descEl.textContent = rawBody" not in html
 
 
 def test_ticket_form_has_breadcrumb(client, default_board):
