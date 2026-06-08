@@ -134,7 +134,9 @@
     </section>
   </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
   // ── Render description as markdown ──
   (function() {
@@ -143,10 +145,8 @@
     var rawBody = {{ ticket.body | tojson }};
     if (!rawBody || rawBody.trim() === '') {
       descEl.innerHTML = '<p class="ticket-description-empty">No description</p>';
-    } else if (typeof renderMarkdown === 'function') {
-      descEl.innerHTML = renderMarkdown(rawBody);
     } else {
-      descEl.textContent = rawBody;
+      descEl.innerHTML = renderMarkdown(rawBody);
     }
   })();
 
