@@ -783,11 +783,14 @@ def test_agent_prompt_no_gates_no_mention(client):
     assert "Some transitions require quality gate approval" not in context_msg
 
 
-# 18. Regression: CLI gate failure does NOT auto re-trigger agent (infinite loop prevention)
-def test_cli_gate_failure_no_auto_retrigger(client):
-    """When a CLI gate fails, the agent for the old status must NOT be
-    automatically re-triggered. Previously this caused infinite loops:
-    spawn → try same transition → gate fails → re-spawn → …"""
+# 18. Regression: CLI gate failure DOES re-trigger the agent in the current (old) status,
+# mirroring the manual gate rejection behaviour. The agent receives the failure comment
+# in its warm-spawn context so it can fix the root cause before retrying the same
+# transition.
+def test_cli_gate_failure_retriggers_agent_in_current_status(client):
+    """When a CLI gate fails, the agent for the current (old) status must be
+    re-triggered with the failure comment as context. This mirrors the
+    manual gate rejection path in pi_cowork/api/gate_reviews.py."""
     wf_id, status_ids = _create_workflow_with_statuses(client, n_statuses=3)
     _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
 
@@ -795,7 +798,7 @@ def test_cli_gate_failure_no_auto_retrigger(client):
     res = client.post(
         "/api/agents",
         json={
-            "name": "LoopRisk",
+            "name": "RetryOnFail",
             "description": "Does work",
             "workflow_id": wf_id,
         },
@@ -827,14 +830,24 @@ def test_cli_gate_failure_no_auto_retrigger(client):
 
     assert res.status_code == 200
 
-    # The agent for the old status must NOT have been re-triggered
-    # Popen should NOT have been called (the only Popen call would be
-    # a re-trigger, which we removed)
-    assert not mock_popen.called
+    # The agent for the old status MUST have been re-triggered after the CLI failure
+    assert mock_popen.called, "Agent should be re-triggered in the current status after CLI gate failure"
 
     # Ticket should still be in old status
     ticket = json.loads(client.get(f"/api/tickets/{ticket_id}").data)
     assert ticket["status_id"] == status_ids[0]
+
+    # Failure comments should be present (CLI failure + transition rejection)
+    comments = json.loads(client.get(f"/api/tickets/{ticket_id}/comments").data)
+    fail_comments = [c for c in comments if "failed" in c["body"].lower()]
+    assert len(fail_comments) >= 1
+    reject_comments = [c for c in comments if "rejected" in c["body"].lower()]
+    assert len(reject_comments) >= 1
+
+    # No pending gate reviews remain
+    reviews = json.loads(client.get(f"/api/gate_reviews?ticket_id={ticket_id}").data)
+    pending = [r for r in reviews if r["status"] == "pending"]
+    assert len(pending) == 0
 
 
 # 19. Regression: orphaned gate reviews from different transitions are cleaned up

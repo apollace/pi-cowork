@@ -390,6 +390,35 @@ def api_update_ticket(ticket_id):  # noqa: C901
                     (ticket_id, old_status_id, new_status_id),
                 )
                 add_comment(ticket_id, f"🚫 Transition to '{dest_status['name']}' rejected — quality gate(s) failed.")
+                # Re-trigger the agent for the *current* (old) status with the failure comment
+                # as context, mirroring the manual gate rejection path in
+                # pi_cowork/api/gate_reviews.py. This is a behavioural change from
+                # the previous "CLI gate failure does not auto-retrigger" behaviour —
+                # the loop risk is mitigated by the agent receiving the failure
+                # comment (so it can fix the root cause before retrying) and by the
+                # queue/rate limits absorbing bursts.
+                current_status = get_status(old_status_id)
+                if current_status and current_status.get("agent_id"):
+                    current_agent = get_agent(current_status["agent_id"])
+                    if current_agent:
+                        full_ticket = query_db(
+                            """
+                            SELECT t.*, b.name AS board_name, w.name AS workflow_name, b.workflow_id, w.git_enabled
+                            FROM tickets t
+                            JOIN boards b ON t.board_id = b.id
+                            JOIN workflows w ON b.workflow_id = w.id
+                            WHERE t.id = ?
+                        """,
+                            (ticket_id,),
+                            one=True,
+                        )
+                        if full_ticket:
+                            try_spawn_or_queue(
+                                row_to_dict(full_ticket),
+                                current_status,
+                                current_agent,
+                                old_status_id=None,
+                            )
                 response_data["gate_pending"] = False
                 if labels_provided:
                     response_data["labels"] = get_ticket_labels(ticket_id)
