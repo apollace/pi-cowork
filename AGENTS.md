@@ -711,9 +711,11 @@ The UI underwent a broad set of improvements. Key conventions:
 
 ### Markdown Rendering
 - `marked.js` loaded from CDN in `base.html`
-- `window.renderMarkdown(text)` renders markdown content to HTML
-- Used in ticket descriptions (`ticket_detail.html`) and comments
-- CSS class `.markdown-content` styles rendered markdown (code blocks, blockquotes, tables, etc.)
+  - `highlight.js` (github-dark theme) is also loaded from CDN for syntax highlighting in fenced code blocks.
+  - `window.renderMarkdown(text)` configures `marked.setOptions({ langPrefix: 'hljs language-', highlight: (code, lang) => hljs.highlight(...) })` before calling `marked.parse(text)`.
+  - Used in ticket descriptions (`ticket_detail.html`), comments, assistant messages (`assistant.js`), and knowledge entries (`knowledge.js`).
+  - **CSS specificity trap:** `.markdown-content code` must NOT target code inside `pre` blocks, because a broad `color: inherit` rule on `.markdown-content pre code` overrides highlight.js token colors (its specificity beats `.hljs-keyword`). The correct selector is `.markdown-content :not(pre) > code` for inline code, and `.markdown-content pre code` should omit `color: inherit` so that highlight.js themes and `pre` inheritance work correctly.
+  - CSS class `.markdown-content` styles rendered markdown (code blocks, blockquotes, tables, etc.)
 
 ### Two-Column Ticket Detail Layout
 - `.ticket-layout` uses CSS Grid: `1fr 280px`

@@ -11,9 +11,11 @@ Tests verify:
 - Loading skeleton in board page
 - Board assistant removed from board page
 - Markdown content area in ticket description and comments
+- Syntax highlighting in markdown code blocks
 """
 
 import json
+import re
 
 
 def test_base_html_has_toast_container(client):
@@ -48,6 +50,32 @@ def test_base_html_has_render_markdown(client):
     assert res.status_code == 200
     html = res.data.decode("utf-8")
     assert "renderMarkdown" in html
+
+
+def test_base_html_has_highlight_js(client):
+    """base.html should include highlight.js for syntax highlighting."""
+    res = client.get("/board")
+    assert res.status_code == 200
+    html = res.data.decode("utf-8")
+    assert "highlight.min.js" in html
+    assert "hljs" in html
+
+
+def test_base_html_has_highlight_theme_css(client):
+    """base.html should include a highlight.js theme CSS."""
+    res = client.get("/board")
+    assert res.status_code == 200
+    html = res.data.decode("utf-8")
+    assert "github-dark" in html
+
+
+def test_base_html_render_markdown_uses_highlight(client):
+    """renderMarkdown should configure marked with a hljs highlight callback."""
+    res = client.get("/board")
+    assert res.status_code == 200
+    html = res.data.decode("utf-8")
+    assert "hljs" in html
+    assert "hljs.getLanguage" in html
 
 
 def test_board_has_priority_toggles(client):
@@ -204,7 +232,7 @@ def test_css_has_markdown_styles():
     with open("static/style.css") as f:
         css = f.read()
     assert ".markdown-content" in css
-    assert ".markdown-content code" in css
+    assert ".markdown-content :not(pre) > code" in css
     assert ".markdown-content pre" in css
     assert ".markdown-content blockquote" in css
 
@@ -238,6 +266,18 @@ def test_css_has_animation_styles():
         css = f.read()
     assert "@keyframes fade-in" in css
     assert "@keyframes card-entrance" in css
+
+
+def test_css_pre_code_compatible_with_highlightjs():
+    """style.css pre code styles should not override highlight.js token colors."""
+    with open("static/style.css") as f:
+        css = f.read()
+    # Inline code rule should not apply inside pre blocks
+    assert ".markdown-content :not(pre) > code {" in css
+    # The pre code rule must not force a color (which would beat hljs specificity)
+    rule = re.search(r"\.markdown-content pre code\s*\{([^}]*)\}", css)
+    if rule:
+        assert "color:" not in rule.group(1), ".markdown-content pre code should not set color to avoid overriding hljs"
 
 
 def test_board_url_search_param(client):
