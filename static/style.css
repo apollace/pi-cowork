@@ -614,8 +614,31 @@ body {
 }
 
 .group.collapsed .cards { display: none; }
-.group.collapsed .cards-collapsed { display: none; }
 .group.collapsed .group-chevron { transform: rotate(-90deg); }
+
+.group-indicators { display: none; }
+.group.collapsed .group-indicators {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0 1rem 0.5rem;
+}
+
+.group-indicator {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-decoration: none;
+  line-height: 1;
+  white-space: nowrap;
+}
+.group-indicator.priority-Critical { background: #dc2626; color: #fff; }
+.group-indicator.priority-High     { background: #d97706; color: #fff; }
+.group-indicator.priority-Medium   { background: #2563eb; color: #fff; }
+.group-indicator.priority-Low      { background: #6b7280; color: #fff; }
 
 .group .cards {
   padding: 0.75rem;
@@ -692,44 +715,22 @@ body {
   .board > .group.collapsed .group-chevron {
     transform: rotate(180deg);
   }
-  .board > .group.collapsed .cards-collapsed {
+  .board > .group.collapsed .group-indicators {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.35rem;
     padding: 0.5rem 0.25rem;
+    flex: 1 1 auto;
     overflow-y: auto;
     min-height: 0;
-    flex: 1 1 auto;
   }
-  .collapsed-marker {
-    display: block;
-    font-size: 0.68rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    text-align: center;
-    text-decoration: none;
-    padding: 0.25rem 0.15rem;
-    border-radius: 6px;
-    border-left: 3px solid transparent;
-    min-width: 0;
+  .board > .group.collapsed .group-indicator {
+    width: 10px;
+    height: 10px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    transition: background .15s;
-    cursor: pointer;
-  }
-  .collapsed-marker:hover {
-    background: var(--bg);
-  }
-  .collapsed-marker.priority-Critical { border-left-color: #dc2626; }
-  .collapsed-marker.priority-High     { border-left-color: #d97706; }
-  .collapsed-marker.priority-Medium   { border-left-color: #2563eb; }
-  .collapsed-marker.priority-Low      { border-left-color: #6b7280; }
-  .collapsed-marker-id {
-    display: block;
-    font-size: 0.65rem;
-    color: var(--text-secondary);
   }
 }
 
