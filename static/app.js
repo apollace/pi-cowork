@@ -439,6 +439,7 @@ async function initBoard() {
     }
 
     updateGroupCounts(newTickets);
+    rebuildCollapsedMarkers(newTickets);
     tickets = newTickets;
   }
 
@@ -747,6 +748,31 @@ async function initBoard() {
     return true;
   }
 
+  function buildCollapsedMarker(ticket) {
+    const link = document.createElement("a");
+    link.className = "collapsed-marker";
+    link.href = `/ticket/${ticket.id}`;
+    const priorityClass = ticket.priority ? ` priority-${ticket.priority}` : "";
+    link.className = `collapsed-marker${priorityClass}`;
+    link.innerHTML = `<span class="collapsed-marker-id">#${ticket.id}</span>`;
+    return link;
+  }
+
+  function rebuildCollapsedMarkers(allTickets) {
+    const visibleTickets = allTickets.filter(matchesFilters);
+    for (const status of statuses) {
+      const group = board.querySelector(`.group[data-status-id="${status.id}"]`);
+      if (!group) continue;
+      const container = group.querySelector(".cards-collapsed");
+      if (!container) continue;
+      container.innerHTML = "";
+      const filtered = visibleTickets.filter(t => t.status_id === status.id);
+      for (const t of filtered) {
+        container.appendChild(buildCollapsedMarker(t));
+      }
+    }
+  }
+
   function buildGroup(status, visibleTickets) {
     const group = document.createElement("div");
     group.className = "group";
@@ -770,6 +796,7 @@ async function initBoard() {
         <a class="add-btn" href="/ticket/new?status_id=${status.id}&board_id=${currentBoardId}" title="Add ticket">+</a>
       </div>
       <div class="cards"></div>
+      <div class="cards-collapsed"></div>
     `;
 
     const header = group.querySelector(".group-header");
@@ -822,6 +849,7 @@ async function initBoard() {
       board.appendChild(buildGroup(status, visibleTickets));
     }
     updateFilterBadge();
+    rebuildCollapsedMarkers(tickets);
   }
 
   showTerminal.addEventListener("change", () => {
