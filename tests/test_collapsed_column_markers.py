@@ -14,12 +14,12 @@ import json
 
 
 def _load_js():
-    with open("static/app.js", "r") as f:
+    with open("static/app.js") as f:
         return f.read()
 
 
 def _load_css():
-    with open("static/style.css", "r") as f:
+    with open("static/style.css") as f:
         return f.read()
 
 
