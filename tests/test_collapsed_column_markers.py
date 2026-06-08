@@ -110,10 +110,16 @@ def test_build_indicator_returns_link_with_accessibility():
     start = js.find("function buildIndicator(ticket)")
     end = js.find("function rebuildIndicators(allTickets)")
     body = js[start:end]
-    assert 'aria-label' in body
-    assert 'title' in body
-    assert 'href = `/ticket/${ticket.id}`' in body or 'href = `/ticket/' in body or "href: `/ticket/" in body or 'href=`/ticket/' in body
-    # Check for href pattern more loosely
+    assert "aria-label" in body
+    assert "title" in body
+    # Check for href pattern loosely
+    href_patterns = [
+        "href = `/ticket/${ticket.id}`",
+        "href = `/ticket/",
+        "href: `/ticket/",
+        "href=`/ticket/",
+    ]
+    assert any(p in body for p in href_patterns)
     assert "/ticket/${ticket.id}" in body or "/ticket/" in body
 
 
