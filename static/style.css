@@ -614,6 +614,7 @@ body {
 }
 
 .group.collapsed .cards { display: none; }
+.group.collapsed .cards-collapsed { display: none; }
 .group.collapsed .group-chevron { transform: rotate(-90deg); }
 
 .group .cards {
@@ -659,9 +660,9 @@ body {
   }
   /* Horizontal collapse: narrow vertical strip with rotated title */
   .board > .group.collapsed {
-    flex: 0 0 48px;
-    width: 48px;
-    max-width: 48px;
+    flex: 0 0 64px;
+    width: 64px;
+    max-width: 64px;
   }
   .board > .group.collapsed .group-header {
     flex-direction: column;
@@ -690,6 +691,45 @@ body {
   }
   .board > .group.collapsed .group-chevron {
     transform: rotate(180deg);
+  }
+  .board > .group.collapsed .cards-collapsed {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.5rem 0.25rem;
+    overflow-y: auto;
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+  .collapsed-marker {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-align: center;
+    text-decoration: none;
+    padding: 0.25rem 0.15rem;
+    border-radius: 6px;
+    border-left: 3px solid transparent;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: background .15s;
+    cursor: pointer;
+  }
+  .collapsed-marker:hover {
+    background: var(--bg);
+  }
+  .collapsed-marker.priority-Critical { border-left-color: #dc2626; }
+  .collapsed-marker.priority-High     { border-left-color: #d97706; }
+  .collapsed-marker.priority-Medium   { border-left-color: #2563eb; }
+  .collapsed-marker.priority-Low      { border-left-color: #6b7280; }
+  .collapsed-marker-id {
+    display: block;
+    font-size: 0.65rem;
+    color: var(--text-secondary);
   }
 }
 

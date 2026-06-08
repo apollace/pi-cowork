@@ -50,7 +50,7 @@ class TestHorizontalLayoutCSS:
         assert "text-overflow: ellipsis" in block, "Expected text-overflow: ellipsis"
 
     def test_collapsed_column_narrow_strip(self):
-        """Collapsed columns shrink to a ~48px vertical strip."""
+        """Collapsed columns shrink to a ~64px vertical strip to fit ticket markers."""
         css = read(STYLE_CSS_PATH)
         m = re.search(
             r"@media\s*\(\s*min-width:\s*769px\s*\)\s*\{(.+?)\n\}",
@@ -60,7 +60,7 @@ class TestHorizontalLayoutCSS:
         assert m, "Could not extract desktop media query block"
         block = m.group(1)
         assert ".board > .group.collapsed" in block, "Expected collapsed column selector in desktop block"
-        assert "48px" in block, "Expected 48px width for collapsed column"
+        assert "64px" in block, "Expected 64px width for collapsed column"
 
     def test_collapsed_header_vertical_layout(self):
         """Collapsed column header switches to vertical flex with centered items."""
