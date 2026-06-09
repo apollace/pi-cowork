@@ -82,6 +82,10 @@
           <input type="number" id="cfg-port" min="1" max="65535" />
         </label>
         <label class="form-row">
+          <span>Skills folder path</span>
+          <input type="text" id="cfg-skills-folder" placeholder="workspace/skills" />
+        </label>
+        <label class="form-row">
           <span>Max parallel agents</span>
           <input type="number" id="cfg-max-parallel" min="1" max="100" />
         </label>
@@ -164,6 +168,7 @@
   const GENERAL_DEFAULTS = {
     pi_cowork_url: 'http://localhost:5000',
     port: '5000',
+    skills_folder_path: 'workspace/skills',
     max_parallel: '1',
     max_per_hour: '100',
     warm_spawn_threshold: '3600',
@@ -250,7 +255,7 @@
       renderAssistantEndpointCheckboxes(window._assistantApiEndpoints);
 
       // Load general settings
-      const generalKeys = ['pi_cowork_url', 'port', 'max_parallel', 'max_per_hour', 'warm_spawn_threshold', 'run_max_age'];
+      const generalKeys = ['pi_cowork_url', 'port', 'skills_folder_path', 'max_parallel', 'max_per_hour', 'warm_spawn_threshold', 'run_max_age'];
       for (const key of generalKeys) {
         try {
           const r = await fetch('/api/settings/' + key);
@@ -258,6 +263,7 @@
             const d = await r.json();
             const elId = key === 'pi_cowork_url' ? 'cfg-pi-cowork-url' :
                          key === 'port' ? 'cfg-port' :
+                         key === 'skills_folder_path' ? 'cfg-skills-folder' :
                          key === 'max_parallel' ? 'cfg-max-parallel' :
                          key === 'max_per_hour' ? 'cfg-max-per-hour' :
                          key === 'warm_spawn_threshold' ? 'cfg-warm-spawn-threshold' :
@@ -265,7 +271,7 @@
             if (elId) {
               const el = document.getElementById(elId);
               if (el) {
-                el.value = key === 'pi_cowork_url' ? d.value : parseInt(d.value, 10);
+                el.value = key === 'pi_cowork_url' || key === 'skills_folder_path' ? d.value : parseInt(d.value, 10);
               }
             }
           }
@@ -273,6 +279,7 @@
           // Use default if fetch fails
           const elId = key === 'pi_cowork_url' ? 'cfg-pi-cowork-url' :
                        key === 'port' ? 'cfg-port' :
+                       key === 'skills_folder_path' ? 'cfg-skills-folder' :
                        key === 'max_parallel' ? 'cfg-max-parallel' :
                        key === 'max_per_hour' ? 'cfg-max-per-hour' :
                        key === 'warm_spawn_threshold' ? 'cfg-warm-spawn-threshold' :
@@ -280,7 +287,7 @@
           if (elId) {
             const el = document.getElementById(elId);
             if (el) {
-              el.value = key === 'pi_cowork_url' ? GENERAL_DEFAULTS[key] : parseInt(GENERAL_DEFAULTS[key], 10);
+              el.value = key === 'pi_cowork_url' || key === 'skills_folder_path' ? GENERAL_DEFAULTS[key] : parseInt(GENERAL_DEFAULTS[key], 10);
             }
           }
         }
@@ -463,6 +470,7 @@
       const generalSettings = {
         pi_cowork_url: syncedUrl,
         port: String(portVal),
+        skills_folder_path: document.getElementById('cfg-skills-folder').value.trim() || 'workspace/skills',
         max_parallel: String(maxParallel),
         max_per_hour: String(maxPerHour),
         warm_spawn_threshold: String(warmThreshold),

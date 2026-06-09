@@ -1,4 +1,4 @@
-"""API: Skills CRUD."""
+"""API: Skills CRUD and ZIP import."""
 
 import re
 import sqlite3
@@ -6,9 +6,9 @@ import sqlite3
 from flask import Blueprint, jsonify, request
 
 from pi_cowork.models import create_skill, delete_skill, get_skill, get_skills, update_skill
+from pi_cowork.skill_packages import delete_skill_package, get_skill_dir, import_skill_from_zip
 
 skills_bp = Blueprint("skills", __name__)
-
 _SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
@@ -50,6 +50,36 @@ def api_create_skill():
         skill = create_skill(workflow_id, name, description, content, sort_order=sort_order)
         return jsonify(skill), 201
     except sqlite3.IntegrityError:
+        return jsonify({"error": "Skill name already exists in this workflow"}), 409
+
+
+@skills_bp.route("/api/skills/import", methods=["POST"])
+def api_import_skill():
+    workflow_id = request.form.get("workflow_id", type=int)
+    if workflow_id is None:
+        return jsonify({"error": "workflow_id is required"}), 400
+
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "file is required"}), 400
+
+    skill_info, error = import_skill_from_zip(file, workflow_id)
+    if error:
+        status = 409 if "already exists" in error else 400
+        return jsonify({"error": error}), status
+
+    try:
+        skill = create_skill(
+            workflow_id,
+            skill_info["name"],
+            skill_info.get("description"),
+            skill_info.get("content") or "",
+            sort_order=0,
+        )
+        return jsonify(skill), 201
+    except sqlite3.IntegrityError:
+        # Rollback filesystem if DB fails
+        delete_skill_package(get_skill_dir(workflow_id, skill_info["name"]))
         return jsonify({"error": "Skill name already exists in this workflow"}), 409
 
 

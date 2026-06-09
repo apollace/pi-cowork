@@ -482,6 +482,40 @@ def spawn_agent(ticket, status, agent, old_status_id=None):  # noqa: C901
             lines.append(f"- [{ke['id']}] {ke['title']} ({scope}): {preview}")
         knowledge_block = "\n".join(lines)
 
+    # ── Skills integration (must run before context_msg is built) ──
+    from pi_cowork.skill_packages import copy_skill_to_session, get_skill_dir, read_skill_package
+
+    skills = get_agent_skills(agent["id"])
+    skill_args = []
+    skill_meta_lines = []
+    for sk in skills:
+        global_skill_dir = get_skill_dir(workflow_id, sk["name"])
+        session_skill_dir = os.path.join(session_dir, "skills", sk["name"])
+
+        if os.path.isdir(global_skill_dir):
+            copy_skill_to_session(global_skill_dir, session_skill_dir)
+        else:
+            # Legacy fallback: write SKILL.md from DB content when no package exists
+            Path(session_skill_dir).mkdir(parents=True, exist_ok=True)
+            skill_md_path = os.path.join(session_skill_dir, "SKILL.md")
+            skill_body = (
+                f"---\nname: {sk['name']}\ndescription: {sk.get('description') or ''}\n---\n\n{sk['content'] or ''}"
+            )
+            with open(skill_md_path, "w", encoding="utf-8") as f:
+                f.write(skill_body)
+
+        skill_args += ["--skill", session_skill_dir]
+
+        pkg = read_skill_package(session_skill_dir)
+        if pkg:
+            skill_meta_lines.append(f"- {pkg['name']}: {pkg.get('description') or 'No description'}")
+        else:
+            skill_meta_lines.append(f"- {sk['name']}: {sk.get('description') or 'No description'}")
+
+    skills_block = ""
+    if skill_meta_lines:
+        skills_block = "Skills available to you:\n" + "\n".join(skill_meta_lines)
+
     if transitions_line:
         done_instruction = (
             "When done: first add a comment to the ticket summarizing what you did, "
@@ -526,6 +560,7 @@ New comments since last update:
 API:
 {api_docs}
 {knowledge_block}
+{skills_block}
 {goal_instruction}
 {transitions_line}
 {done_instruction}"""
@@ -545,7 +580,7 @@ API:
 {board_ctx}{git_info}{change_note}\nDescription:
 {ticket["body"] or "(no description)"}\nComments:
 {all_comments_block}\nAPI:
-{api_docs}\n{knowledge_block}\nThis is a new prompt, forget the goals you had from previous prompts.
+{api_docs}\n{knowledge_block}\n{skills_block}\nThis is a new prompt, forget the goals you had from previous prompts.
 Your goal: {goal_line}
 {transitions_line}
 {done_instruction}"""
@@ -577,20 +612,6 @@ After completing your task, write a comment on the ticket summarizing what you d
         effective_thinking = status["thinking"].strip()
     else:
         effective_thinking = agent.get("thinking")
-
-    # ── Skills integration ──
-    skills = get_agent_skills(agent["id"])
-    skill_args = []
-    for sk in skills:
-        skill_dir = os.path.join(session_dir, "skills", sk["name"])
-        Path(skill_dir).mkdir(parents=True, exist_ok=True)
-        skill_md_path = os.path.join(skill_dir, "SKILL.md")
-        skill_body = (
-            f"---\nname: {sk['name']}\ndescription: {sk.get('description') or ''}\n---\n\n{sk['content'] or ''}"
-        )
-        with open(skill_md_path, "w", encoding="utf-8") as f:
-            f.write(skill_body)
-        skill_args += ["--skill", skill_dir]
 
     cmd = [
         "pi",

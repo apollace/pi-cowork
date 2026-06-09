@@ -87,6 +87,7 @@ All dynamic configuration is resolved via `pi_cowork.config.get_config(key)` wit
 |-------------|--------|---------|---------|------|----------|
 | API Base URL | `pi_cowork_url` | `PI_COWORK_URL` | `http://localhost:5000` | str | ⚙️ General |
 | **Port** | `port` | `PI_PORT` | `5000` | int | ⚙️ General |
+| Skills Folder Path | `skills_folder_path` | `PI_SKILLS_FOLDER` | `workspace/skills` | str | ⚙️ General |
 | Max Parallel Agents | `max_parallel` | `PI_MAX_PARALLEL` | `1` | int | ⚙️ General |
 | Max Spawns Per Hour | `max_per_hour` | `PI_MAX_PER_HOUR` | `100` | int | ⚙️ General |
 | Warm Spawn Threshold (sec) | `warm_spawn_threshold` | _(none)_ | `3600` | int | ⚙️ General |
@@ -105,7 +106,7 @@ All dynamic configuration is resolved via `pi_cowork.config.get_config(key)` wit
 
 **Settings UI** has three collapsible categories:
 1. 🤖 **Assistant** — enabled, auto-context, model, thinking, working-dir, system-prompt, api-endpoints, saved-prompts
-2. ⚙️ **General** — pi_cowork_url, **port**, max_parallel, max_per_hour, warm_spawn_threshold, run_max_age
+2. ⚙️ **General** — pi_cowork_url, **port**, skills_folder_path, max_parallel, max_per_hour, warm_spawn_threshold, run_max_age
 3. 📜 **Logs & Storage** — log_retention_days, event_log_retention_days, db_backup_max_count, notification_dismissal_retention_days, purge terminal logs
 
 ## Data Model
@@ -202,7 +203,8 @@ When a ticket is moved to a status with an agent assigned, or when a ticket is c
 1. `pi` is spawned as a background subprocess in the **board's** `working_directory`
 2. Command: `pi --system-prompt "<prompt>" --print --session-dir <dir> [--thinking <level>] [--model <model>] [--skill <skill-dir> ...] "<context>"`
 3. `--thinking` and `--model` are only included if an override is active at any level; resolution order: ticket override → status override → agent setting → `pi` CLI built-in defaults (lowest). Each field resolves independently.
-4. **Skills**: If the agent has associated skills, each skill is written to `{session_dir}/skills/{name}/SKILL.md` with YAML frontmatter (`name`, `description`) + markdown `content`, and `--skill {skill-dir}` is appended to the `pi` CLI command for each skill. When no skills are configured, `--skill` is not passed, preserving pi's default behavior.
+4. **Skills**: If the agent has associated skills, the full skill package directory is copied from `{skills_folder_path}/{workflow_id}/{name}/` into `{session_dir}/skills/{name}/`, and `--skill {session_dir}/skills/{name}` is appended to the `pi` CLI command for each skill. When no skills are configured, `--skill` is not passed, preserving pi's default behavior.
+5. The agent context message lists skill names and descriptions (read from each package's `SKILL.md` YAML frontmatter) under a "Skills available to you:" block.
 5. The **system prompt** contains only the agent's description plus two short directives: follow the goal at the end of the context message, and always add a comment when done
 6. The **context message** is structured with the most important directives at the tail end (recency bias) — see structure below
 7. A system comment is added: "Agent started/resumed working at..."
@@ -332,9 +334,10 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 ### Skills (scoped by workflow)
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/api/skills?workflow_id=<id>` | GET | List skills for a workflow |
-| `/api/skills` | POST | Create skill (requires `workflow_id`) |
-| `/api/skills/<id>` | GET/PUT/DELETE | Get / update / remove skill |
+| `/api/skills?workflow_id=<id>` | GET | List skills for a workflow (reads from DB index; enriches with filesystem subdirs) |
+| `/api/skills` | POST | Create skill (requires `workflow_id`); writes package to filesystem, syncs index row |
+| `/api/skills/<id>` | GET/PUT/DELETE | Get / update / remove skill (GET reads `SKILL.md` from disk; PUT syncs filesystem; DELETE removes package dir) |
+| `/api/skills/import` | POST | Import skill from ZIP (multipart/form-data); extracts package to filesystem, syncs index row |
 
 ### Agents (scoped by workflow)
 | Route | Method | Description |
@@ -409,11 +412,21 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 **Ticket detail response** (`GET /api/tickets/<id>`) returns full `comments` array plus `running_agents`, `agent_run_count`, `last_agent_run` etc.
 
 **Skill fields:**
-- `name` (string, required, unique per workflow) — must match `^[a-z0-9-]+$`, max 64 chars, no leading/trailing/consecutive hyphens
-- `description` (string, nullable)
-- `content` (text, required) — markdown body written to `{session_dir}/skills/{name}/SKILL.md` with YAML frontmatter
+- `name` (string, required, unique per workflow) — must match `^[a-z0-9-]+$`, max 64 chars, no leading/trailing/consecutive hyphens; also the directory name
+- `description` (string, nullable) — cached mirror of the `SKILL.md` frontmatter
+- `content` (text, required) — cached mirror of the markdown body in `SKILL.md`
 - `sort_order` (integer, default 0)
 - `workflow_id` (integer, required)
+- **`subdirs`** (array of strings, read-only) — subdirectories inside the package (e.g. `examples`, `tests`, `schemas`)
+
+**Skill Package Architecture:**
+- Global path: `{skills_folder_path}/{workflow_id}/{skill_name}/`
+- `skills_folder_path` is a dynamic setting (DB key `skills_folder_path`, env `PI_SKILLS_FOLDER`, default `workspace/skills`)
+- Each package contains `SKILL.md` with YAML frontmatter (`name`, `description`) + markdown body
+- Optional subdirectories (`examples/`, `tests/`, `schemas/`, `templates/`) are copied wholesale into agent sessions
+- The DB `skills` table is an **index**, not the source of truth. On read, `SKILL.md` is parsed from disk; on write, the filesystem is updated first, then the DB row is synced.
+- ZIP import (`POST /api/skills/import`) extracts the package to the filesystem and creates the DB index row.
+- Workflow deletion removes the entire `{skills_folder_path}/{workflow_id}/` directory.
 
 **Agent fields:**
 - `name` (string, required, unique per workflow)

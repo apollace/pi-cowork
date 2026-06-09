@@ -92,6 +92,15 @@ def api_delete_workflow(workflow_id):
     run_db("DELETE FROM quality_gates WHERE workflow_id = ?", (workflow_id,))
     run_db("DELETE FROM statuses WHERE workflow_id = ?", (workflow_id,))
     run_db("DELETE FROM agents WHERE workflow_id = ?", (workflow_id,))
+    # Cleanup filesystem skill packages before DB cascade removes skill rows
+    import os
+    import shutil
+
+    from pi_cowork.skill_packages import get_skills_folder
+
+    wf_skills_dir = os.path.join(get_skills_folder(), str(workflow_id))
+    if os.path.isdir(wf_skills_dir):
+        shutil.rmtree(wf_skills_dir, ignore_errors=True)
     run_db("DELETE FROM workflows WHERE id = ?", (workflow_id,))
     add_log(
         "INFO",
