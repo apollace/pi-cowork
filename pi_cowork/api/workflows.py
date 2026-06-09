@@ -96,7 +96,7 @@ def api_delete_workflow(workflow_id):
     import os
     import shutil
 
-    from pi_cowork.skill_packages import get_skill_dir, get_skills_folder
+    from pi_cowork.skill_packages import get_skills_folder
 
     wf_skills_dir = os.path.join(get_skills_folder(), str(workflow_id))
     if os.path.isdir(wf_skills_dir):

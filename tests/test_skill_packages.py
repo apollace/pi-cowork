@@ -225,12 +225,13 @@ def test_skill_setting_default(monkeypatch):
         _sp.get_skills_folder = original
 
 
-def test_skill_setting_env_override(monkeypatch):
+def test_skill_setting_env_override(monkeypatch, tmp_path):
     from pi_cowork.config import get_config
 
-    monkeypatch.setenv("PI_SKILLS_FOLDER", "/tmp/skills-test")
+    test_dir = str(tmp_path / "skills-test")
+    monkeypatch.setenv("PI_SKILLS_FOLDER", test_dir)
     # get_config reads env dynamically each call
-    assert get_config("skills_folder_path") == "/tmp/skills-test"
+    assert get_config("skills_folder_path") == test_dir
 
 
 def test_spawn_agent_copies_skill_directory(client, default_workflow, default_board, temp_skills_folder):

@@ -70,7 +70,7 @@ def read_skill_package(skill_dir):
     if not os.path.isfile(skill_md):
         return None
     try:
-        with open(skill_md, "r", encoding="utf-8") as f:
+        with open(skill_md, encoding="utf-8") as f:
             text = f.read()
     except (OSError, UnicodeDecodeError):
         return None
@@ -179,7 +179,7 @@ def import_skill_from_zip(file_storage, workflow_id):
         if not os.path.isfile(skill_md):
             return None, "ZIP must contain a SKILL.md file at the package root"
 
-        with open(skill_md, "r", encoding="utf-8") as f:
+        with open(skill_md, encoding="utf-8") as f:
             text = f.read()
 
         meta, content = _parse_frontmatter(text)
