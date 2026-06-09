@@ -271,6 +271,27 @@ ENDPOINT_REGISTRY = [
             "- GET {base_url}/api/agents/{agent_id} → get agent details",
         ],
     },
+    # ── Skills ──
+    {
+        "key": "skills_list",
+        "category": "Skills",
+        "method": "GET",
+        "path_template": "/api/skills",
+        "label": "list skills for workflow (query: workflow_id)",
+        "doc_lines": [
+            "- GET {base_url}/api/skills?workflow_id={workflow_id} → list skills for workflow",
+        ],
+    },
+    {
+        "key": "skill_get",
+        "category": "Skills",
+        "method": "GET",
+        "path_template": "/api/skills/{skill_id}",
+        "label": "get skill details",
+        "doc_lines": [
+            "- GET {base_url}/api/skills/{skill_id} → get skill details",
+        ],
+    },
     # ── Labels ──
     {
         "key": "labels_list",

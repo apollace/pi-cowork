@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import sys
 import tempfile
 
@@ -138,6 +139,25 @@ def mock_model_ids(monkeypatch):
     monkeypatch.setattr(_statuses, "get_model_ids", fake)
     monkeypatch.setattr(_assistant, "get_model_ids", fake)
     monkeypatch.setattr(_tso, "get_model_ids", fake)
+
+
+@pytest.fixture(autouse=True)
+def temp_skills_folder(monkeypatch):
+    """Use a temporary directory for skills so tests don't pollute workspace/skills."""
+    tmpdir = tempfile.mkdtemp(prefix="pi-cowork-skills-")
+    monkeypatch.setenv("PI_SKILLS_FOLDER", tmpdir)
+    # Also patch get_config directly since it may cache env reads
+    import pi_cowork.skill_packages as _sp
+
+    original_get_skills_folder = _sp.get_skills_folder
+
+    def _fake_get_skills_folder():
+        return tmpdir
+
+    monkeypatch.setattr(_sp, "get_skills_folder", _fake_get_skills_folder)
+    yield tmpdir
+    shutil.rmtree(tmpdir, ignore_errors=True)
+    monkeypatch.setattr(_sp, "get_skills_folder", original_get_skills_folder)
 
 
 @pytest.fixture

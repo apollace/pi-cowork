@@ -27,6 +27,7 @@ DEFAULTS = {
     "event_log_retention_days": "30",
     "db_backup_max_count": "10",
     "notification_dismissal_retention_days": "7",
+    "skills_folder_path": "workspace/skills",
 }
 
 # ── Mapping: config key → env var name ──
@@ -38,6 +39,7 @@ ENV_MAP = {
     "log_retention_days": "PI_LOG_RETENTION_DAYS",
     "event_log_retention_days": "PI_EVENT_LOG_RETENTION_DAYS",
     "notification_dismissal_retention_days": "PI_NOTIFICATION_DISMISSAL_RETENTION_DAYS",
+    "skills_folder_path": "PI_SKILLS_FOLDER",
 }
 
 # ── Type coercion for numeric settings ──

@@ -7,6 +7,7 @@ through ``pi_cowork.events.bus`` where appropriate.
 import contextlib
 import json
 import logging
+import os
 import subprocess
 from datetime import UTC
 
@@ -140,18 +141,49 @@ def delete_ticket_status_override(ticket_id, status_id):
 # Skills
 # ---------------------------------------------------------------------------
 
+from pi_cowork.skill_packages import (  # noqa: E402
+    delete_skill_package,
+    get_skill_dir,
+    read_skill_package,
+    rename_skill_package,
+    write_skill_package,
+)
+
 
 def get_skills(workflow_id):
     rows = query_db("SELECT * FROM skills WHERE workflow_id = ? ORDER BY sort_order, name", (workflow_id,))
-    return [row_to_dict(r) for r in rows]
+    result = []
+    for r in rows:
+        d = row_to_dict(r)
+        pkg = read_skill_package(get_skill_dir(workflow_id, d["name"]))
+        if pkg:
+            d["description"] = pkg.get("description") or d.get("description")
+            d["content"] = pkg.get("content") or d.get("content")
+            d["subdirs"] = pkg.get("subdirs", [])
+        else:
+            d["subdirs"] = []
+        result.append(d)
+    return result
 
 
 def get_skill(skill_id):
     row = query_db("SELECT * FROM skills WHERE id = ?", (skill_id,), one=True)
-    return row_to_dict(row) if row else None
+    if not row:
+        return None
+    d = row_to_dict(row)
+    pkg = read_skill_package(get_skill_dir(d["workflow_id"], d["name"]))
+    if pkg:
+        d["description"] = pkg.get("description") or d.get("description")
+        d["content"] = pkg.get("content") or d.get("content")
+        d["subdirs"] = pkg.get("subdirs", [])
+    else:
+        d["subdirs"] = []
+    return d
 
 
 def create_skill(workflow_id, name, description, content, sort_order=0):
+    skill_dir = get_skill_dir(workflow_id, name)
+    write_skill_package(skill_dir, name, description, content)
     cur = run_db(
         "INSERT INTO skills (workflow_id, name, description, content, sort_order) VALUES (?, ?, ?, ?, ?)",
         (workflow_id, name.strip(), (description or "").strip() or None, content, sort_order),
@@ -163,11 +195,26 @@ def update_skill(skill_id, name=None, description=None, content=None, sort_order
     skill = get_skill(skill_id)
     if not skill:
         return None
+    old_name = skill["name"]
+    old_workflow_id = skill["workflow_id"]
+    new_name = name.strip() if name is not None else old_name
+
+    # Rename filesystem package before updating DB so we fail early on collision
+    if name is not None and new_name != old_name:
+        old_dir = get_skill_dir(old_workflow_id, old_name)
+        new_dir = get_skill_dir(old_workflow_id, new_name)
+        if os.path.exists(new_dir):
+            raise sqlite3.IntegrityError("Skill name already exists in this workflow")
+        if os.path.exists(old_dir):
+            renamed = rename_skill_package(old_dir, new_name)
+            if renamed is None:
+                raise sqlite3.IntegrityError("Skill name already exists in this workflow")
+
     updates = []
     args = []
     if name is not None:
         updates.append("name = ?")
-        args.append(name.strip())
+        args.append(new_name)
     if description is not None:
         updates.append("description = ?")
         args.append((description or "").strip() or None)
@@ -181,10 +228,22 @@ def update_skill(skill_id, name=None, description=None, content=None, sort_order
         return skill
     args.append(skill_id)
     run_db(f"UPDATE skills SET {', '.join(updates)} WHERE id = ?", tuple(args))  # noqa: S608
+
+    # Sync filesystem SKILL.md with latest metadata
+    skill_dir = get_skill_dir(old_workflow_id, new_name)
+    write_skill_package(
+        skill_dir,
+        new_name,
+        description if description is not None else skill.get("description"),
+        content if content is not None else skill.get("content"),
+    )
     return get_skill(skill_id)
 
 
 def delete_skill(skill_id):
+    skill = get_skill(skill_id)
+    if skill:
+        delete_skill_package(get_skill_dir(skill["workflow_id"], skill["name"]))
     run_db("DELETE FROM skills WHERE id = ?", (skill_id,))
 
 

@@ -109,6 +109,25 @@
   </div>
 </div>
 
+<!-- Skill Import ZIP Modal -->
+<div id="skill-import-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2>Import Skill from ZIP</h2>
+    <form id="skill-import-form" class="form-card" enctype="multipart/form-data">
+      <input type="hidden" name="workflow_id">
+      <label>
+        ZIP file *
+        <input type="file" name="file" accept=".zip,application/zip" required>
+      </label>
+      <p class="muted" style="font-size:0.8rem;">ZIP must contain a <code>SKILL.md</code> with YAML frontmatter (<code>name</code>, <code>description</code>) at the root or inside a single top-level directory.</p>
+      <div class="form-actions">
+        <button type="submit" class="btn primary">Import</button>
+        <button type="button" class="btn" onclick="hideSkillImportModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- Status Modal (create/edit) -->
 <div id="status-modal" class="modal" style="display:none;">
   <div class="modal-content">
@@ -501,7 +520,7 @@ async function loadWorkflowDetail(id) {
       </div>`}
     </div>
     <div class="wf-subsection">
-      <h3 class="wf-subtitle">Skills <button class="btn small" onclick="showSkillCreate(${id})" style="margin-left:0.5rem;">+ Add</button></h3>
+      <h3 class="wf-subtitle">Skills <button class="btn small" onclick="showSkillCreate(${id})" style="margin-left:0.5rem;">+ Add</button><button class="btn small" onclick="showSkillImport(${id})" style="margin-left:0.25rem;">📥 Import ZIP</button></h3>
       ${skills.length === 0 ? '<p class="empty-sm">No skills yet.</p>' : `
       <div class="table-wrapper" style="margin-top:0.5rem;">
         <table class="data-table">
@@ -509,7 +528,7 @@ async function loadWorkflowDetail(id) {
           <tbody>
             ${skills.map(sk => `
               <tr>
-                <td><strong>${escapeHtml(sk.name)}</strong></td>
+                <td><strong>${escapeHtml(sk.name)}</strong>${sk.subdirs && sk.subdirs.length ? '<br><span class="badge muted">' + sk.subdirs.join(', ') + '</span>' : ''}</td>
                 <td>${escapeHtml(sk.description || '—')}</td>
                 <td>${sk.sort_order}</td>
                 <td class="row-actions">
@@ -900,6 +919,36 @@ function hideSkillModal() {
   closeModal('skill-modal');
   document.getElementById('skill-form').reset();
 }
+
+function showSkillImport(workflowId) {
+  const form = document.getElementById('skill-import-form');
+  form.elements.workflow_id.value = workflowId;
+  openModal('skill-import-modal');
+}
+
+function hideSkillImportModal() {
+  closeModal('skill-import-modal');
+  document.getElementById('skill-import-form').reset();
+}
+
+document.getElementById('skill-import-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const workflowId = parseInt(form.elements.workflow_id.value);
+  const fd = new FormData(form);
+  const res = await fetch('/api/skills/import', {
+    method: 'POST',
+    body: fd,
+  });
+  if (res.ok) {
+    hideSkillImportModal();
+    loadWorkflowDetail(workflowId);
+    showToast('Skill imported successfully', 'success');
+  } else {
+    const d = await res.json();
+    showToast(d.error || 'Import failed', 'error');
+  }
+});
 
 document.getElementById('skill-form').addEventListener('submit', async (e) => {
   e.preventDefault();
