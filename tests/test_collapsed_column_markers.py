@@ -95,14 +95,20 @@ def test_css_desktop_shows_group_indicators_in_collapsed_group():
     assert "flex-direction: column" in media_block
 
 
-def test_css_desktop_group_indicator_is_dot():
+def test_css_desktop_group_indicator_is_compact_pill_with_visible_text():
     css = _load_css()
     media_start = css.find("@media (min-width: 769px)")
     media_end = css.find(".add-btn {", media_start)
     media_block = css[media_start:media_end]
     assert ".board > .group.collapsed .group-indicator" in media_block
-    # Desktop hides text and renders a small coloured dot
-    assert "width: 10px" in media_block or "font-size: 0" in media_block
+    # Desktop renders a compact pill with visible ticket number text
+    assert "border-radius: 999px" in media_block
+    assert "font-size: 0.65rem" in media_block
+    assert "max-width: 100%" in media_block
+    assert "text-overflow: ellipsis" in media_block
+    # Old dot styles should be gone
+    assert "width: 10px;" not in media_block
+    assert "font-size: 0;" not in media_block
 
 
 def test_build_indicator_returns_link_with_accessibility():
