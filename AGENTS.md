@@ -42,11 +42,12 @@ pi-cowork/
 │   ├── ticket_form.html   # Create / edit ticket
 │   ├── ticket_detail.html # Ticket view + comments + gate reviews + agent badge
 │   ├── knowledge.html     # Knowledge management page
-│   ├── workflows.html     # Workflows + agents/statuses/transitions/quality gates + import workflow
+│   ├── workflows.html     # Workflows + agents/statuses/transitions/quality gates/skills + import workflow
 └── tests/                 # pytest suite (930+ tests)
     ├── conftest.py
     ├── test_tickets_api.py
     ├── test_agents_api.py
+    ├── test_skills_api.py
     ├── test_statuses_api.py
     ├── test_transitions_api.py
     ├── test_agent_limits.py
@@ -115,7 +116,7 @@ Workflow (agents + statuses + transitions + quality_gates)
         └── Tickets (comments, agent runs, gate_reviews)
 ```
 
-- **Workflow** = reusable template (agents, statuses, transitions, quality gates)
+- **Workflow** = reusable template (agents, statuses, transitions, quality gates, **skills**)
 - **Board** = CoWork instance assigned to exactly one workflow. Has its own working directory where agents run.
 - **Ticket** = lives on exactly one board, inherits its workflow's statuses
 - **Quality Gate** = check on a status transition (from, to) pair that must pass before the transition completes (manual approval or CLI command)
@@ -199,12 +200,13 @@ Logs are retained forever. No size cap.
 When a ticket is moved to a status with an agent assigned, or when a ticket is created in such a status:
 
 1. `pi` is spawned as a background subprocess in the **board's** `working_directory`
-2. Command: `pi --system-prompt "<prompt>" --print --session-dir <dir> [--thinking <level>] [--model <model>] "<context>"`
+2. Command: `pi --system-prompt "<prompt>" --print --session-dir <dir> [--thinking <level>] [--model <model>] [--skill <skill-dir> ...] "<context>"`
 3. `--thinking` and `--model` are only included if an override is active at any level; resolution order: ticket override → status override → agent setting → `pi` CLI built-in defaults (lowest). Each field resolves independently.
-4. The **system prompt** contains only the agent's description plus two short directives: follow the goal at the end of the context message, and always add a comment when done
-5. The **context message** is structured with the most important directives at the tail end (recency bias) — see structure below
-6. A system comment is added: "Agent started/resumed working at..."
-7. Sessions are cached per (agent, ticket) pair at `{board.working_dir}/.pi-sessions/<agent-id>/ticket-{id}/`
+4. **Skills**: If the agent has associated skills, each skill is written to `{session_dir}/skills/{name}/SKILL.md` with YAML frontmatter (`name`, `description`) + markdown `content`, and `--skill {skill-dir}` is appended to the `pi` CLI command for each skill. When no skills are configured, `--skill` is not passed, preserving pi's default behavior.
+5. The **system prompt** contains only the agent's description plus two short directives: follow the goal at the end of the context message, and always add a comment when done
+6. The **context message** is structured with the most important directives at the tail end (recency bias) — see structure below
+7. A system comment is added: "Agent started/resumed working at..."
+8. Sessions are cached per (agent, ticket) pair at `{board.working_dir}/.pi-sessions/<agent-id>/ticket-{id}/`
 
 ### System Prompt (lean, identity-only)
 
@@ -327,12 +329,19 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 | `/api/tickets/<id>` | GET/PUT | Get / update ticket |
 | `/api/tickets/<id>/comments` | GET/POST | List / add comment |
 
+### Skills (scoped by workflow)
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/api/skills?workflow_id=<id>` | GET | List skills for a workflow |
+| `/api/skills` | POST | Create skill (requires `workflow_id`) |
+| `/api/skills/<id>` | GET/PUT/DELETE | Get / update / remove skill |
+
 ### Agents (scoped by workflow)
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/api/agents?workflow_id=<id>` | GET | List agents for a workflow |
-| `/api/agents` | POST | Create agent (requires `workflow_id`) |
-| `/api/agents/<id>` | GET/PUT/DELETE | Get / update / remove agent (delete blocked if assigned to a status) |
+| `/api/agents?workflow_id=<id>` | GET | List agents for a workflow (includes `skills` array per agent) |
+| `/api/agents` | POST | Create agent (requires `workflow_id`, optional `skill_ids` array) |
+| `/api/agents/<id>` | GET/PUT/DELETE | Get / update / remove agent (`PUT` accepts optional `skill_ids` array; delete blocked if assigned to a status) |
 | `/api/endpoint-registry` | GET | List all API endpoint keys available for agent prompts (grouped by category) |
 | `/api/pi-models` | GET | List available models and thinking levels from the pi CLI |
 
@@ -399,12 +408,20 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 
 **Ticket detail response** (`GET /api/tickets/<id>`) returns full `comments` array plus `running_agents`, `agent_run_count`, `last_agent_run` etc.
 
+**Skill fields:**
+- `name` (string, required, unique per workflow) — must match `^[a-z0-9-]+$`, max 64 chars, no leading/trailing/consecutive hyphens
+- `description` (string, nullable)
+- `content` (text, required) — markdown body written to `{session_dir}/skills/{name}/SKILL.md` with YAML frontmatter
+- `sort_order` (integer, default 0)
+- `workflow_id` (integer, required)
+
 **Agent fields:**
 - `name` (string, required, unique per workflow)
 - `description` (string) — used as `--system-prompt` for `pi`
 - `model` (string, nullable) — optional `--model` override for `pi`; `NULL` means use pi default
 - `thinking` (string, nullable) — optional `--thinking` level for `pi`; one of: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`; `NULL` means use pi default
 - `api_endpoints` (array of strings or null) — list of endpoint keys from `ENDPOINT_REGISTRY` to include in agent prompt; `NULL` uses defaults (`ticket_put`, `ticket_comments_post`, `ticket_questions_post`)
+- **`skills`** (array, read-only via JSON) — skills associated with this agent via `agent_skills` junction table
 - `workflow_id` (integer) — required
 
 **Status fields:**
@@ -450,14 +467,16 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
   "exported_at": "...",
   "name": "My Workflow",
   "description": "...",
-  "agents": [...],
+  "agents": [..., { "skill_ids": ["skill-name"] }],
   "statuses": [...],
   "transitions": [...],
-  "quality_gates": [...]
+  "quality_gates": [...],
+  "skills": [...],
+  "labels": [...]
 }
 ```
 
-**Import** — creates a **new workflow** from JSON. No existing data is deleted. If the name collides, a timestamp is appended. Quality gates are recreated if present in the export.
+**Import** — creates a **new workflow** from JSON. No existing data is deleted. If the name collides, a timestamp is appended. Skills are created before agents so that per-agent `skill_ids` references can be resolved.
 
 ## Quality Gates
 

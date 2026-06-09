@@ -10,10 +10,69 @@ def test_export_workflow(client, default_workflow):
     assert isinstance(data["agents"], list)
     assert isinstance(data["statuses"], list)
     assert isinstance(data["transitions"], list)
+    assert isinstance(data["skills"], list)
     # Should have the seeded agents
     agent_names = [a["name"] for a in data["agents"]]
     assert "Researcher" in agent_names
     assert "Developer" in agent_names
+
+
+def test_import_workflow_with_skills(client):
+    workflow_json = {
+        "version": "1.0",
+        "name": "Skills Import Workflow",
+        "description": "Testing skills import",
+        "skills": [{"name": "pytest-skill", "description": "d", "content": "## hello", "sort_order": 1}],
+        "agents": [{"name": "SkilledAgent", "description": "d", "skill_ids": ["pytest-skill"]}],
+        "statuses": [
+            {
+                "name": "Start",
+                "sort_order": 1,
+                "is_default": True,
+                "is_terminal": False,
+                "agent_name": None,
+                "goal": None,
+            },
+            {
+                "name": "End",
+                "sort_order": 2,
+                "is_default": False,
+                "is_terminal": True,
+                "agent_name": None,
+                "goal": None,
+            },
+        ],
+        "transitions": [{"from_status_name": "Start", "to_status_name": "End", "instructions": ""}],
+    }
+    res = client.post("/api/workflows/import", json=workflow_json)
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    assert data["skills"] == 1
+    assert data["agents"] == 1
+
+    # Verify skills and associations
+    wf_id = data["workflow_id"]
+    skills = json.loads(client.get(f"/api/skills?workflow_id={wf_id}").data)
+    assert len(skills) == 1
+    assert skills[0]["name"] == "pytest-skill"
+
+    agents = json.loads(client.get(f"/api/agents?workflow_id={wf_id}").data)
+    assert len(agents[0]["skills"]) == 1
+    assert agents[0]["skills"][0]["name"] == "pytest-skill"
+
+
+def test_import_rejects_unknown_skill_ref(client):
+    workflow_json = {
+        "version": "1.0",
+        "name": "Bad Skills",
+        "skills": [],
+        "agents": [{"name": "A1", "description": "d", "skill_ids": ["nonexistent-skill"]}],
+        "statuses": [{"name": "S1", "sort_order": 1, "is_default": True, "is_terminal": False, "agent_name": None}],
+        "transitions": [],
+    }
+    res = client.post("/api/workflows/import", json=workflow_json)
+    assert res.status_code == 400
+    assert b"unknown skill" in res.data
 
 
 def test_export_nonexistent_workflow(client):

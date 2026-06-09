@@ -78,9 +78,32 @@
         <legend>API Endpoints</legend>
         <div id="api-endpoints-checkboxes">Loading…</div>
       </fieldset>
+      <fieldset class="skills-fieldset" id="agent-skills-fieldset" style="display:none;">
+        <legend>Skills</legend>
+        <div id="agent-skills-checkboxes"></div>
+      </fieldset>
       <div class="form-actions">
         <button type="submit" class="btn primary">Save</button>
         <button type="button" class="btn" onclick="hideAgentModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Skill Modal (create/edit) -->
+<div id="skill-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2 id="skill-modal-title">New Skill</h2>
+    <form id="skill-form" class="form-card">
+      <input type="hidden" name="id">
+      <input type="hidden" name="workflow_id">
+      <label>Name *<input type="text" name="name" required pattern="[a-z0-9]+(-[a-z0-9]+)*" title="lowercase letters, numbers, and single hyphens"></label>
+      <label>Description<textarea name="description" rows="2"></textarea></label>
+      <label>Content *<textarea name="content" rows="6" required placeholder="Markdown content for the skill..."></textarea></label>
+      <label>Sort Order<input type="number" name="sort_order" value="0"></label>
+      <div class="form-actions">
+        <button type="submit" class="btn primary">Save</button>
+        <button type="button" class="btn" onclick="hideSkillModal()">Cancel</button>
       </div>
     </form>
   </div>
@@ -348,13 +371,14 @@ function toggleWorkflow(id) {
 async function loadWorkflowDetail(id) {
   const detail = document.getElementById(`wf-detail-${id}`);
   if (!detail) return;
-  const [agentsRes, statusesRes, transitionsRes, boardsRes, gatesRes, labelsRes] = await Promise.all([
+  const [agentsRes, statusesRes, transitionsRes, boardsRes, gatesRes, labelsRes, skillsRes] = await Promise.all([
     fetch(`/api/agents?workflow_id=${id}`),
     fetch(`/api/statuses?workflow_id=${id}`),
     fetch(`/api/transitions?workflow_id=${id}`),
     fetch('/api/boards'),
     fetch(`/api/quality_gates?workflow_id=${id}`),
     fetch(`/api/labels?workflow_id=${id}`),
+    fetch(`/api/skills?workflow_id=${id}`),
   ]);
   const agents = await agentsRes.json();
   const statuses = await statusesRes.json();
@@ -362,10 +386,11 @@ async function loadWorkflowDetail(id) {
   const allBoards = await boardsRes.json();
   const gates = await gatesRes.json();
   const labels = await labelsRes.json();
+  const skills = await skillsRes.json();
   const wfBoards = allBoards.filter(b => b.workflow_id === id);
 
-  // Cache agents/statuses for forms
-  workflowsData[id] = { ...workflowsData[id], agents, statuses, transitions, gates, labels };
+  // Cache agents/statuses/skills for forms
+  workflowsData[id] = { ...workflowsData[id], agents, statuses, transitions, gates, labels, skills };
 
   let boardsHtml = '';
   if (wfBoards.length > 0) {
@@ -471,6 +496,28 @@ async function loadWorkflowDetail(id) {
                 </td>
               </tr>`;
             }).join('')}
+          </tbody>
+        </table>
+      </div>`}
+    </div>
+    <div class="wf-subsection">
+      <h3 class="wf-subtitle">Skills <button class="btn small" onclick="showSkillCreate(${id})" style="margin-left:0.5rem;">+ Add</button></h3>
+      ${skills.length === 0 ? '<p class="empty-sm">No skills yet.</p>' : `
+      <div class="table-wrapper" style="margin-top:0.5rem;">
+        <table class="data-table">
+          <thead><tr><th>Name</th><th>Description</th><th>Sort</th><th></th></tr></thead>
+          <tbody>
+            ${skills.map(sk => `
+              <tr>
+                <td><strong>${escapeHtml(sk.name)}</strong></td>
+                <td>${escapeHtml(sk.description || '—')}</td>
+                <td>${sk.sort_order}</td>
+                <td class="row-actions">
+                  <button class="btn small ghost" onclick="showSkillEdit(${sk.id}, ${id})">✏️</button>
+                  <button class="btn small ghost danger-text" onclick="deleteSkill(${sk.id}, ${id})">🗑️</button>
+                </td>
+              </tr>
+            `).join('')}
           </tbody>
         </table>
       </div>`}
@@ -723,6 +770,7 @@ async function showAgentCreate(workflowId) {
   _agentEditEndpoints = null; // defaults
   await loadEndpointRegistry();
   renderEndpointCheckboxes(null);
+  renderAgentSkillCheckboxes(workflowId, []);
   openModal('agent-modal');
 }
 async function showAgentEdit(agentId, workflowId) {
@@ -748,9 +796,30 @@ async function showAgentEdit(agentId, workflowId) {
   document.getElementById('agent-modal-title').textContent = 'Edit Agent';
   await loadEndpointRegistry();
   renderEndpointCheckboxes(epKeys);
+  const selectedSkillIds = (agent.skills || []).map(s => s.id);
+  renderAgentSkillCheckboxes(workflowId, selectedSkillIds);
   openModal('agent-modal');
 }
 function hideAgentModal() { closeModal('agent-modal'); }
+
+function renderAgentSkillCheckboxes(workflowId, selectedIds) {
+  const container = document.getElementById('agent-skills-checkboxes');
+  const fieldset = document.getElementById('agent-skills-fieldset');
+  const skills = workflowsData[workflowId]?.skills || [];
+  if (skills.length === 0) {
+    fieldset.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+  fieldset.style.display = 'block';
+  const selectedSet = new Set(selectedIds);
+  let html = '';
+  for (const sk of skills) {
+    const checked = selectedSet.has(sk.id) ? 'checked' : '';
+    html += `<label class="ep-checkbox-label"><input type="checkbox" class="skill-checkbox" value="${sk.id}" ${checked}> ${escapeHtml(sk.name)}</label>`;
+  }
+  container.innerHTML = html;
+}
 
 document.getElementById('agent-form').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -780,6 +849,9 @@ document.getElementById('agent-form').addEventListener('submit', async (e) => {
   const isDefault = sorted.length === sortedDefault.length && sorted.every((k, i) => k === sortedDefault[i]);
   // Send null for defaults, the selected list otherwise
   body.api_endpoints = isDefault ? null : selectedKeys;
+  // Collect selected skill IDs
+  const checkedSkills = document.querySelectorAll('#agent-skills-checkboxes .skill-checkbox:checked');
+  body.skill_ids = Array.from(checkedSkills).map(cb => parseInt(cb.value));
   const url = id ? `/api/agents/${id}` : '/api/agents';
   const method = id ? 'PUT' : 'POST';
   if (!id) body.workflow_id = workflowId;
@@ -791,6 +863,66 @@ document.getElementById('agent-form').addEventListener('submit', async (e) => {
 async function deleteAgent(agentId, workflowId) {
   if (!confirm('Delete this agent?')) return;
   const res = await fetch(`/api/agents/${agentId}`, { method: 'DELETE' });
+  if (res.ok) loadWorkflowDetail(workflowId);
+  else { const d = await res.json(); showToast(d.error || 'Failed', 'error'); }
+}
+
+// ── Skill CRUD ──
+
+function showSkillCreate(workflowId) {
+  const form = document.getElementById('skill-form');
+  form.elements.id.value = '';
+  form.elements.workflow_id.value = workflowId;
+  form.elements.name.value = '';
+  form.elements.description.value = '';
+  form.elements.content.value = '';
+  form.elements.sort_order.value = '0';
+  document.getElementById('skill-modal-title').textContent = 'New Skill';
+  openModal('skill-modal');
+}
+
+async function showSkillEdit(skillId, workflowId) {
+  const skills = workflowsData[workflowId]?.skills || [];
+  const skill = skills.find(s => s.id === skillId);
+  if (!skill) return;
+  const form = document.getElementById('skill-form');
+  form.elements.id.value = skill.id;
+  form.elements.workflow_id.value = workflowId;
+  form.elements.name.value = skill.name;
+  form.elements.description.value = skill.description || '';
+  form.elements.content.value = skill.content || '';
+  form.elements.sort_order.value = skill.sort_order || 0;
+  document.getElementById('skill-modal-title').textContent = 'Edit Skill';
+  openModal('skill-modal');
+}
+
+function hideSkillModal() {
+  closeModal('skill-modal');
+  document.getElementById('skill-form').reset();
+}
+
+document.getElementById('skill-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const id = fd.get('id');
+  const workflowId = parseInt(fd.get('workflow_id'));
+  const body = {
+    name: fd.get('name'),
+    description: fd.get('description'),
+    content: fd.get('content'),
+    sort_order: parseInt(fd.get('sort_order') || '0'),
+  };
+  const url = id ? `/api/skills/${id}` : '/api/skills';
+  const method = id ? 'PUT' : 'POST';
+  if (!id) body.workflow_id = workflowId;
+  const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+  if (res.ok) { hideSkillModal(); loadWorkflowDetail(workflowId); }
+  else { const d = await res.json(); showToast(d.error || 'Failed', 'error'); }
+});
+
+async function deleteSkill(skillId, workflowId) {
+  if (!confirm('Delete this skill?')) return;
+  const res = await fetch(`/api/skills/${skillId}`, { method: 'DELETE' });
   if (res.ok) loadWorkflowDetail(workflowId);
   else { const d = await res.json(); showToast(d.error || 'Failed', 'error'); }
 }
