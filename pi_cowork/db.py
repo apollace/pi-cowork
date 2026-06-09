@@ -382,6 +382,33 @@ def _migrate(db):
             "seed_notification_dismissal_retention_days",
             "INSERT OR IGNORE INTO settings (key, value) VALUES ('notification_dismissal_retention_days', '7')",
         ),
+        # Ticket #133 — Skills support
+        (
+            "create_skills_table",
+            """
+            CREATE TABLE IF NOT EXISTS skills (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                description TEXT,
+                content TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(name, workflow_id)
+            )
+        """,
+        ),
+        (
+            "create_agent_skills_table",
+            """
+            CREATE TABLE IF NOT EXISTS agent_skills (
+                agent_id INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+                skill_id INTEGER NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+                PRIMARY KEY (agent_id, skill_id)
+            )
+        """,
+        ),
+        ("idx_skills_workflow_id", "CREATE INDEX IF NOT EXISTS idx_skills_workflow_id ON skills(workflow_id)"),
         # Ticket #84 — Store ticket status_id in agent_runs
         ("add_agent_runs_status_id", "ALTER TABLE agent_runs ADD COLUMN status_id INTEGER"),
     ]

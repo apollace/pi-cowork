@@ -212,6 +212,25 @@ CREATE TABLE IF NOT EXISTS recurring_instances (
     triggered_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Skills: workflow-scoped reusable skill definitions
+CREATE TABLE IF NOT EXISTS skills (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    description TEXT,
+    content TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(name, workflow_id)
+);
+
+-- Agent skills: many-to-many join
+CREATE TABLE IF NOT EXISTS agent_skills (
+    agent_id INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    skill_id INTEGER NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    PRIMARY KEY (agent_id, skill_id)
+);
+
 -- Ticket status overrides: per-ticket model/thinking overrides for specific statuses
 CREATE TABLE IF NOT EXISTS ticket_status_overrides (
     ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
@@ -271,6 +290,7 @@ CREATE INDEX IF NOT EXISTS idx_questions_ticket_id ON questions(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_ticket_labels_ticket_id ON ticket_labels(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_recurring_instances_ticket_id ON recurring_instances(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_labels_workflow_id ON labels(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_skills_workflow_id ON skills(workflow_id);
 CREATE INDEX IF NOT EXISTS idx_event_log_created_at ON event_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_system_logs_timestamp ON system_logs(timestamp);
 CREATE INDEX IF NOT EXISTS idx_system_logs_level ON system_logs(level);

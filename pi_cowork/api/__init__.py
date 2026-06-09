@@ -17,6 +17,7 @@ from pi_cowork.api.quality_gates import quality_gates_bp
 from pi_cowork.api.questions import questions_bp
 from pi_cowork.api.recurring import recurring_bp
 from pi_cowork.api.settings import settings_bp
+from pi_cowork.api.skills import skills_bp
 from pi_cowork.api.statuses import statuses_bp
 from pi_cowork.api.system_logs import system_logs_bp
 from pi_cowork.api.ticket_status_overrides import ticket_status_overrides_bp
@@ -32,6 +33,7 @@ ALL_BLUEPRINTS = [
     questions_bp,
     labels_bp,
     agents_api_bp,
+    skills_bp,
     statuses_bp,
     transitions_bp,
     quality_gates_bp,

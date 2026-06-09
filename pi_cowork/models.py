@@ -137,6 +137,90 @@ def delete_ticket_status_override(ticket_id, status_id):
 
 
 # ---------------------------------------------------------------------------
+# Skills
+# ---------------------------------------------------------------------------
+
+
+def get_skills(workflow_id):
+    rows = query_db("SELECT * FROM skills WHERE workflow_id = ? ORDER BY sort_order, name", (workflow_id,))
+    return [row_to_dict(r) for r in rows]
+
+
+def get_skill(skill_id):
+    row = query_db("SELECT * FROM skills WHERE id = ?", (skill_id,), one=True)
+    return row_to_dict(row) if row else None
+
+
+def create_skill(workflow_id, name, description, content, sort_order=0):
+    cur = run_db(
+        "INSERT INTO skills (workflow_id, name, description, content, sort_order) VALUES (?, ?, ?, ?, ?)",
+        (workflow_id, name.strip(), (description or "").strip() or None, content, sort_order),
+    )
+    return get_skill(cur.lastrowid)
+
+
+def update_skill(skill_id, name=None, description=None, content=None, sort_order=None):
+    skill = get_skill(skill_id)
+    if not skill:
+        return None
+    updates = []
+    args = []
+    if name is not None:
+        updates.append("name = ?")
+        args.append(name.strip())
+    if description is not None:
+        updates.append("description = ?")
+        args.append((description or "").strip() or None)
+    if content is not None:
+        updates.append("content = ?")
+        args.append(content)
+    if sort_order is not None:
+        updates.append("sort_order = ?")
+        args.append(sort_order)
+    if not updates:
+        return skill
+    args.append(skill_id)
+    run_db(f"UPDATE skills SET {', '.join(updates)} WHERE id = ?", tuple(args))  # noqa: S608
+    return get_skill(skill_id)
+
+
+def delete_skill(skill_id):
+    run_db("DELETE FROM skills WHERE id = ?", (skill_id,))
+
+
+def get_agent_skills(agent_id):
+    rows = query_db(
+        """SELECT s.* FROM skills s
+           JOIN agent_skills ask ON ask.skill_id = s.id
+           WHERE ask.agent_id = ?
+           ORDER BY s.sort_order, s.name""",
+        (agent_id,),
+    )
+    return [row_to_dict(r) for r in rows]
+
+
+def set_agent_skills(agent_id, skill_ids):
+    """Replace an agent's skills with the given list of skill IDs."""
+    if not isinstance(skill_ids, list):
+        return False
+    run_db("DELETE FROM agent_skills WHERE agent_id = ?", (agent_id,))
+    if skill_ids:
+        placeholders = ",".join("?" * len(skill_ids))
+        # Validate that skill_ids belong to the same workflow as the agent
+        agent = get_agent(agent_id)
+        if agent:
+            valid = query_db(
+                f"SELECT id FROM skills WHERE workflow_id = ? AND id IN ({placeholders})",  # noqa: S608
+                (agent["workflow_id"], *skill_ids),
+            )
+            valid_ids = {r["id"] for r in valid}
+            for sid in valid_ids:
+                with contextlib.suppress(Exception):
+                    run_db("INSERT INTO agent_skills (agent_id, skill_id) VALUES (?, ?)", (agent_id, sid))
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Questions
 # ---------------------------------------------------------------------------
 

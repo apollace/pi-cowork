@@ -7,8 +7,8 @@ from flask import Blueprint, jsonify, request
 
 from pi_cowork.api.pi_models import get_model_ids, get_thinking_levels
 from pi_cowork.api_docs import _REGISTRY_MAP
-from pi_cowork.db import query_db, run_db
-from pi_cowork.models import get_agent, get_agents, get_workflow
+from pi_cowork.db import query_db, row_to_dict, run_db
+from pi_cowork.models import get_agent, get_agent_skills, get_workflow, set_agent_skills
 
 agents_api_bp = Blueprint("agents_api", __name__)
 
@@ -18,7 +18,13 @@ def api_agents():
     workflow_id = request.args.get("workflow_id", type=int)
     if workflow_id is None:
         return jsonify({"error": "workflow_id is required"}), 400
-    return jsonify(get_agents(workflow_id))
+    rows = query_db("SELECT * FROM agents WHERE workflow_id = ? ORDER BY name", (workflow_id,))
+    result = []
+    for r in rows:
+        agent = row_to_dict(r)
+        agent["skills"] = get_agent_skills(agent["id"])
+        result.append(agent)
+    return jsonify(result)
 
 
 @agents_api_bp.route("/api/agents", methods=["POST"])
@@ -62,7 +68,11 @@ def api_create_agent():
             "api_endpoints) VALUES (?, ?, ?, ?, ?, ?)",
             (name, description, workflow_id, model, thinking, api_endpoints_json),
         )
-        return jsonify({"id": cur.lastrowid}), 201
+        agent_id = cur.lastrowid
+        skill_ids = data.get("skill_ids")
+        if skill_ids is not None and isinstance(skill_ids, list):
+            set_agent_skills(agent_id, skill_ids)
+        return jsonify({"id": agent_id}), 201
     except sqlite3.IntegrityError:
         return jsonify({"error": "Agent name already exists"}), 409
 
@@ -72,21 +82,20 @@ def api_get_agent(agent_id):
     agent = get_agent(agent_id)
     if not agent:
         return jsonify({"error": "Agent not found"}), 404
+    agent = dict(agent)
+    agent["skills"] = get_agent_skills(agent_id)
     return jsonify(agent)
 
 
-@agents_api_bp.route("/api/agents/<int:agent_id>", methods=["PUT"])
-def api_update_agent(agent_id):
-    agent = get_agent(agent_id)
-    if not agent:
-        return jsonify({"error": "Agent not found"}), 404
-    data = request.get_json() or {}
+def _build_agent_updates(data):
+    """Validate and build SQL updates for agent fields."""
+    updates = []
+    args = []
     name = data.get("name")
     description = data.get("description")
     model = data.get("model")
     thinking = data.get("thinking")
-    updates = []
-    args = []
+
     if name is not None:
         updates.append("name = ?")
         args.append(name.strip())
@@ -95,41 +104,56 @@ def api_update_agent(agent_id):
         args.append(description.strip())
     if model is not None:
         updates.append("model = ?")
-        # Empty string or null clears the override (sets DB value to NULL)
         args.append(model if model else None)
         if model:
             valid_models = get_model_ids()
             if valid_models and model not in valid_models:
-                return jsonify({"error": f"model must be one of: {', '.join(valid_models)}"}), 400
+                return None, None, (jsonify({"error": f"model must be one of: {', '.join(valid_models)}"}), 400)
     if thinking is not None:
         valid_thinking = get_thinking_levels()
         if thinking and thinking not in valid_thinking:
-            return jsonify({"error": f"thinking must be one of: {', '.join(valid_thinking)}"}), 400
+            return None, None, (jsonify({"error": f"thinking must be one of: {', '.join(valid_thinking)}"}), 400)
         updates.append("thinking = ?")
-        # Empty string or null clears the override (sets DB value to NULL)
         args.append(thinking if thinking else None)
-    # api_endpoints: list of keys → JSON string; null/None → NULL (use defaults)
     if "api_endpoints" in data:
         api_endpoints = data.get("api_endpoints")
         if api_endpoints is not None:
             if not isinstance(api_endpoints, list):
-                return jsonify({"error": "api_endpoints must be a list of endpoint keys or null"}), 400
+                return None, None, (jsonify({"error": "api_endpoints must be a list of endpoint keys or null"}), 400)
             invalid = [k for k in api_endpoints if k not in _REGISTRY_MAP]
             if invalid:
-                return jsonify({"error": f"Unknown endpoint keys: {', '.join(invalid)}"}), 400
+                return None, None, (jsonify({"error": f"Unknown endpoint keys: {', '.join(invalid)}"}), 400)
             updates.append("api_endpoints = ?")
             args.append(json.dumps(api_endpoints))
         else:
-            # Explicitly set to null → use defaults
             updates.append("api_endpoints = ?")
             args.append(None)
+    return updates, args, None
+
+
+@agents_api_bp.route("/api/agents/<int:agent_id>", methods=["PUT"])
+def api_update_agent(agent_id):
+    agent = get_agent(agent_id)
+    if not agent:
+        return jsonify({"error": "Agent not found"}), 404
+    data = request.get_json() or {}
+    updates, args, error = _build_agent_updates(data)
+    if error:
+        return error
     if not updates:
+        skill_ids = data.get("skill_ids")
+        if skill_ids is not None and isinstance(skill_ids, list):
+            set_agent_skills(agent_id, skill_ids)
+            return jsonify({"success": True})
         return jsonify({"error": "No fields to update"}), 400
     args.append(agent_id)
     try:
         run_db(f"UPDATE agents SET {', '.join(updates)} WHERE id = ?", tuple(args))  # noqa: S608
     except sqlite3.IntegrityError:
         return jsonify({"error": "Agent name already exists"}), 409
+    skill_ids = data.get("skill_ids")
+    if skill_ids is not None and isinstance(skill_ids, list):
+        set_agent_skills(agent_id, skill_ids)
     return jsonify({"success": True})
 
 

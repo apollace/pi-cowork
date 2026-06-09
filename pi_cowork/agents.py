@@ -20,6 +20,7 @@ from pi_cowork.models import (
     add_comment,
     count_unanswered_questions,
     get_agent,
+    get_agent_skills,
     get_board,
     get_comments,
     get_quality_gates,
@@ -577,6 +578,20 @@ After completing your task, write a comment on the ticket summarizing what you d
     else:
         effective_thinking = agent.get("thinking")
 
+    # ── Skills integration ──
+    skills = get_agent_skills(agent["id"])
+    skill_args = []
+    for sk in skills:
+        skill_dir = os.path.join(session_dir, "skills", sk["name"])
+        Path(skill_dir).mkdir(parents=True, exist_ok=True)
+        skill_md_path = os.path.join(skill_dir, "SKILL.md")
+        skill_body = (
+            f"---\nname: {sk['name']}\ndescription: {sk.get('description') or ''}\n---\n\n{sk['content'] or ''}"
+        )
+        with open(skill_md_path, "w", encoding="utf-8") as f:
+            f.write(skill_body)
+        skill_args += ["--skill", skill_dir]
+
     cmd = [
         "pi",
         "--system-prompt",
@@ -589,6 +604,8 @@ After completing your task, write a comment on the ticket summarizing what you d
         cmd += ["--thinking", effective_thinking]
     if effective_model:
         cmd += ["--model", effective_model]
+    if skill_args:
+        cmd += skill_args
     cmd += [context_msg]
 
     db = get_db()
