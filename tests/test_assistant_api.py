@@ -1134,3 +1134,48 @@ class TestSavedPromptsCSS:
     def test_css_has_saved_prompts_row_actions(self):
         css = read(STYLE_CSS_PATH)
         assert ".saved-prompts-row-actions" in css, "Expected .saved-prompts-row-actions styles in CSS"
+
+
+# ---------------------------------------------------------------------------
+# Quick Config (Model & Thinking) UI
+# ---------------------------------------------------------------------------
+
+
+class TestAssistantQuickConfigUI:
+    def test_base_html_has_quick_config(self):
+        html = read(BASE_HTML_PATH)
+        assert "assistant-quick-config" in html, "Expected assistant-quick-config in base.html"
+        assert "assistant-model" in html, "Expected assistant-model select in base.html"
+        assert "assistant-thinking" in html, "Expected assistant-thinking select in base.html"
+
+    def test_assistant_js_has_quick_config_logic(self):
+        js = read(ASSISTANT_JS_PATH)
+        assert "loadPiModels" in js, "Expected loadPiModels in assistant.js"
+        assert "populateModelSelect" in js, "Expected populateModelSelect in assistant.js"
+        assert "populateThinkingSelect" in js, "Expected populateThinkingSelect in assistant.js"
+        assert "saveQuickConfig" in js, "Expected saveQuickConfig in assistant.js"
+        assert "assistant-model" in js, "Expected assistant-model reference in assistant.js"
+        assert "assistant-thinking" in js, "Expected assistant-thinking reference in assistant.js"
+
+    def test_css_has_quick_config_styles(self):
+        css = read(STYLE_CSS_PATH)
+        assert ".assistant-quick-config" in css, "Expected .assistant-quick-config styles in CSS"
+        assert ".assistant-quick-config-field" in css, "Expected .assistant-quick-config-field styles in CSS"
+
+
+def test_board_page_has_assistant_quick_config(client):
+    res = client.get("/board")
+    assert res.status_code == 200
+    html = res.data.decode("utf-8")
+    assert "assistant-quick-config" in html
+    assert "assistant-model" in html
+    assert "assistant-thinking" in html
+
+
+def test_quick_config_api_updates_model_and_thinking(client):
+    res = client.put("/api/assistant/config", json={"model": "custom-model", "thinking": "high"})
+    assert res.status_code == 200
+    res = client.get("/api/assistant/config")
+    data = json.loads(res.data)
+    assert data["model"] == "custom-model"
+    assert data["thinking"] == "high"

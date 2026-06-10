@@ -11,6 +11,7 @@
 
   let config = {};
   let savedScrollY = 0;
+  let piModelsData = { models: [], thinking_levels: [] };
 
   const savedPromptsEl = document.getElementById("assistant-saved-prompts");
 
@@ -48,6 +49,82 @@
     });
   }
 
+  async function loadPiModels() {
+    try {
+      const res = await fetch("/api/pi-models");
+      if (res.ok) {
+        piModelsData = await res.json();
+      }
+    } catch (e) {
+      console.warn("Failed to load pi models", e);
+    }
+  }
+
+  function populateModelSelect(selectEl, currentValue) {
+    if (!selectEl) return;
+    selectEl.innerHTML = '<option value="">default</option>';
+    const models = piModelsData.models || [];
+    for (const m of models) {
+      const opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent = m.id;
+      selectEl.appendChild(opt);
+    }
+    if (currentValue) {
+      if (!Array.from(selectEl.options).some(o => o.value === currentValue)) {
+        const opt = document.createElement("option");
+        opt.value = currentValue;
+        opt.textContent = currentValue + " (unavailable)";
+        selectEl.appendChild(opt);
+      }
+      selectEl.value = currentValue;
+    }
+  }
+
+  function getModelThinkingLevels(modelId) {
+    if (!modelId) return null;
+    const models = piModelsData.models || [];
+    const model = models.find(m => m.id === modelId);
+    if (!model) return null;
+    return model.thinking_levels || null;
+  }
+
+  function populateThinkingSelect(selectEl, currentValue, modelThinkingLevels) {
+    if (!selectEl) return;
+    selectEl.innerHTML = "<option value=\"\">default</option>";
+    const allLevels = piModelsData.thinking_levels || ["off","minimal","low","medium","high","xhigh"];
+    const levels = Array.isArray(modelThinkingLevels) ? modelThinkingLevels : allLevels;
+    for (const level of levels) {
+      const opt = document.createElement("option");
+      opt.value = level;
+      opt.textContent = level;
+      selectEl.appendChild(opt);
+    }
+    if (currentValue && !levels.includes(currentValue)) {
+      selectEl.value = "";
+    } else {
+      selectEl.value = currentValue || "";
+    }
+  }
+
+  async function saveQuickConfig() {
+    const model = document.getElementById("assistant-model").value.trim() || null;
+    const thinking = document.getElementById("assistant-thinking").value || "";
+    try {
+      const res = await fetch("/api/assistant/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model, thinking }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        showToast("Failed to save assistant config: " + (data.error || "unknown error"), "error");
+      }
+    } catch (e) {
+      showToast("Failed to save assistant config: " + e.message, "error");
+    }
+  }
+
   async function loadConfig() {
     try {
       const res = await fetch("/api/assistant/config");
@@ -56,6 +133,9 @@
       console.error("Failed to load assistant config", e);
       config = { enabled: 1, auto_context: 1 };
     }
+    await loadPiModels();
+    populateModelSelect(document.getElementById("assistant-model"), config.model || "");
+    populateThinkingSelect(document.getElementById("assistant-thinking"), config.thinking || "", getModelThinkingLevels(config.model));
     updateUIFromConfig();
   }
 
@@ -71,6 +151,7 @@
   function openPanel() {
     panel.classList.add("open");
     bubble.classList.add("panel-open");
+    loadConfig();
     loadHistory();
     loadSavedPrompts();
     inputEl.focus();
@@ -392,6 +473,19 @@
       }
     });
     ro.observe(panel);
+  }
+
+  const modelSelect = document.getElementById("assistant-model");
+  const thinkingSelect = document.getElementById("assistant-thinking");
+  if (modelSelect) {
+    modelSelect.addEventListener("change", function () {
+      const thinkingLevels = getModelThinkingLevels(this.value);
+      populateThinkingSelect(thinkingSelect, thinkingSelect.value, thinkingLevels);
+      saveQuickConfig();
+    });
+  }
+  if (thinkingSelect) {
+    thinkingSelect.addEventListener("change", saveQuickConfig);
   }
 
   loadConfig();
