@@ -10,6 +10,7 @@ from pi_cowork.db import query_db
 from pi_cowork.skill_packages import (
     delete_skill_package,
     get_built_in_skills_folder,
+    get_global_skill_dir,
     get_skill_dir,
     get_skills_folder,
     import_skill_from_github,
@@ -17,6 +18,7 @@ from pi_cowork.skill_packages import (
     is_built_in_skill,
     list_skills,
     validate_skill_dir_name,
+    write_skill_package,
 )
 
 skills_bp = Blueprint("skills", __name__)
@@ -42,6 +44,33 @@ def api_skills():
     for sk in skills:
         sk["used_by"] = used_by.get(sk["name"], [])
     return jsonify(skills)
+
+
+@skills_bp.route("/api/skills", methods=["POST"])
+def api_create_skill():
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    description = (data.get("description") or "").strip()
+    content = (data.get("content") or "").strip()
+    workflow_id = data.get("workflow_id")
+
+    error = validate_skill_dir_name(name)
+    if error:
+        return jsonify({"error": error}), 400
+
+    skill_dir = get_skill_dir(workflow_id, name) if workflow_id is not None else get_global_skill_dir(name)
+
+    if os.path.exists(skill_dir):
+        return jsonify({"error": f"Skill '{name}' already exists"}), 409
+
+    write_skill_package(skill_dir, name, description, content)
+
+    subdirs = []
+    for sub in sorted(os.listdir(skill_dir)):
+        if os.path.isdir(os.path.join(skill_dir, sub)) and not sub.startswith("."):
+            subdirs.append(sub)
+
+    return jsonify({"name": name, "description": description, "content": content, "subdirs": subdirs}), 201
 
 
 @skills_bp.route("/api/skills/import-github", methods=["POST"])

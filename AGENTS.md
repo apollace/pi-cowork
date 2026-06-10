@@ -347,6 +347,7 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 | Route | Method | Description |
 |-------|--------|-------------|
 | `/api/skills?workflow_id=<id>` | GET | List skills for a workflow (filesystem scan; returns `name`, `scope`, `description`, `subdirs`, `used_by`). Omit `workflow_id` to list **only global skills**. |
+| `/api/skills` | POST | Create a skill (fields: `name`, `description`, `content`, optional `workflow_id`). Writes a `SKILL.md` package to the filesystem. Omit `workflow_id` for **global scope**. |
 | `/api/skills/<name>/export?workflow_id=<id>` | GET | Export skill directory as ZIP (falls back to global scope, then built-in) |
 | `/api/skills/<name>?workflow_id=<id>` | DELETE | Delete skill folder from filesystem. Omit `workflow_id` to delete from **global scope**. |
 | `/api/skills/import` | POST | Import skill from ZIP (multipart/form-data). Provide `workflow_id` for workflow scope; omit for **global scope**. |
@@ -668,7 +669,7 @@ The UI updates in real-time via Server-Sent Events (SSE), replacing all polling.
 
 - **SSE Endpoint**: `GET /api/events/stream?board_id=<id>` (`pi_cowork/api/events.py`)
   - Opens a long-lived SSE connection per browser tab
-  - Subscribes dynamically to all 12 EventBus event types
+  - Subscribes dynamically to all 14 EventBus event types
   - Events are pushed into a thread-safe `queue.Queue` by the subscriber (O(1), no DB calls in hot path)
   - Generator loop pulls from the queue and yields named SSE frames
   - Optional `board_id` filter: only events whose ticket belongs to that board
@@ -680,7 +681,7 @@ The UI updates in real-time via Server-Sent Events (SSE), replacing all polling.
 - **Frontend (base.html)**: A single shared `EventSource` connection
   - Connected on page load, board_id from `localStorage.activeBoard`
   - Reconnects when board changes (storage event) or SSE stream drops
-  - Dispatches all 12 event types as `CustomEvent`s on `window` (`sse:ticket.created`, `sse:comment.added`, etc.)
+  - Dispatches all 14 event types as `CustomEvent`s on `window` (`sse:ticket.created`, `sse:comment.added`, etc.)
   - `sse:open` event dispatched on connect/reconnect → triggers full refresh to re-sync state
   - `window._reconnectSSE()` available for programmatic reconnection
 
@@ -880,3 +881,5 @@ Key principles: clarity over cleverness, consistency (reuse design tokens), prog
 - **schema.sql must stay in sync with migrations** — `tests/test_schema_sync.py` verifies that a DB built from `schema.sql` alone matches a DB built from `schema.sql` + `_migrate()`. When adding a migration that creates a table, adds a column, or creates an index, you **must** also update `schema.sql` accordingly. The test compares tables, columns (via `PRAGMA table_info`), and indexes, ignoring the `_migrations` table. Run `pytest tests/test_schema_sync.py` after any schema change.
 - **Periodic cleanup in the drain loop** — The background drain loop (`_drain_loop` in `agents.py`) runs two daily (86400s) cleanup tasks: `cleanup_old_logs()` (system_logs table, `log_retention_days` setting) and `cleanup_old_event_logs()` (event_log table, `event_log_retention_days` setting). Both follow the same config precedence pattern: explicit arg → DB setting → env var → default 30. Both work inside and outside Flask app context. When adding a new table that needs periodic rotation, add a `_last_*_cleanup` tracker and a daily call in `_drain_loop`, create the cleanup function in a dedicated module (mirroring `system_logs.py` / `event_log.py`), add a seed migration for the retention-days setting, and add a `created_at` index for efficient deletion.
 - **Jinja script block ordering** — `base.html` defines shared globals like `window.renderMarkdown` and `window.showToast` in a `<script>` block that appears after `{% block content %}` in the rendered DOM. Any child template script that depends on these globals must be placed in `{% block scripts %}` (rendered after the base `<script>` block), not inline inside `{% block content %}`. Scripts inside `{% block content %}` execute before the base globals exist, causing race conditions where markdown rendering silently falls back to plain text.
+- **EventBus handlers need an active Flask app context for DB access** — `pi_cowork/db.get_db()` requires `current_app` / `flask.g`. When calling `bus.publish()` from outside a request (e.g., in tests or background threads), wrap it in `with app.app_context():` so that subscribers that query the database (audit log, system logs, self-improvement) can open a connection. The `_audit_subscriber` and `_on_agent_failed` / `_on_comment_added` handlers all call `get_db()` and will raise `RuntimeError` without an app context.
+- **Self-improvement loop (Hermes) creates observation tickets on the System board** — The `pi_cowork/self_improvement.py` module subscribes to `AGENT_FAILED`, `GATE_FAILED`, `GATE_REVIEW_REJECTED`, `TICKET_RERUN_DETECTED`, and `COMMENT_ADDED`. When `self_improvement_enabled=1` (default), it auto-creates tickets on the System board in the **Observe** status. The System board and its `System Improvement` workflow (with the Synthesizer agent) are seeded by `schema.sql` and migrations. Tests that publish these events should expect new tickets to appear on the System board. The high-comment-threshold observation is guarded so only one open churn observation exists per source ticket. The nightly batch scheduler is itself a `recurring_tasks` entry on the System board (cron `0 2 * * *`, seeded automatically) that creates a Synthesizer ticket in **Analyze** status; the Synthesizer then references the Observe tickets via the API and moves the batch ticket through **Synthesize → Apply → Validate → Closed**. CLI gate failures publish `GATE_FAILED` in addition to the transition rejection, so they also trigger observations.

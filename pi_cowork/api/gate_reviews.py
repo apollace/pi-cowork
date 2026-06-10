@@ -15,7 +15,7 @@ from flask import Blueprint, current_app, jsonify, request
 
 from pi_cowork.agents import try_spawn_or_queue
 from pi_cowork.db import query_db, row_to_dict, run_db
-from pi_cowork.events import GATE_FAILED, GATE_PASSED, TICKET_STATUS_CHANGED, bus
+from pi_cowork.events import GATE_FAILED, GATE_PASSED, GATE_REVIEW_REJECTED, TICKET_STATUS_CHANGED, bus
 from pi_cowork.models import add_comment, get_agent, get_board, get_status
 from pi_cowork.system_logs import add_log
 
@@ -203,6 +203,7 @@ def api_update_gate_review(review_id):  # noqa: C901
             "DELETE FROM gate_reviews WHERE ticket_id = ? AND from_status_id = ? AND to_status_id = ?",
             (ticket_id, review["from_status_id"], review["to_status_id"]),
         )
+        bus.publish(GATE_REVIEW_REJECTED, ticket_id=ticket_id, gate_name=review["gate_name"])
         bus.publish(GATE_FAILED, ticket_id=ticket_id, gate_name=review["gate_name"])
         # Re-trigger agent for the current (old) status
         current_status = get_status(review["from_status_id"])

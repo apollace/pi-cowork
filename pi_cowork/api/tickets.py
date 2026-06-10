@@ -9,7 +9,15 @@ from flask import Blueprint, jsonify, request
 
 from pi_cowork.agents import spawn_agent_for_ticket, try_spawn_or_queue
 from pi_cowork.db import query_db, row_to_dict, run_db
-from pi_cowork.events import GATE_PENDING, TICKET_CREATED, TICKET_STATUS_CHANGED, TICKET_UPDATED, bus
+from pi_cowork.events import (
+    GATE_FAILED,
+    GATE_PENDING,
+    TICKET_CREATED,
+    TICKET_RERUN_DETECTED,
+    TICKET_STATUS_CHANGED,
+    TICKET_UPDATED,
+    bus,
+)
 from pi_cowork.models import (
     add_comment,
     count_unanswered_questions,
@@ -380,6 +388,7 @@ def api_update_ticket(ticket_id):  # noqa: C901
                             add_comment(ticket_id, f"✅ Gate '{gate['name']}' (CLI) passed.\n{output}")
                         else:
                             add_comment(ticket_id, f"❌ Gate '{gate['name']}' (CLI) failed.\n{output}")
+                            bus.publish(GATE_FAILED, ticket_id=ticket_id, gate_name=gate["name"])
                             any_failed = True
                 elif gate["gate_type"] == "manual":
                     all_resolved = False
@@ -479,6 +488,16 @@ def api_update_ticket(ticket_id):  # noqa: C901
         bus.publish(
             TICKET_STATUS_CHANGED, ticket_id=ticket_id, old_status_id=old_status_id, new_status_id=new_status_id
         )
+        # Detect backward moves (reruns) within the same workflow
+        old_status = get_status(old_status_id)
+        new_status = get_status(new_status_id)
+        if old_status and new_status and new_status.get("sort_order", 0) < old_status.get("sort_order", 0):
+            bus.publish(
+                TICKET_RERUN_DETECTED,
+                ticket_id=ticket_id,
+                old_status_id=old_status_id,
+                new_status_id=new_status_id,
+            )
         status = get_status(new_status_id)
         if status:
             if status.get("is_terminal"):
