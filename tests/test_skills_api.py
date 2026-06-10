@@ -106,6 +106,53 @@ def test_export_skill(client, new_workflow, temp_skills_folder):
         assert "extra.txt" in names
 
 
+def test_list_skills_includes_built_in(client, new_workflow, temp_skills_folder):
+    import pi_cowork.skill_packages as _sp
+    built_in_dir = os.path.join(_sp.get_built_in_skills_folder(), "bi-skill")
+    os.makedirs(built_in_dir, exist_ok=True)
+    with open(os.path.join(built_in_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: bi-skill\ndescription: Built-in\n---\n\nContent.")
+    res = client.get(f"/api/skills?workflow_id={new_workflow['id']}")
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    names = [sk["name"] for sk in data]
+    assert "bi-skill" in names
+    bi_skill = next(sk for sk in data if sk["name"] == "bi-skill")
+    assert bi_skill["scope"] == "system"
+    assert bi_skill["description"] == "Built-in"
+
+
+def test_list_skills_workflow_overrides_built_in(client, new_workflow, temp_skills_folder):
+    import pi_cowork.skill_packages as _sp
+    # Create a built-in skill
+    built_in_dir = os.path.join(_sp.get_built_in_skills_folder(), "override-skill")
+    os.makedirs(built_in_dir, exist_ok=True)
+    with open(os.path.join(built_in_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: override-skill\ndescription: Built-in\n---\n\nContent.")
+    # Create a workflow-scoped skill with the same name
+    wf_dir = os.path.join(temp_skills_folder, str(new_workflow["id"]), "override-skill")
+    os.makedirs(wf_dir, exist_ok=True)
+    with open(os.path.join(wf_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: override-skill\ndescription: Workflow\n---\n\nContent.")
+    res = client.get(f"/api/skills?workflow_id={new_workflow['id']}")
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    skill = next(sk for sk in data if sk["name"] == "override-skill")
+    assert skill["scope"] == "workflow"
+    assert skill["description"] == "Workflow"
+
+
+def test_export_skill_built_in_fallback(client, new_workflow, temp_skills_folder):
+    import pi_cowork.skill_packages as _sp
+    built_in_dir = os.path.join(_sp.get_built_in_skills_folder(), "bi-exp")
+    os.makedirs(built_in_dir, exist_ok=True)
+    with open(os.path.join(built_in_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: bi-exp\n---\n\nContent.")
+    res = client.get(f"/api/skills/bi-exp/export?workflow_id={new_workflow['id']}")
+    assert res.status_code == 200
+    assert res.content_type == "application/zip"
+
+
 def test_export_skill_global_fallback(client, new_workflow, temp_skills_folder):
     skill_dir = os.path.join(temp_skills_folder, "global", "global-exp")
     os.makedirs(skill_dir, exist_ok=True)
@@ -113,6 +160,73 @@ def test_export_skill_global_fallback(client, new_workflow, temp_skills_folder):
         f.write("---\nname: global-exp\n---\n\nContent.")
     res = client.get(f"/api/skills/global-exp/export?workflow_id={new_workflow['id']}")
     assert res.status_code == 200
+
+
+def test_delete_skill_built_in_rejected(client, new_workflow, temp_skills_folder):
+    import pi_cowork.skill_packages as _sp
+    built_in_dir = os.path.join(_sp.get_built_in_skills_folder(), "bi-del")
+    os.makedirs(built_in_dir, exist_ok=True)
+    with open(os.path.join(built_in_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: bi-del\n---\n\nContent.")
+    res = client.delete(f"/api/skills/bi-del?workflow_id={new_workflow['id']}")
+    assert res.status_code == 403
+    assert b"System skills cannot be deleted" in res.data
+    assert os.path.isdir(built_in_dir)
+
+
+def test_delete_skill_workflow_not_built_in(client, new_workflow, temp_skills_folder):
+    skill_dir = os.path.join(temp_skills_folder, str(new_workflow["id"]), "del-wf")
+    os.makedirs(skill_dir, exist_ok=True)
+    with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: del-wf\n---\n\nContent.")
+    res = client.delete(f"/api/skills/del-wf?workflow_id={new_workflow['id']}")
+    assert res.status_code == 200
+    assert not os.path.exists(skill_dir)
+
+
+def test_resolve_skill_dir_built_in_fallback():
+    import tempfile
+    import pi_cowork.skill_packages as _sp
+    from pi_cowork.skill_packages import resolve_skill_dir
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        original_built_in = _sp.get_built_in_skills_folder
+        _sp.get_built_in_skills_folder = lambda: tmpdir
+        try:
+            os.makedirs(os.path.join(tmpdir, "built-in-skill"))
+            with open(os.path.join(tmpdir, "built-in-skill", "SKILL.md"), "w") as f:
+                f.write("---\nname: built-in-skill\n---\n\nContent.")
+            result = resolve_skill_dir(999, "built-in-skill")
+            assert result is not None
+            assert result.endswith("built-in-skill")
+        finally:
+            _sp.get_built_in_skills_folder = original_built_in
+
+
+def test_resolve_skill_dir_workflow_overrides_built_in():
+    import tempfile
+    import pi_cowork.skill_packages as _sp
+    from pi_cowork.skill_packages import resolve_skill_dir
+
+    with tempfile.TemporaryDirectory() as skills_tmp, tempfile.TemporaryDirectory() as built_in_tmp:
+        original_skills = _sp.get_skills_folder
+        original_built_in = _sp.get_built_in_skills_folder
+        _sp.get_skills_folder = lambda: skills_tmp
+        _sp.get_built_in_skills_folder = lambda: built_in_tmp
+        try:
+            wf_dir = os.path.join(skills_tmp, "1", "override-skill")
+            bi_dir = os.path.join(built_in_tmp, "override-skill")
+            os.makedirs(wf_dir)
+            os.makedirs(bi_dir)
+            with open(os.path.join(wf_dir, "SKILL.md"), "w") as f:
+                f.write("---\nname: override-skill\n---\n\nContent.")
+            with open(os.path.join(bi_dir, "SKILL.md"), "w") as f:
+                f.write("---\nname: override-skill\n---\n\nContent.")
+            result = resolve_skill_dir(1, "override-skill")
+            assert result == wf_dir
+        finally:
+            _sp.get_skills_folder = original_skills
+            _sp.get_built_in_skills_folder = original_built_in
 
 
 def test_import_skill_zip(client, new_workflow, temp_skills_folder):

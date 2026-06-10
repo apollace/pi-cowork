@@ -130,15 +130,15 @@ Workflow (agents + statuses + transitions + quality_gates)
 
 ## Skills Architecture (pure filesystem)
 
-Skills are **pure filesystem packages** — there is no DB table for skills. The `skills` and `agent_skills` tables were removed in Ticket #146.
+Skills are **pure filesystem packages** — there is no DB table for skills. The `skills` and `agent_skills` tables were removed in Ticket #146. Built-in/system skills were added in Ticket #147.
 
-- **Storage**: `{skills_folder_path}/{workflow_id}/{skill_name}/` for workflow-scoped skills, and `{skills_folder_path}/global/{skill_name}/` for global skills.
+- **Storage**: `{skills_folder_path}/{workflow_id}/{skill_name}/` for workflow-scoped skills, `{skills_folder_path}/global/{skill_name}/` for global skills, and `{repo_root}/skills/{skill_name}/` for built-in/system skills that ship with the app.
 - **Package contents**: Each directory contains a `SKILL.md` with YAML frontmatter (`name`, `description`) plus markdown body. Optional subdirectories (`examples/`, `tests/`, `schemas/`, `templates/`) are copied wholesale into agent sessions.
-- **Discovery**: `GET /api/skills?workflow_id=` scans both the workflow directory and the `global/` directory, returning `name`, `scope` (`workflow` or `global`), `description`, `subdirs`, and `used_by` (agent names that reference the skill).
+- **Discovery**: `GET /api/skills?workflow_id=` scans the workflow directory, the `global/` directory, and the built-in directory, returning `name`, `scope` (`workflow`, `global`, or `system`), `description`, `subdirs`, and `used_by` (agent names that reference the skill). Names are deduplicated with precedence: workflow > global > built-in.
 - **Agent association**: Agents store `skill_names` as a JSON text array directly in `agents.skill_names` (default `'[]'`). No junction table.
-- **Agent spawn resolution**: When spawning an agent, each `skill_name` is resolved to `{workflow_id}/{name}` first, then `global/{name}` fallback. If a referenced directory is missing, a warning comment is posted on the ticket and the skill is skipped.
-- **Import / Export**: `POST /api/skills/import` extracts a ZIP to the filesystem. `GET /api/skills/{name}/export` streams a skill directory as a ZIP. Workflow export no longer includes a `skills` section; agents export their `skill_names` array directly.
-- **Deletion**: `DELETE /api/skills/{name}?workflow_id=` removes the filesystem directory only. Workflow deletion still cleans up `{skills_folder}/{workflow_id}/` (existing code).
+- **Agent spawn resolution**: When spawning an agent, each `skill_name` is resolved to `{workflow_id}/{name}` first, then `global/{name}` fallback, then the built-in directory. If a referenced directory is missing, a warning comment is posted on the ticket and the skill is skipped.
+- **Import / Export**: `POST /api/skills/import` extracts a ZIP to the filesystem. `GET /api/skills/{name}/export` streams a skill directory as a ZIP, falling back to built-in. Workflow export no longer includes a `skills` section; agents export their `skill_names` array directly.
+- **Deletion**: `DELETE /api/skills/{name}?workflow_id=` removes the filesystem directory only. Built-in skills cannot be deleted (returns 403). Workflow deletion still cleans up `{skills_folder}/{workflow_id}/` (existing code).
 
 ## Pre-built Default Workflow (8 Agents)
 
