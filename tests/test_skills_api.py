@@ -108,6 +108,7 @@ def test_export_skill(client, new_workflow, temp_skills_folder):
 
 def test_list_skills_includes_built_in(client, new_workflow, temp_skills_folder):
     import pi_cowork.skill_packages as _sp
+
     built_in_dir = os.path.join(_sp.get_built_in_skills_folder(), "bi-skill")
     os.makedirs(built_in_dir, exist_ok=True)
     with open(os.path.join(built_in_dir, "SKILL.md"), "w") as f:
@@ -124,6 +125,7 @@ def test_list_skills_includes_built_in(client, new_workflow, temp_skills_folder)
 
 def test_list_skills_workflow_overrides_built_in(client, new_workflow, temp_skills_folder):
     import pi_cowork.skill_packages as _sp
+
     # Create a built-in skill
     built_in_dir = os.path.join(_sp.get_built_in_skills_folder(), "override-skill")
     os.makedirs(built_in_dir, exist_ok=True)
@@ -144,6 +146,7 @@ def test_list_skills_workflow_overrides_built_in(client, new_workflow, temp_skil
 
 def test_export_skill_built_in_fallback(client, new_workflow, temp_skills_folder):
     import pi_cowork.skill_packages as _sp
+
     built_in_dir = os.path.join(_sp.get_built_in_skills_folder(), "bi-exp")
     os.makedirs(built_in_dir, exist_ok=True)
     with open(os.path.join(built_in_dir, "SKILL.md"), "w") as f:
@@ -164,6 +167,7 @@ def test_export_skill_global_fallback(client, new_workflow, temp_skills_folder):
 
 def test_delete_skill_built_in_rejected(client, new_workflow, temp_skills_folder):
     import pi_cowork.skill_packages as _sp
+
     built_in_dir = os.path.join(_sp.get_built_in_skills_folder(), "bi-del")
     os.makedirs(built_in_dir, exist_ok=True)
     with open(os.path.join(built_in_dir, "SKILL.md"), "w") as f:
@@ -186,6 +190,7 @@ def test_delete_skill_workflow_not_built_in(client, new_workflow, temp_skills_fo
 
 def test_resolve_skill_dir_built_in_fallback():
     import tempfile
+
     import pi_cowork.skill_packages as _sp
     from pi_cowork.skill_packages import resolve_skill_dir
 
@@ -205,6 +210,7 @@ def test_resolve_skill_dir_built_in_fallback():
 
 def test_resolve_skill_dir_workflow_overrides_built_in():
     import tempfile
+
     import pi_cowork.skill_packages as _sp
     from pi_cowork.skill_packages import resolve_skill_dir
 
