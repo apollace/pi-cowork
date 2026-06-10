@@ -1,3 +1,8 @@
+---
+name: ux-design
+description: Comprehensive UI guidelines covering design tokens, component rules, and interaction patterns for the pi-CoWork application.
+---
+
 # UX Design Skill
 
 Comprehensive UI guidelines covering the full application — cards, forms, detail pages, sidebar, modals, notifications, etc. Extends the UI Conventions (#79) and UI Design Guidelines (#80) sections in `AGENTS.md` with formal design tokens, component rules, and interaction patterns.

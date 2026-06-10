@@ -9,9 +9,11 @@ from flask import Blueprint, jsonify, request, send_file
 from pi_cowork.db import query_db
 from pi_cowork.skill_packages import (
     delete_skill_package,
+    get_built_in_skills_folder,
     get_skill_dir,
     get_skills_folder,
     import_skill_from_zip,
+    is_built_in_skill,
     list_skills,
     validate_skill_dir_name,
 )
@@ -67,6 +69,8 @@ def api_export_skill(name):
     if not skill_dir or not os.path.isdir(skill_dir):
         skill_dir = os.path.join(get_skills_folder(), "global", name)
     if not os.path.isdir(skill_dir):
+        skill_dir = os.path.join(get_built_in_skills_folder(), name)
+    if not os.path.isdir(skill_dir):
         return jsonify({"error": "Skill not found"}), 404
 
     buf = io.BytesIO()
@@ -93,6 +97,9 @@ def api_delete_skill(name):
     error = validate_skill_dir_name(name)
     if error:
         return jsonify({"error": error}), 400
+    # Reject deletion of built-in/system skills
+    if is_built_in_skill(name):
+        return jsonify({"error": "System skills cannot be deleted"}), 403
     skill_dir = get_skill_dir(workflow_id, name)
     if not os.path.isdir(skill_dir):
         return jsonify({"error": "Skill not found"}), 404

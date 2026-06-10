@@ -139,6 +139,14 @@ def rename_skill_package(skill_dir, new_name):
     return new_dir
 
 
+def get_built_in_skills_folder():
+    """Return the path to built-in/system skills that ship with the app.
+
+    Resolved relative to this module so it works regardless of cwd.
+    """
+    return os.path.join(os.path.dirname(os.path.dirname(__file__)), "skills")
+
+
 def get_global_skill_dir(name):
     """Return the filesystem path for a global skill package."""
     return os.path.join(get_skills_folder(), "global", name)
@@ -148,7 +156,7 @@ def list_skills(workflow_id):
     """Scan filesystem for skill packages.
 
     Returns list of dicts: name, scope, description, subdirs.
-    Scope is 'workflow' or 'global'.
+    Scope is 'workflow', 'global', or 'system'.
     """
     result = []
     seen = set()
@@ -156,6 +164,7 @@ def list_skills(workflow_id):
     for scope, path in (
         ("workflow", os.path.join(folder, str(workflow_id))),
         ("global", os.path.join(folder, "global")),
+        ("system", get_built_in_skills_folder()),
     ):
         if not os.path.isdir(path):
             continue
@@ -189,7 +198,8 @@ def list_skills(workflow_id):
 def resolve_skill_dir(workflow_id, name):
     """Resolve a skill name to its filesystem directory.
 
-    Workflow-scoped skills take precedence over global ones.
+    Workflow-scoped skills take precedence over global ones,
+    which take precedence over built-in/system ones.
     Returns the directory path or None if not found.
     """
     wf_dir = get_skill_dir(workflow_id, name)
@@ -198,7 +208,15 @@ def resolve_skill_dir(workflow_id, name):
     global_dir = get_global_skill_dir(name)
     if os.path.isdir(global_dir):
         return global_dir
+    built_in_dir = os.path.join(get_built_in_skills_folder(), name)
+    if os.path.isdir(built_in_dir):
+        return built_in_dir
     return None
+
+
+def is_built_in_skill(name):
+    """Check whether a skill name exists in the built-in/system folder."""
+    return os.path.isdir(os.path.join(get_built_in_skills_folder(), name))
 
 
 def validate_skill_dir_name(name):

@@ -147,17 +147,32 @@ def temp_skills_folder(monkeypatch):
     tmpdir = tempfile.mkdtemp(prefix="pi-cowork-skills-")
     monkeypatch.setenv("PI_SKILLS_FOLDER", tmpdir)
     # Also patch get_config directly since it may cache env reads
+    import pi_cowork.api.skills as _api_skills
     import pi_cowork.skill_packages as _sp
 
     original_get_skills_folder = _sp.get_skills_folder
+    original_get_built_in = _sp.get_built_in_skills_folder
 
     def _fake_get_skills_folder():
         return tmpdir
 
+    # Isolate built-in skills to an empty temp directory so tests are hermetic
+    built_in_tmpdir = tempfile.mkdtemp(prefix="pi-cowork-built-in-skills-")
+
+    def _fake_get_built_in_skills_folder():
+        return built_in_tmpdir
+
     monkeypatch.setattr(_sp, "get_skills_folder", _fake_get_skills_folder)
+    monkeypatch.setattr(_sp, "get_built_in_skills_folder", _fake_get_built_in_skills_folder)
+    # Module-level imports in api.skills hold references to the original functions;
+    # patch them directly so built-in resolution is hermetic there too.
+    monkeypatch.setattr(_api_skills, "get_skills_folder", _fake_get_skills_folder)
+    monkeypatch.setattr(_api_skills, "get_built_in_skills_folder", _fake_get_built_in_skills_folder)
     yield tmpdir
     shutil.rmtree(tmpdir, ignore_errors=True)
+    shutil.rmtree(built_in_tmpdir, ignore_errors=True)
     monkeypatch.setattr(_sp, "get_skills_folder", original_get_skills_folder)
+    monkeypatch.setattr(_sp, "get_built_in_skills_folder", original_get_built_in)
 
 
 @pytest.fixture

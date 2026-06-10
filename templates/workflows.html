@@ -517,7 +517,7 @@ async function loadWorkflowDetail(id) {
                 <td>${(sk.used_by || []).map(n => `<span class="badge muted">${escapeHtml(n)}</span>`).join(' ') || '—'}</td>
                 <td class="row-actions">
                   <button class="btn small ghost" onclick="exportSkill('${escapeHtml(sk.name)}', ${id})" title="Export ZIP">📥</button>
-                  <button class="btn small ghost danger-text" onclick="deleteSkill('${escapeHtml(sk.name)}', ${id})" title="Delete">🗑️</button>
+                  ${sk.scope !== 'system' ? `<button class="btn small ghost danger-text" onclick="deleteSkill('${escapeHtml(sk.name)}', ${id})" title="Delete">🗑️</button>` : ''}
                 </td>
               </tr>
             `).join('')}
