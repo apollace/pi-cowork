@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Skills — pi-CoWork{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Global Skills</h1>
+  <div class="page-actions">
+    <button class="btn primary" onclick="showGlobalSkillImport()">📥 Import ZIP</button>
+  </div>
+</div>
+
+<div id="global-skills-table">
+  <p class="empty">Loading…</p>
+</div>
+
+<!-- Global Skill Import ZIP Modal -->
+<div id="global-skill-import-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2>Import Global Skill from ZIP</h2>
+    <form id="global-skill-import-form" class="form-card" enctype="multipart/form-data">
+      <label>
+        ZIP file *
+        <input type="file" name="file" accept=".zip,application/zip" required>
+      </label>
+      <p class="muted" style="font-size:0.8rem;">ZIP must contain a <code>SKILL.md</code> with YAML frontmatter (<code>name</code>, <code>description</code>) at the root or inside a single top-level directory.</p>
+      <div class="form-actions">
+        <button type="submit" class="btn primary">Import</button>
+        <button type="button" class="btn" onclick="hideGlobalSkillImport()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadGlobalSkills() {
+  const res = await fetch('/api/skills');
+  const container = document.getElementById('global-skills-table');
+  if (!res.ok) {
+    container.innerHTML = '<p class="empty">Failed to load skills.</p>';
+    return;
+  }
+  const skills = await res.json();
+  if (skills.length === 0) {
+    container.innerHTML = '<p class="empty">No global skills yet. Import one above.</p>';
+    return;
+  }
+  container.innerHTML = `
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead><tr><th>Name</th><th>Description</th><th>Subdirs</th><th>Used By</th><th></th></tr></thead>
+        <tbody>
+          ${skills.map(sk => `
+            <tr>
+              <td><strong>${escapeHtml(sk.name)}</strong></td>
+              <td>${escapeHtml(sk.description || '—')}</td>
+              <td>${sk.subdirs && sk.subdirs.length ? sk.subdirs.map(d => `<span class="badge muted">${escapeHtml(d)}</span>`).join(' ') : '—'}</td>
+              <td>${(sk.used_by || []).map(n => `<span class="badge muted">${escapeHtml(n)}</span>`).join(' ') || '—'}</td>
+              <td class="row-actions">
+                <button class="btn small ghost" onclick="exportGlobalSkill('${escapeHtml(sk.name)}')" title="Export ZIP">📥</button>
+                <button class="btn small ghost danger-text" onclick="deleteGlobalSkill('${escapeHtml(sk.name)}')" title="Delete">🗑️</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function showGlobalSkillImport() {
+  const modal = document.getElementById('global-skill-import-modal');
+  modal.style.display = 'flex';
+  modal.setAttribute('aria-hidden', 'false');
+  const firstInput = modal.querySelector('input[type="file"]');
+  if (firstInput) firstInput.focus();
+}
+
+function hideGlobalSkillImport() {
+  const modal = document.getElementById('global-skill-import-modal');
+  modal.style.display = 'none';
+  modal.setAttribute('aria-hidden', 'true');
+  document.getElementById('global-skill-import-form').reset();
+}
+
+// Backdrop click / Escape
+(function() {
+  const modal = document.getElementById('global-skill-import-modal');
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) hideGlobalSkillImport();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal.style.display === 'flex') hideGlobalSkillImport();
+  });
+})();
+
+document.getElementById('global-skill-import-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const fd = new FormData(form);
+  const res = await fetch('/api/skills/import', {
+    method: 'POST',
+    body: fd,
+  });
+  if (res.ok) {
+    hideGlobalSkillImport();
+    loadGlobalSkills();
+    showToast('Skill imported successfully', 'success');
+  } else {
+    const d = await res.json();
+    showToast(d.error || 'Import failed', 'error');
+  }
+});
+
+async function exportGlobalSkill(name) {
+  const res = await fetch(`/api/skills/${encodeURIComponent(name)}/export`);
+  if (!res.ok) { showToast('Export failed', 'error'); return; }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${name}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function deleteGlobalSkill(name) {
+  if (!confirm(`Delete global skill "${name}"?`)) return;
+  const res = await fetch(`/api/skills/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  if (res.ok) {
+    loadGlobalSkills();
+    showToast('Skill deleted', 'success');
+  } else {
+    const d = await res.json();
+    showToast(d.error || 'Failed', 'error');
+  }
+}
+
+loadGlobalSkills();
+</script>
+{% endblock %}

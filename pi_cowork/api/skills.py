@@ -24,11 +24,12 @@ skills_bp = Blueprint("skills", __name__)
 @skills_bp.route("/api/skills", methods=["GET"])
 def api_skills():
     workflow_id = request.args.get("workflow_id", type=int)
-    if workflow_id is None:
-        return jsonify({"error": "workflow_id is required"}), 400
     skills = list_skills(workflow_id)
     # Enrich with used_by agents
-    agents = query_db("SELECT id, name, skill_names FROM agents WHERE workflow_id = ?", (workflow_id,))
+    if workflow_id is not None:
+        agents = query_db("SELECT id, name, skill_names FROM agents WHERE workflow_id = ?", (workflow_id,))
+    else:
+        agents = query_db("SELECT id, name, skill_names FROM agents")
     used_by = {}
     for a in agents:
         try:
@@ -45,8 +46,6 @@ def api_skills():
 @skills_bp.route("/api/skills/import", methods=["POST"])
 def api_import_skill():
     workflow_id = request.form.get("workflow_id", type=int)
-    if workflow_id is None:
-        return jsonify({"error": "workflow_id is required"}), 400
 
     file = request.files.get("file")
     if not file:
@@ -92,15 +91,16 @@ def api_export_skill(name):
 @skills_bp.route("/api/skills/<name>", methods=["DELETE"])
 def api_delete_skill(name):
     workflow_id = request.args.get("workflow_id", type=int)
-    if workflow_id is None:
-        return jsonify({"error": "workflow_id is required"}), 400
     error = validate_skill_dir_name(name)
     if error:
         return jsonify({"error": error}), 400
     # Reject deletion of built-in/system skills
     if is_built_in_skill(name):
         return jsonify({"error": "System skills cannot be deleted"}), 403
-    skill_dir = get_skill_dir(workflow_id, name)
+    if workflow_id is not None:
+        skill_dir = get_skill_dir(workflow_id, name)
+    else:
+        skill_dir = os.path.join(get_skills_folder(), "global", name)
     if not os.path.isdir(skill_dir):
         return jsonify({"error": "Skill not found"}), 404
     delete_skill_package(skill_dir)

@@ -152,20 +152,26 @@ def get_global_skill_dir(name):
     return os.path.join(get_skills_folder(), "global", name)
 
 
-def list_skills(workflow_id):
+def list_skills(workflow_id=None):
     """Scan filesystem for skill packages.
 
     Returns list of dicts: name, scope, description, subdirs.
     Scope is 'workflow', 'global', or 'system'.
+
+    When workflow_id is provided, returns workflow + global + system skills
+    with workflow scope taking precedence.
+    When workflow_id is None, returns only global skills.
     """
     result = []
     seen = set()
     folder = get_skills_folder()
-    for scope, path in (
-        ("workflow", os.path.join(folder, str(workflow_id))),
-        ("global", os.path.join(folder, "global")),
-        ("system", get_built_in_skills_folder()),
-    ):
+    scopes = []
+    if workflow_id is not None:
+        scopes.append(("workflow", os.path.join(folder, str(workflow_id))))
+    scopes.append(("global", os.path.join(folder, "global")))
+    if workflow_id is not None:
+        scopes.append(("system", get_built_in_skills_folder()))
+    for scope, path in scopes:
         if not os.path.isdir(path):
             continue
         for entry in sorted(os.listdir(path)):
@@ -239,12 +245,12 @@ def copy_skill_to_session(skill_dir, session_skill_dir):
     return session_skill_dir
 
 
-def import_skill_from_zip(file_storage, workflow_id):
+def import_skill_from_zip(file_storage, workflow_id=None):
     """Import a skill from an uploaded ZIP file.
 
     Args:
         file_storage: Flask FileStorage object (request.files['file']).
-        workflow_id: Workflow ID to import into.
+        workflow_id: Workflow ID to import into. If None, imports into global scope.
 
     Returns:
         (skill_info_dict, error_string).  error_string is None on success.
@@ -284,9 +290,15 @@ def import_skill_from_zip(file_storage, workflow_id):
         if error:
             return None, error
 
-        target_dir = get_skill_dir(workflow_id, name)
+        if workflow_id is not None:
+            target_dir = get_skill_dir(workflow_id, name)
+            exists_msg = f"Skill '{name}' already exists in this workflow"
+        else:
+            target_dir = get_global_skill_dir(name)
+            exists_msg = f"Global skill '{name}' already exists"
+
         if os.path.exists(target_dir):
-            return None, f"Skill '{name}' already exists in this workflow"
+            return None, exists_msg
 
         shutil.copytree(root_dir, target_dir)
 

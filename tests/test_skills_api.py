@@ -76,10 +76,132 @@ def test_delete_skill_by_name(client, new_workflow, temp_skills_folder):
     assert not os.path.exists(skill_dir)
 
 
-def test_delete_skill_missing_workflow(client):
-    res = client.delete("/api/skills/foo")
-    assert res.status_code == 400
-    assert b"workflow_id is required" in res.data
+def test_list_skills_global_only(client, temp_skills_folder):
+    global_dir = os.path.join(temp_skills_folder, "global", "global-skill")
+    os.makedirs(global_dir, exist_ok=True)
+    with open(os.path.join(global_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: global-skill\ndescription: Global\n---\n\nGlobal content.")
+    res = client.get("/api/skills")
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    assert len(data) == 1
+    assert data[0]["name"] == "global-skill"
+    assert data[0]["scope"] == "global"
+    assert data[0]["description"] == "Global"
+
+
+def test_list_skills_global_only_excludes_system(client, temp_skills_folder):
+    import pi_cowork.skill_packages as _sp
+
+    global_dir = os.path.join(temp_skills_folder, "global", "global-skill")
+    os.makedirs(global_dir, exist_ok=True)
+    with open(os.path.join(global_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: global-skill\n---\n\nContent.")
+    built_in_dir = os.path.join(_sp.get_built_in_skills_folder(), "bi-skill")
+    os.makedirs(built_in_dir, exist_ok=True)
+    with open(os.path.join(built_in_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: bi-skill\n---\n\nContent.")
+    res = client.get("/api/skills")
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    names = [sk["name"] for sk in data]
+    assert "global-skill" in names
+    assert "bi-skill" not in names
+
+
+def test_list_skills_global_only_used_by_all_workflows(client, new_workflow, temp_skills_folder):
+    global_dir = os.path.join(temp_skills_folder, "global", "shared-skill")
+    os.makedirs(global_dir, exist_ok=True)
+    with open(os.path.join(global_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: shared-skill\ndescription: Shared\n---\n\nContent.")
+    # Create two workflows, each with an agent referencing the global skill
+    wf2_res = client.post("/api/workflows", json={"name": "WF2", "description": "d"})
+    assert wf2_res.status_code == 201
+    wf2 = json.loads(wf2_res.data)
+    client.post(
+        "/api/agents",
+        json={
+            "workflow_id": new_workflow["id"],
+            "name": "Agent1",
+            "description": "d",
+            "skill_names": ["shared-skill"],
+        },
+    )
+    client.post(
+        "/api/agents",
+        json={
+            "workflow_id": wf2["id"],
+            "name": "Agent2",
+            "description": "d",
+            "skill_names": ["shared-skill"],
+        },
+    )
+    res = client.get("/api/skills")
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    sk = next(s for s in data if s["name"] == "shared-skill")
+    assert sorted(sk["used_by"]) == ["Agent1", "Agent2"]
+
+
+def test_delete_skill_missing_workflow_targets_global(client, temp_skills_folder):
+    global_dir = os.path.join(temp_skills_folder, "global", "global-del")
+    os.makedirs(global_dir, exist_ok=True)
+    with open(os.path.join(global_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: global-del\n---\n\nContent.")
+    res = client.delete("/api/skills/global-del")
+    assert res.status_code == 200
+    assert not os.path.exists(global_dir)
+
+
+def test_delete_skill_global_built_in_rejected(client, temp_skills_folder):
+    import pi_cowork.skill_packages as _sp
+
+    built_in_dir = os.path.join(_sp.get_built_in_skills_folder(), "bi-global-del")
+    os.makedirs(built_in_dir, exist_ok=True)
+    with open(os.path.join(built_in_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: bi-global-del\n---\n\nContent.")
+    res = client.delete("/api/skills/bi-global-del")
+    assert res.status_code == 403
+    assert b"System skills cannot be deleted" in res.data
+    assert os.path.isdir(built_in_dir)
+
+
+def test_import_skill_zip_global(client, temp_skills_folder):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(
+            "SKILL.md",
+            "---\nname: zip-global-skill\ndescription: Global imported\n---\n\nContent.",
+        )
+    buf.seek(0)
+    res = client.post(
+        "/api/skills/import",
+        data={"file": (buf, "skill.zip")},
+        content_type="multipart/form-data",
+    )
+    assert res.status_code == 201
+    data = json.loads(res.data)
+    assert data["name"] == "zip-global-skill"
+    skill_dir = os.path.join(temp_skills_folder, "global", "zip-global-skill")
+    assert os.path.isdir(skill_dir)
+
+
+def test_import_skill_zip_global_duplicate(client, temp_skills_folder):
+    global_dir = os.path.join(temp_skills_folder, "global", "dup-global-skill")
+    os.makedirs(global_dir, exist_ok=True)
+    with open(os.path.join(global_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: dup-global-skill\n---\n\nContent.")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("SKILL.md", "---\nname: dup-global-skill\n---\n\nContent.")
+    buf.seek(0)
+    res = client.post(
+        "/api/skills/import",
+        data={"file": (buf, "skill.zip")},
+        content_type="multipart/form-data",
+    )
+    assert res.status_code == 409
+    assert b"already exists" in res.data
 
 
 def test_delete_skill_not_found(client, new_workflow):
