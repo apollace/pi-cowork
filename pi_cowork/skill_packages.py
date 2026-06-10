@@ -12,6 +12,7 @@ import io
 import os
 import re
 import shutil
+import urllib.request
 import zipfile
 from pathlib import Path
 
@@ -245,11 +246,118 @@ def copy_skill_to_session(skill_dir, session_skill_dir):
     return session_skill_dir
 
 
-def import_skill_from_zip(file_storage, workflow_id=None):
-    """Import a skill from an uploaded ZIP file.
+_GITHUB_URL_RE = re.compile(
+    r"^(?:https?://)?(?:www\.)?github\.com/"
+    r"(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?"
+    r"(?:/(?:tree|blob)/[^/]+/(?P<subpath>.+))?"
+    r"/?$"
+)
+
+
+def parse_github_url(url):
+    """Extract (owner, repo, subpath) from a GitHub URL.
+
+    Supported forms:
+        github.com/owner/repo
+        https://github.com/owner/repo.git
+        https://github.com/owner/repo/tree/branch/sub/path
+
+    Raises ValueError for unsupported URLs.
+    """
+    match = _GITHUB_URL_RE.match(url.strip())
+    if not match:
+        raise ValueError("Invalid GitHub URL")
+    owner = match.group("owner")
+    repo = match.group("repo")
+    subpath = match.group("subpath")
+    return owner, repo, subpath
+
+
+def download_github_repo(owner, repo):
+    """Download the default-branch zipball for a GitHub repository.
+
+    Returns the raw zipball bytes.
+    Raises LookupError for 404 (repo not found).
+    Raises PermissionError for 403 (rate limited / forbidden).
+    Raises ConnectionError for other network / HTTP errors.
+    """
+    url = f"https://api.github.com/repos/{owner}/{repo}/zipball"
+    if not url.startswith("https://"):
+        raise ValueError("Only HTTPS URLs are supported")
+    req = urllib.request.Request(  # noqa: S310
+        url,
+        headers={"User-Agent": "pi-cowork/github-skill-importer"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+            return resp.read()
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            raise LookupError(f"Repository {owner}/{repo} not found") from exc
+        if exc.code == 403:
+            raise PermissionError("GitHub API rate limit or access denied") from exc
+        raise ConnectionError(f"GitHub download failed: HTTP {exc.code}") from exc
+    except urllib.error.URLError as exc:
+        raise ConnectionError(f"Network error: {exc.reason}") from exc
+
+
+def import_skill_from_github(url, workflow_id=None):
+    """Import a skill from a public GitHub repository.
 
     Args:
-        file_storage: Flask FileStorage object (request.files['file']).
+        url: GitHub repository or subdirectory URL.
+        workflow_id: Workflow ID to import into. If None, imports into global scope.
+
+    Returns:
+        (skill_info_dict, error_string).  error_string is None on success.
+    """
+    try:
+        owner, repo, subpath = parse_github_url(url)
+    except ValueError as exc:
+        return None, str(exc)
+
+    try:
+        zip_bytes = download_github_repo(owner, repo)
+    except (LookupError, PermissionError, ConnectionError) as exc:
+        return None, str(exc)
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        try:
+            with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as zf:
+                zf.extractall(tmpdir)
+        except zipfile.BadZipFile:
+            return None, "Invalid ZIP file downloaded from GitHub"
+
+        # GitHub zipballs have a single top-level directory like owner-repo-sha/
+        entries = [e for e in os.listdir(tmpdir)]
+        if not entries:
+            return None, "Downloaded ZIP is empty"
+
+        if len(entries) == 1 and os.path.isdir(os.path.join(tmpdir, entries[0])):
+            root_dir = os.path.join(tmpdir, entries[0])
+        else:
+            root_dir = tmpdir
+
+        # If a subpath was specified, navigate into it
+        if subpath:
+            target = os.path.normpath(os.path.join(root_dir, subpath))
+            norm_root = os.path.normpath(root_dir) + os.sep
+            if not target.startswith(norm_root) and target != os.path.normpath(root_dir):
+                return None, "Invalid subpath"
+            if not os.path.isdir(target):
+                return None, f"Subpath '{subpath}' not found in repository"
+            root_dir = target
+
+        return _import_skill_from_dir(root_dir, workflow_id)
+
+
+def import_skill_from_bytes(zip_bytes, workflow_id=None):
+    """Import a skill from raw ZIP bytes.
+
+    Args:
+        zip_bytes: Raw bytes of a ZIP archive.
         workflow_id: Workflow ID to import into. If None, imports into global scope.
 
     Returns:
@@ -259,7 +367,7 @@ def import_skill_from_zip(file_storage, workflow_id=None):
 
     with tempfile.TemporaryDirectory() as tmpdir:
         try:
-            with zipfile.ZipFile(io.BytesIO(file_storage.read()), "r") as zf:
+            with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as zf:
                 zf.extractall(tmpdir)
         except zipfile.BadZipFile:
             return None, "Invalid ZIP file"
@@ -274,42 +382,64 @@ def import_skill_from_zip(file_storage, workflow_id=None):
         else:
             root_dir = tmpdir
 
-        skill_md = os.path.join(root_dir, "SKILL.md")
-        if not os.path.isfile(skill_md):
-            return None, "ZIP must contain a SKILL.md file at the package root"
+        return _import_skill_from_dir(root_dir, workflow_id)
 
-        with open(skill_md, encoding="utf-8") as f:
-            text = f.read()
 
-        meta, content = _parse_frontmatter(text)
-        name = meta.get("name")
-        if not name:
-            return None, "SKILL.md frontmatter must include a name field"
+def import_skill_from_zip(file_storage, workflow_id=None):
+    """Import a skill from an uploaded ZIP file.
 
-        error = validate_skill_dir_name(name)
-        if error:
-            return None, error
+    Args:
+        file_storage: Flask FileStorage object (request.files['file']).
+        workflow_id: Workflow ID to import into. If None, imports into global scope.
 
-        if workflow_id is not None:
-            target_dir = get_skill_dir(workflow_id, name)
-            exists_msg = f"Skill '{name}' already exists in this workflow"
-        else:
-            target_dir = get_global_skill_dir(name)
-            exists_msg = f"Global skill '{name}' already exists"
+    Returns:
+        (skill_info_dict, error_string).  error_string is None on success.
+    """
+    return import_skill_from_bytes(file_storage.read(), workflow_id)
 
-        if os.path.exists(target_dir):
-            return None, exists_msg
 
-        shutil.copytree(root_dir, target_dir)
+def _import_skill_from_dir(root_dir, workflow_id=None):
+    """Import a skill from an extracted directory.
 
-        subdirs = []
-        for sub in sorted(os.listdir(target_dir)):
-            if os.path.isdir(os.path.join(target_dir, sub)) and not sub.startswith("."):
-                subdirs.append(sub)
+    Returns:
+        (skill_info_dict, error_string).  error_string is None on success.
+    """
+    skill_md = os.path.join(root_dir, "SKILL.md")
+    if not os.path.isfile(skill_md):
+        return None, "ZIP must contain a SKILL.md file at the package root"
 
-        return {
-            "name": name,
-            "description": meta.get("description"),
-            "content": content,
-            "subdirs": subdirs,
-        }, None
+    with open(skill_md, encoding="utf-8") as f:
+        text = f.read()
+
+    meta, content = _parse_frontmatter(text)
+    name = meta.get("name")
+    if not name:
+        return None, "SKILL.md frontmatter must include a name field"
+
+    error = validate_skill_dir_name(name)
+    if error:
+        return None, error
+
+    if workflow_id is not None:
+        target_dir = get_skill_dir(workflow_id, name)
+        exists_msg = f"Skill '{name}' already exists in this workflow"
+    else:
+        target_dir = get_global_skill_dir(name)
+        exists_msg = f"Global skill '{name}' already exists"
+
+    if os.path.exists(target_dir):
+        return None, exists_msg
+
+    shutil.copytree(root_dir, target_dir)
+
+    subdirs = []
+    for sub in sorted(os.listdir(target_dir)):
+        if os.path.isdir(os.path.join(target_dir, sub)) and not sub.startswith("."):
+            subdirs.append(sub)
+
+    return {
+        "name": name,
+        "description": meta.get("description"),
+        "content": content,
+        "subdirs": subdirs,
+    }, None

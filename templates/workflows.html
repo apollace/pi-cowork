@@ -109,6 +109,25 @@
   </div>
 </div>
 
+<!-- Skill Import from GitHub Modal -->
+<div id="skill-import-github-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2>Import Skill from GitHub</h2>
+    <form id="skill-import-github-form" class="form-card">
+      <input type="hidden" name="workflow_id">
+      <label>
+        GitHub URL *
+        <input type="text" name="url" placeholder="https://github.com/owner/repo" required>
+      </label>
+      <p class="muted" style="font-size:0.8rem;">Paste a GitHub repository or subdirectory URL. Public repos only.</p>
+      <div class="form-actions">
+        <button type="submit" class="btn primary">Import</button>
+        <button type="button" class="btn" onclick="hideSkillImportGitHubModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- Status Modal (create/edit) -->
 <div id="status-modal" class="modal" style="display:none;">
   <div class="modal-content">
@@ -502,7 +521,7 @@ async function loadWorkflowDetail(id) {
       </div>`}
     </div>
     <div class="wf-subsection">
-      <h3 class="wf-subtitle">Workflow Skills <button class="btn small" onclick="showSkillImport(${id})" style="margin-left:0.5rem;">📥 Import ZIP</button></h3>
+      <h3 class="wf-subtitle">Workflow Skills <button class="btn small" onclick="showSkillImport(${id})" style="margin-left:0.5rem;">📥 Import ZIP</button><button class="btn small" onclick="showSkillImportGitHub(${id})" style="margin-left:0.5rem;">🐙 Import from GitHub</button></h3>
       ${skills.filter(sk=>sk.scope==='workflow').length === 0 ? '<p class="empty-sm">No workflow skills yet.</p>' : `
       <div class="table-wrapper" style="margin-top:0.5rem;">
         <table class="data-table">
@@ -906,6 +925,17 @@ function hideSkillImportModal() {
   document.getElementById('skill-import-form').reset();
 }
 
+function showSkillImportGitHub(workflowId) {
+  const form = document.getElementById('skill-import-github-form');
+  form.elements.workflow_id.value = workflowId;
+  openModal('skill-import-github-modal');
+}
+
+function hideSkillImportGitHubModal() {
+  closeModal('skill-import-github-modal');
+  document.getElementById('skill-import-github-form').reset();
+}
+
 document.getElementById('skill-import-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
@@ -919,6 +949,26 @@ document.getElementById('skill-import-form').addEventListener('submit', async (e
     hideSkillImportModal();
     loadWorkflowDetail(workflowId);
     showToast('Skill imported successfully', 'success');
+  } else {
+    const d = await res.json();
+    showToast(d.error || 'Import failed', 'error');
+  }
+});
+
+document.getElementById('skill-import-github-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const workflowId = parseInt(form.elements.workflow_id.value);
+  const url = form.querySelector('input[name="url"]').value.trim();
+  const res = await fetch('/api/skills/import-github', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: url, workflow_id: workflowId }),
+  });
+  if (res.ok) {
+    hideSkillImportGitHubModal();
+    loadWorkflowDetail(workflowId);
+    showToast('Skill imported from GitHub successfully', 'success');
   } else {
     const d = await res.json();
     showToast(d.error || 'Import failed', 'error');

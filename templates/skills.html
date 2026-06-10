@@ -4,6 +4,7 @@
 <div class="page-header">
   <h1>Global Skills</h1>
   <div class="page-actions">
+    <button class="btn" onclick="showGlobalSkillImportGitHub()">🐙 Import from GitHub</button>
     <button class="btn primary" onclick="showGlobalSkillImport()">📥 Import ZIP</button>
   </div>
 </div>
@@ -25,6 +26,24 @@
       <div class="form-actions">
         <button type="submit" class="btn primary">Import</button>
         <button type="button" class="btn" onclick="hideGlobalSkillImport()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Global Skill Import from GitHub Modal -->
+<div id="global-skill-import-github-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h2>Import Global Skill from GitHub</h2>
+    <form id="global-skill-import-github-form" class="form-card">
+      <label>
+        GitHub URL *
+        <input type="text" name="url" placeholder="https://github.com/owner/repo" required>
+      </label>
+      <p class="muted" style="font-size:0.8rem;">Paste a GitHub repository or subdirectory URL. Public repos only.</p>
+      <div class="form-actions">
+        <button type="submit" class="btn primary">Import</button>
+        <button type="button" class="btn" onclick="hideGlobalSkillImportGitHub()">Cancel</button>
       </div>
     </form>
   </div>
@@ -83,6 +102,21 @@ function hideGlobalSkillImport() {
   document.getElementById('global-skill-import-form').reset();
 }
 
+function showGlobalSkillImportGitHub() {
+  const modal = document.getElementById('global-skill-import-github-modal');
+  modal.style.display = 'flex';
+  modal.setAttribute('aria-hidden', 'false');
+  const firstInput = modal.querySelector('input[name="url"]');
+  if (firstInput) firstInput.focus();
+}
+
+function hideGlobalSkillImportGitHub() {
+  const modal = document.getElementById('global-skill-import-github-modal');
+  modal.style.display = 'none';
+  modal.setAttribute('aria-hidden', 'true');
+  document.getElementById('global-skill-import-github-form').reset();
+}
+
 // Backdrop click / Escape
 (function() {
   const modal = document.getElementById('global-skill-import-modal');
@@ -91,6 +125,16 @@ function hideGlobalSkillImport() {
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && modal.style.display === 'flex') hideGlobalSkillImport();
+  });
+})();
+
+(function() {
+  const modal = document.getElementById('global-skill-import-github-modal');
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) hideGlobalSkillImportGitHub();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal.style.display === 'flex') hideGlobalSkillImportGitHub();
   });
 })();
 
@@ -106,6 +150,25 @@ document.getElementById('global-skill-import-form').addEventListener('submit', a
     hideGlobalSkillImport();
     loadGlobalSkills();
     showToast('Skill imported successfully', 'success');
+  } else {
+    const d = await res.json();
+    showToast(d.error || 'Import failed', 'error');
+  }
+});
+
+document.getElementById('global-skill-import-github-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const url = form.querySelector('input[name="url"]').value.trim();
+  const res = await fetch('/api/skills/import-github', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: url }),
+  });
+  if (res.ok) {
+    hideGlobalSkillImportGitHub();
+    loadGlobalSkills();
+    showToast('Skill imported from GitHub successfully', 'success');
   } else {
     const d = await res.json();
     showToast(d.error || 'Import failed', 'error');
