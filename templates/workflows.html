@@ -502,13 +502,37 @@ async function loadWorkflowDetail(id) {
       </div>`}
     </div>
     <div class="wf-subsection">
-      <h3 class="wf-subtitle">Skills <button class="btn small" onclick="showSkillImport(${id})" style="margin-left:0.5rem;">📥 Import ZIP</button></h3>
-      ${skills.length === 0 ? '<p class="empty-sm">No skills yet.</p>' : `
+      <h3 class="wf-subtitle">Workflow Skills <button class="btn small" onclick="showSkillImport(${id})" style="margin-left:0.5rem;">📥 Import ZIP</button></h3>
+      ${skills.filter(sk=>sk.scope==='workflow').length === 0 ? '<p class="empty-sm">No workflow skills yet.</p>' : `
+      <div class="table-wrapper" style="margin-top:0.5rem;">
+        <table class="data-table">
+          <thead><tr><th>Name</th><th>Description</th><th>Subdirs</th><th>Used By</th><th></th></tr></thead>
+          <tbody>
+            ${skills.filter(sk=>sk.scope==='workflow').map(sk => `
+              <tr>
+                <td><strong>${escapeHtml(sk.name)}</strong></td>
+                <td>${escapeHtml(sk.description || '—')}</td>
+                <td>${sk.subdirs && sk.subdirs.length ? sk.subdirs.map(d => `<span class="badge muted">${escapeHtml(d)}</span>`).join(' ') : '—'}</td>
+                <td>${(sk.used_by || []).map(n => `<span class="badge muted">${escapeHtml(n)}</span>`).join(' ') || '—'}</td>
+                <td class="row-actions">
+                  <button class="btn small ghost" onclick="exportSkill('${escapeHtml(sk.name)}', ${id})" title="Export ZIP">📥</button>
+                  <button class="btn small ghost danger-text" onclick="deleteSkill('${escapeHtml(sk.name)}', ${id})" title="Delete">🗑️</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>`}
+    </div>
+    <div class="wf-subsection">
+      <h3 class="wf-subtitle">Global & System Skills</h3>
+      <p class="muted" style="font-size:0.85rem;margin-bottom:0.5rem;">These skills are shared across all workflows. They cannot be deleted from this page.</p>
+      ${skills.filter(sk=>sk.scope!=='workflow').length === 0 ? '<p class="empty-sm">No global or system skills.</p>' : `
       <div class="table-wrapper" style="margin-top:0.5rem;">
         <table class="data-table">
           <thead><tr><th>Name</th><th>Scope</th><th>Description</th><th>Subdirs</th><th>Used By</th><th></th></tr></thead>
           <tbody>
-            ${skills.map(sk => `
+            ${skills.filter(sk=>sk.scope!=='workflow').map(sk => `
               <tr>
                 <td><strong>${escapeHtml(sk.name)}</strong></td>
                 <td><span class="badge muted">${escapeHtml(sk.scope)}</span></td>
@@ -517,7 +541,6 @@ async function loadWorkflowDetail(id) {
                 <td>${(sk.used_by || []).map(n => `<span class="badge muted">${escapeHtml(n)}</span>`).join(' ') || '—'}</td>
                 <td class="row-actions">
                   <button class="btn small ghost" onclick="exportSkill('${escapeHtml(sk.name)}', ${id})" title="Export ZIP">📥</button>
-                  ${sk.scope !== 'system' ? `<button class="btn small ghost danger-text" onclick="deleteSkill('${escapeHtml(sk.name)}', ${id})" title="Delete">🗑️</button>` : ''}
                 </td>
               </tr>
             `).join('')}

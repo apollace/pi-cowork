@@ -277,9 +277,10 @@ ENDPOINT_REGISTRY = [
         "category": "Skills",
         "method": "GET",
         "path_template": "/api/skills",
-        "label": "list skills for workflow (query: workflow_id)",
+        "label": "list skills (query: workflow_id optional; omit for global-only)",
         "doc_lines": [
-            "- GET {base_url}/api/skills?workflow_id={workflow_id} → list skills for workflow",
+            "- GET {base_url}/api/skills?workflow_id={workflow_id} → list skills for workflow (workflow + global + "
+            "system). Omit workflow_id to list only global skills.",
         ],
     },
     {
@@ -287,9 +288,10 @@ ENDPOINT_REGISTRY = [
         "category": "Skills",
         "method": "GET",
         "path_template": "/api/skills/{name}/export",
-        "label": "export skill as ZIP (query: workflow_id)",
+        "label": "export skill as ZIP (query: workflow_id optional; falls back to global)",
         "doc_lines": [
-            "- GET {base_url}/api/skills/{name}/export?workflow_id={workflow_id} → download skill ZIP",
+            "- GET {base_url}/api/skills/{name}/export?workflow_id={workflow_id} → download skill ZIP (falls back to "
+            "global scope if workflow_id omitted or skill not found in workflow)",
         ],
     },
     {
@@ -297,9 +299,10 @@ ENDPOINT_REGISTRY = [
         "category": "Skills",
         "method": "DELETE",
         "path_template": "/api/skills/{name}",
-        "label": "delete skill folder (query: workflow_id)",
+        "label": "delete skill folder (query: workflow_id optional; omit for global)",
         "doc_lines": [
-            "- DELETE {base_url}/api/skills/{name}?workflow_id={workflow_id} → remove skill folder",
+            "- DELETE {base_url}/api/skills/{name}?workflow_id={workflow_id} → remove skill folder. "
+            "Omit workflow_id to delete from global scope.",
         ],
     },
     # ── Labels ──
