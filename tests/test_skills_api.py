@@ -1,339 +1,163 @@
-"""Tests for skills API (Ticket #133)."""
+"""Tests for skills API (Ticket #146)."""
 
+import io
 import json
+import os
+import zipfile
 
 import pytest
 
 
 @pytest.fixture
-def new_workflow(client):
-    res = client.post("/api/workflows", json={"name": "Skill Test WF", "description": "t"})
-    assert res.status_code == 201
-    return json.loads(res.data)
+def sample_skill(client, new_workflow, temp_skills_folder):
+    skill_dir = os.path.join(temp_skills_folder, str(new_workflow["id"]), "test-skill")
+    os.makedirs(skill_dir, exist_ok=True)
+    with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: test-skill\ndescription: A test skill\n---\n\n## Test Skill\n\nThis is a test.")
+    return {"name": "test-skill", "workflow_id": new_workflow["id"]}, new_workflow
 
 
-@pytest.fixture
-def sample_skill(client, new_workflow):
-    res = client.post(
-        "/api/skills",
-        json={
-            "workflow_id": new_workflow["id"],
-            "name": "test-skill",
-            "description": "A test skill",
-            "content": "## Test Skill\n\nThis is a test.",
-            "sort_order": 1,
-        },
-    )
-    assert res.status_code == 201
-    return json.loads(res.data)
-
-
-# ── CRUD ──
-
-
-def test_create_skill(client, new_workflow):
-    res = client.post(
-        "/api/skills",
-        json={
-            "workflow_id": new_workflow["id"],
-            "name": "my-skill",
-            "description": "desc",
-            "content": "content body",
-            "sort_order": 5,
-        },
-    )
-    assert res.status_code == 201
-    data = json.loads(res.data)
-    assert data["name"] == "my-skill"
-    assert data["description"] == "desc"
-    assert data["content"] == "content body"
-    assert data["sort_order"] == 5
-    assert data["workflow_id"] == new_workflow["id"]
-
-
-def test_create_skill_missing_workflow(client):
-    res = client.post("/api/skills", json={"name": "n"})
-    assert res.status_code == 400
-    assert b"workflow_id is required" in res.data
-
-
-def test_create_skill_missing_name(client, new_workflow):
-    res = client.post("/api/skills", json={"workflow_id": new_workflow["id"], "content": "c"})
-    assert res.status_code == 400
-    assert b"name is required" in res.data
-
-
-def test_create_skill_invalid_name(client, new_workflow):
-    res = client.post(
-        "/api/skills",
-        json={"workflow_id": new_workflow["id"], "name": "Bad Name!", "content": "c"},
-    )
-    assert res.status_code == 400
-    assert b"lowercase letters" in res.data
-
-
-def test_create_skill_duplicate_name(client, sample_skill):
-    res = client.post(
-        "/api/skills",
-        json={
-            "workflow_id": sample_skill["workflow_id"],
-            "name": sample_skill["name"],
-            "content": "c",
-        },
-    )
-    assert res.status_code == 409
-    assert b"already exists" in res.data
-
-
-def test_create_skill_name_too_long(client, new_workflow):
-    res = client.post(
-        "/api/skills",
-        json={
-            "workflow_id": new_workflow["id"],
-            "name": "a" * 65,
-            "content": "c",
-        },
-    )
-    assert res.status_code == 400
-    assert b"64 characters" in res.data
-
-
-def test_list_skills(client, new_workflow, sample_skill):
+def test_list_skills_filesystem_scan(client, new_workflow, temp_skills_folder):
+    skill_dir = os.path.join(temp_skills_folder, str(new_workflow["id"]), "fs-skill")
+    os.makedirs(skill_dir, exist_ok=True)
+    with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: fs-skill\ndescription: Scanned\n---\n\nContent.")
     res = client.get(f"/api/skills?workflow_id={new_workflow['id']}")
     assert res.status_code == 200
     data = json.loads(res.data)
     assert len(data) == 1
-    assert data[0]["name"] == "test-skill"
+    assert data[0]["name"] == "fs-skill"
+    assert data[0]["scope"] == "workflow"
+    assert data[0]["description"] == "Scanned"
 
 
-def test_get_skill(client, sample_skill):
-    res = client.get(f"/api/skills/{sample_skill['id']}")
+def test_list_skills_includes_global(client, new_workflow, temp_skills_folder):
+    global_dir = os.path.join(temp_skills_folder, "global", "global-skill")
+    os.makedirs(global_dir, exist_ok=True)
+    with open(os.path.join(global_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: global-skill\ndescription: Global\n---\n\nGlobal content.")
+    res = client.get(f"/api/skills?workflow_id={new_workflow['id']}")
     assert res.status_code == 200
     data = json.loads(res.data)
-    assert data["id"] == sample_skill["id"]
+    names = [sk["name"] for sk in data]
+    assert "global-skill" in names
+    global_skill = next(sk for sk in data if sk["name"] == "global-skill")
+    assert global_skill["scope"] == "global"
 
 
-def test_get_skill_not_found(client):
-    res = client.get("/api/skills/99999")
+def test_list_skills_used_by_agents(client, new_workflow, temp_skills_folder):
+    skill_dir = os.path.join(temp_skills_folder, str(new_workflow["id"]), "linked-skill")
+    os.makedirs(skill_dir, exist_ok=True)
+    with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: linked-skill\ndescription: Linked\n---\n\nContent.")
+    agent_res = client.post(
+        "/api/agents",
+        json={
+            "workflow_id": new_workflow["id"],
+            "name": "LinkedAgent",
+            "description": "d",
+            "skill_names": ["linked-skill"],
+        },
+    )
+    assert agent_res.status_code == 201
+    res = client.get(f"/api/skills?workflow_id={new_workflow['id']}")
+    data = json.loads(res.data)
+    sk = next(s for s in data if s["name"] == "linked-skill")
+    assert sk["used_by"] == ["LinkedAgent"]
+
+
+def test_delete_skill_by_name(client, new_workflow, temp_skills_folder):
+    skill_dir = os.path.join(temp_skills_folder, str(new_workflow["id"]), "del-skill")
+    os.makedirs(skill_dir, exist_ok=True)
+    with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: del-skill\ndescription: Del\n---\n\nContent.")
+    res = client.delete(f"/api/skills/del-skill?workflow_id={new_workflow['id']}")
+    assert res.status_code == 200
+    assert not os.path.exists(skill_dir)
+
+
+def test_delete_skill_missing_workflow(client):
+    res = client.delete("/api/skills/foo")
+    assert res.status_code == 400
+    assert b"workflow_id is required" in res.data
+
+
+def test_delete_skill_not_found(client, new_workflow):
+    res = client.delete(f"/api/skills/missing?workflow_id={new_workflow['id']}")
     assert res.status_code == 404
 
 
-def test_update_skill(client, sample_skill):
-    res = client.put(
-        f"/api/skills/{sample_skill['id']}",
-        json={"name": "updated-skill", "content": "new content", "description": "new desc", "sort_order": 10},
-    )
+def test_export_skill(client, new_workflow, temp_skills_folder):
+    skill_dir = os.path.join(temp_skills_folder, str(new_workflow["id"]), "exp-skill")
+    os.makedirs(skill_dir, exist_ok=True)
+    with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: exp-skill\n---\n\nContent.")
+    with open(os.path.join(skill_dir, "extra.txt"), "w") as f:
+        f.write("extra")
+    res = client.get(f"/api/skills/exp-skill/export?workflow_id={new_workflow['id']}")
     assert res.status_code == 200
+    assert res.content_type == "application/zip"
+    from io import BytesIO
+
+    buf = BytesIO(res.data)
+    with zipfile.ZipFile(buf, "r") as zf:
+        names = zf.namelist()
+        assert "SKILL.md" in names
+        assert "extra.txt" in names
+
+
+def test_export_skill_global_fallback(client, new_workflow, temp_skills_folder):
+    skill_dir = os.path.join(temp_skills_folder, "global", "global-exp")
+    os.makedirs(skill_dir, exist_ok=True)
+    with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: global-exp\n---\n\nContent.")
+    res = client.get(f"/api/skills/global-exp/export?workflow_id={new_workflow['id']}")
+    assert res.status_code == 200
+
+
+def test_import_skill_zip(client, new_workflow, temp_skills_folder):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(
+            "SKILL.md",
+            "---\nname: zip-import-skill\ndescription: Imported\n---\n\nContent.",
+        )
+    buf.seek(0)
+    res = client.post(
+        "/api/skills/import",
+        data={"workflow_id": new_workflow["id"], "file": (buf, "skill.zip")},
+        content_type="multipart/form-data",
+    )
+    assert res.status_code == 201
     data = json.loads(res.data)
-    assert data["name"] == "updated-skill"
-    assert data["content"] == "new content"
-    assert data["description"] == "new desc"
-    assert data["sort_order"] == 10
+    assert data["name"] == "zip-import-skill"
+    skill_dir = os.path.join(temp_skills_folder, str(new_workflow["id"]), "zip-import-skill")
+    assert os.path.isdir(skill_dir)
 
 
-def test_update_skill_invalid_name(client, sample_skill):
-    res = client.put(f"/api/skills/{sample_skill['id']}", json={"name": "--bad"})
-    assert res.status_code == 400
-    assert b"lowercase letters" in res.data
-
-
-def test_update_skill_no_fields(client, sample_skill):
-    res = client.put(f"/api/skills/{sample_skill['id']}", json={})
-    assert res.status_code == 400
-
-
-def test_delete_skill(client, sample_skill, new_workflow):
-    res = client.delete(f"/api/skills/{sample_skill['id']}")
-    assert res.status_code == 200
-    res2 = client.get(f"/api/skills?workflow_id={new_workflow['id']}")
-    assert len(json.loads(res2.data)) == 0
-
-
-# ── Agent association ──
-
-
-def test_agent_create_with_skills(client, new_workflow, sample_skill):
+def test_import_skill_zip_duplicate(client, sample_skill, new_workflow):
+    skill, workflow = sample_skill
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("SKILL.md", "---\nname: test-skill\n---\n\nContent.")
+    buf.seek(0)
     res = client.post(
-        "/api/agents",
-        json={
-            "workflow_id": new_workflow["id"],
-            "name": "SkillAgent",
-            "description": "d",
-            "skill_ids": [sample_skill["id"]],
-        },
+        "/api/skills/import",
+        data={"workflow_id": workflow["id"], "file": (buf, "skill.zip")},
+        content_type="multipart/form-data",
     )
-    assert res.status_code == 201
-    agent_id = json.loads(res.data)["id"]
-    agent_res = client.get(f"/api/agents/{agent_id}")
-    agent = json.loads(agent_res.data)
-    assert len(agent["skills"]) == 1
-    assert agent["skills"][0]["id"] == sample_skill["id"]
+    assert res.status_code == 409
 
 
-def test_agent_update_with_skills(client, new_workflow, sample_skill):
+def test_import_skill_zip_missing_skill_md(client, new_workflow):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("README.md", "Hello")
+    buf.seek(0)
     res = client.post(
-        "/api/agents",
-        json={
-            "workflow_id": new_workflow["id"],
-            "name": "SkillAgent",
-            "description": "d",
-        },
-    )
-    agent_id = json.loads(res.data)["id"]
-    res = client.put(f"/api/agents/{agent_id}", json={"skill_ids": [sample_skill["id"]]})
-    assert res.status_code == 200
-    agent_res = client.get(f"/api/agents/{agent_id}")
-    agent = json.loads(agent_res.data)
-    assert len(agent["skills"]) == 1
-    assert agent["skills"][0]["id"] == sample_skill["id"]
-
-
-def test_agent_update_clears_skills(client, new_workflow, sample_skill):
-    res = client.post(
-        "/api/agents",
-        json={
-            "workflow_id": new_workflow["id"],
-            "name": "SkillAgent",
-            "description": "d",
-            "skill_ids": [sample_skill["id"]],
-        },
-    )
-    agent_id = json.loads(res.data)["id"]
-    res = client.put(f"/api/agents/{agent_id}", json={"skill_ids": []})
-    assert res.status_code == 200
-    agent_res = client.get(f"/api/agents/{agent_id}")
-    agent = json.loads(agent_res.data)
-    assert agent["skills"] == []
-
-
-def test_agents_list_includes_skills(client, new_workflow, sample_skill):
-    res = client.post(
-        "/api/agents",
-        json={
-            "workflow_id": new_workflow["id"],
-            "name": "SkillAgent",
-            "description": "d",
-            "skill_ids": [sample_skill["id"]],
-        },
-    )
-    assert res.status_code == 201
-    res = client.get(f"/api/agents?workflow_id={new_workflow['id']}")
-    agents = json.loads(res.data)
-    assert len(agents) == 1
-    assert len(agents[0]["skills"]) == 1
-
-
-# ── Agent spawn integration ──
-
-
-def test_spawn_agent_includes_skill_args(client, default_workflow, default_board):
-    from unittest.mock import patch
-
-    # create skill
-    skill = client.post(
-        "/api/skills",
-        json={
-            "workflow_id": default_workflow["id"],
-            "name": "pytest-skill",
-            "description": "A pytest skill",
-            "content": "## Pytest Skill\n\nUse pytest.",
-        },
-    )
-    skill_data = json.loads(skill.data)
-
-    # create agent with skill
-    agent = client.post(
-        "/api/agents",
-        json={
-            "name": "SkillSpawnAgent",
-            "description": "You are a skill agent.",
-            "workflow_id": default_workflow["id"],
-            "skill_ids": [skill_data["id"]],
-        },
-    )
-    aid = json.loads(agent.data)["id"]
-
-    # create status with agent
-    s1 = client.post(
-        "/api/statuses",
-        json={
-            "name": "SkillStage",
-            "sort_order": 1,
-            "agent_id": aid,
-            "workflow_id": default_workflow["id"],
-        },
-    )
-    sid = json.loads(s1.data)["id"]
-
-    # create ticket
-    ticket = client.post(
-        "/api/tickets",
-        json={"title": "Skill Ticket", "board_id": default_board["id"]},
-    )
-    tid = json.loads(ticket.data)["id"]
-
-    captured_cmd = []
-
-    def capture_popen(cmd, **kwargs):
-        class FakeProc:
-            pid = 9999
-
-        captured_cmd[:] = cmd
-        return FakeProc()
-
-    with patch("app.subprocess.Popen", side_effect=capture_popen):
-        res = client.put(f"/api/tickets/{tid}", json={"status_id": sid})
-        assert res.status_code == 200
-
-    assert "--skill" in captured_cmd
-    idx = captured_cmd.index("--skill")
-    skill_dir = captured_cmd[idx + 1]
-    assert skill_dir.endswith("pytest-skill")
-
-    import os
-
-    skill_md = os.path.join(skill_dir, "SKILL.md")
-    assert os.path.exists(skill_md)
-    with open(skill_md) as f:
-        content = f.read()
-    assert "name: pytest-skill" in content
-    assert "Use pytest." in content
-
-
-def test_skill_name_accepts_numbers_and_hyphens(client, new_workflow):
-    res = client.post(
-        "/api/skills",
-        json={"workflow_id": new_workflow["id"], "name": "skill-123", "content": "c"},
-    )
-    assert res.status_code == 201
-
-
-def test_skill_name_rejects_leading_hyphen(client, new_workflow):
-    res = client.post(
-        "/api/skills",
-        json={"workflow_id": new_workflow["id"], "name": "-skill", "content": "c"},
+        "/api/skills/import",
+        data={"workflow_id": new_workflow["id"], "file": (buf, "skill.zip")},
+        content_type="multipart/form-data",
     )
     assert res.status_code == 400
-
-
-def test_skill_name_rejects_trailing_hyphen(client, new_workflow):
-    res = client.post(
-        "/api/skills",
-        json={"workflow_id": new_workflow["id"], "name": "skill-", "content": "c"},
-    )
-    assert res.status_code == 400
-
-
-def test_skill_name_rejects_consecutive_hyphens(client, new_workflow):
-    res = client.post(
-        "/api/skills",
-        json={"workflow_id": new_workflow["id"], "name": "skill--name", "content": "c"},
-    )
-    assert res.status_code == 400
-
-
-def test_delete_workflow_cascades_skills(client, new_workflow, sample_skill):
-    res = client.delete(f"/api/workflows/{new_workflow['id']}")
-    assert res.status_code == 200
-    res2 = client.get(f"/api/skills/{sample_skill['id']}")
-    assert res2.status_code == 404
+    assert b"SKILL.md" in res.data

@@ -117,7 +117,7 @@ Workflow (agents + statuses + transitions + quality_gates)
         └── Tickets (comments, agent runs, gate_reviews)
 ```
 
-- **Workflow** = reusable template (agents, statuses, transitions, quality gates, **skills**)
+- **Workflow** = reusable template (agents, statuses, transitions, quality gates, skills)
 - **Board** = CoWork instance assigned to exactly one workflow. Has its own working directory where agents run.
 - **Ticket** = lives on exactly one board, inherits its workflow's statuses
 - **Quality Gate** = check on a status transition (from, to) pair that must pass before the transition completes (manual approval or CLI command)
@@ -127,6 +127,18 @@ Workflow (agents + statuses + transitions + quality_gates)
 - Deleting a workflow requires that no boards reference it
 - **`assistant_saved_prompts`** — global reusable prompt snippets for both global and board assistants (columns: `id`, `name` UNIQUE, `prompt_text`, `sort_order`, `created_at`)
 - **`ticket_status_overrides`** — per-ticket model/thinking overrides per status (compound PK: `ticket_id, status_id`, both with `ON DELETE CASCADE`; nullable `model`, `thinking` columns)
+
+## Skills Architecture (pure filesystem)
+
+Skills are **pure filesystem packages** — there is no DB table for skills. The `skills` and `agent_skills` tables were removed in Ticket #146.
+
+- **Storage**: `{skills_folder_path}/{workflow_id}/{skill_name}/` for workflow-scoped skills, and `{skills_folder_path}/global/{skill_name}/` for global skills.
+- **Package contents**: Each directory contains a `SKILL.md` with YAML frontmatter (`name`, `description`) plus markdown body. Optional subdirectories (`examples/`, `tests/`, `schemas/`, `templates/`) are copied wholesale into agent sessions.
+- **Discovery**: `GET /api/skills?workflow_id=` scans both the workflow directory and the `global/` directory, returning `name`, `scope` (`workflow` or `global`), `description`, `subdirs`, and `used_by` (agent names that reference the skill).
+- **Agent association**: Agents store `skill_names` as a JSON text array directly in `agents.skill_names` (default `'[]'`). No junction table.
+- **Agent spawn resolution**: When spawning an agent, each `skill_name` is resolved to `{workflow_id}/{name}` first, then `global/{name}` fallback. If a referenced directory is missing, a warning comment is posted on the ticket and the skill is skipped.
+- **Import / Export**: `POST /api/skills/import` extracts a ZIP to the filesystem. `GET /api/skills/{name}/export` streams a skill directory as a ZIP. Workflow export no longer includes a `skills` section; agents export their `skill_names` array directly.
+- **Deletion**: `DELETE /api/skills/{name}?workflow_id=` removes the filesystem directory only. Workflow deletion still cleans up `{skills_folder}/{workflow_id}/` (existing code).
 
 ## Pre-built Default Workflow (8 Agents)
 
@@ -203,7 +215,7 @@ When a ticket is moved to a status with an agent assigned, or when a ticket is c
 1. `pi` is spawned as a background subprocess in the **board's** `working_directory`
 2. Command: `pi --system-prompt "<prompt>" --print --session-dir <dir> [--thinking <level>] [--model <model>] [--skill <skill-dir> ...] "<context>"`
 3. `--thinking` and `--model` are only included if an override is active at any level; resolution order: ticket override → status override → agent setting → `pi` CLI built-in defaults (lowest). Each field resolves independently.
-4. **Skills**: If the agent has associated skills, the full skill package directory is copied from `{skills_folder_path}/{workflow_id}/{name}/` into `{session_dir}/skills/{name}/`, and `--skill {session_dir}/skills/{name}` is appended to the `pi` CLI command for each skill. When no skills are configured, `--skill` is not passed, preserving pi's default behavior.
+4. **Skills**: If the agent has associated skills, the full skill package directory is copied from `{skills_folder_path}/{workflow_id}/{name}/` (with `{skills_folder_path}/global/{name}/` fallback) into `{session_dir}/skills/{name}/`, and `--skill {session_dir}/skills/{name}` is appended to the `pi` CLI command for each skill. When no skills are configured, `--skill` is not passed, preserving pi's default behavior. If a referenced skill directory is missing, a warning comment is posted on the ticket and the skill is skipped.
 5. The agent context message lists skill names and descriptions (read from each package's `SKILL.md` YAML frontmatter) under a "Skills available to you:" block.
 5. The **system prompt** contains only the agent's description plus two short directives: follow the goal at the end of the context message, and always add a comment when done
 6. The **context message** is structured with the most important directives at the tail end (recency bias) — see structure below
@@ -331,20 +343,20 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 | `/api/tickets/<id>` | GET/PUT | Get / update ticket |
 | `/api/tickets/<id>/comments` | GET/POST | List / add comment |
 
-### Skills (scoped by workflow)
+### Skills (filesystem-based, scoped by workflow)
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/api/skills?workflow_id=<id>` | GET | List skills for a workflow (reads from DB index; enriches with filesystem subdirs) |
-| `/api/skills` | POST | Create skill (requires `workflow_id`); writes package to filesystem, syncs index row |
-| `/api/skills/<id>` | GET/PUT/DELETE | Get / update / remove skill (GET reads `SKILL.md` from disk; PUT syncs filesystem; DELETE removes package dir) |
-| `/api/skills/import` | POST | Import skill from ZIP (multipart/form-data); extracts package to filesystem, syncs index row |
+| `/api/skills?workflow_id=<id>` | GET | List skills for a workflow (filesystem scan; returns `name`, `scope`, `description`, `subdirs`, `used_by`) |
+| `/api/skills/<name>/export?workflow_id=<id>` | GET | Export skill directory as ZIP (falls back to global scope) |
+| `/api/skills/<name>?workflow_id=<id>` | DELETE | Delete skill folder from filesystem |
+| `/api/skills/import` | POST | Import skill from ZIP (multipart/form-data); extracts package to filesystem |
 
 ### Agents (scoped by workflow)
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/api/agents?workflow_id=<id>` | GET | List agents for a workflow (includes `skills` array per agent) |
-| `/api/agents` | POST | Create agent (requires `workflow_id`, optional `skill_ids` array) |
-| `/api/agents/<id>` | GET/PUT/DELETE | Get / update / remove agent (`PUT` accepts optional `skill_ids` array; delete blocked if assigned to a status) |
+| `/api/agents?workflow_id=<id>` | GET | List agents for a workflow (includes `skill_names` array per agent) |
+| `/api/agents` | POST | Create agent (requires `workflow_id`, optional `skill_names` array) |
+| `/api/agents/<id>` | GET/PUT/DELETE | Get / update / remove agent (`PUT` accepts optional `skill_names` array; delete blocked if assigned to a status) |
 | `/api/endpoint-registry` | GET | List all API endpoint keys available for agent prompts (grouped by category) |
 | `/api/pi-models` | GET | List available models and thinking levels from the pi CLI |
 
@@ -420,12 +432,13 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 - **`subdirs`** (array of strings, read-only) — subdirectories inside the package (e.g. `examples`, `tests`, `schemas`)
 
 **Skill Package Architecture:**
-- Global path: `{skills_folder_path}/{workflow_id}/{skill_name}/`
+- Workflow-scoped path: `{skills_folder_path}/{workflow_id}/{skill_name}/`
+- Global path: `{skills_folder_path}/global/{skill_name}/`
 - `skills_folder_path` is a dynamic setting (DB key `skills_folder_path`, env `PI_SKILLS_FOLDER`, default `workspace/skills`)
 - Each package contains `SKILL.md` with YAML frontmatter (`name`, `description`) + markdown body
 - Optional subdirectories (`examples/`, `tests/`, `schemas/`, `templates/`) are copied wholesale into agent sessions
-- The DB `skills` table is an **index**, not the source of truth. On read, `SKILL.md` is parsed from disk; on write, the filesystem is updated first, then the DB row is synced.
-- ZIP import (`POST /api/skills/import`) extracts the package to the filesystem and creates the DB index row.
+- **There is no DB table for skills.** The filesystem is the source of truth. `GET /api/skills?workflow_id=` scans directories and reads `SKILL.md` from disk.
+- ZIP import (`POST /api/skills/import`) extracts the package to the filesystem.
 - Workflow deletion removes the entire `{skills_folder_path}/{workflow_id}/` directory.
 
 **Agent fields:**
@@ -434,7 +447,7 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 - `model` (string, nullable) — optional `--model` override for `pi`; `NULL` means use pi default
 - `thinking` (string, nullable) — optional `--thinking` level for `pi`; one of: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`; `NULL` means use pi default
 - `api_endpoints` (array of strings or null) — list of endpoint keys from `ENDPOINT_REGISTRY` to include in agent prompt; `NULL` uses defaults (`ticket_put`, `ticket_comments_post`, `ticket_questions_post`)
-- **`skills`** (array, read-only via JSON) — skills associated with this agent via `agent_skills` junction table
+- **`skill_names`** (array of strings, stored as JSON in `agents.skill_names` DEFAULT `'[]'`) — names of filesystem skill packages to attach to this agent
 - `workflow_id` (integer) — required
 
 **Status fields:**
@@ -480,16 +493,15 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
   "exported_at": "...",
   "name": "My Workflow",
   "description": "...",
-  "agents": [..., { "skill_ids": ["skill-name"] }],
+  "agents": [..., { "skill_names": ["skill-name"] }],
   "statuses": [...],
   "transitions": [...],
   "quality_gates": [...],
-  "skills": [...],
   "labels": [...]
 }
 ```
 
-**Import** — creates a **new workflow** from JSON. No existing data is deleted. If the name collides, a timestamp is appended. Skills are created before agents so that per-agent `skill_ids` references can be resolved.
+**Import** — creates a **new workflow** from JSON. No existing data is deleted. If the name collides, a timestamp is appended. Agents store `skill_names` directly; no skill creation step is required.
 
 ## Quality Gates
 

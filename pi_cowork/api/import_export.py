@@ -8,7 +8,6 @@ from flask import Blueprint, jsonify, request
 
 from pi_cowork.db import query_db, row_to_dict
 from pi_cowork.models import get_workflow
-from pi_cowork.skill_packages import get_skill_dir, read_skill_package, write_skill_package
 
 import_export_bp = Blueprint("import_export", __name__)
 
@@ -20,13 +19,9 @@ def api_export_workflow(workflow_id):
         return jsonify({"error": "Workflow not found"}), 404
     agents = query_db(
         """
-        SELECT a.name, a.description, a.model, a.thinking, a.api_endpoints,
-               GROUP_CONCAT(s.name) AS skill_names
+        SELECT a.name, a.description, a.model, a.thinking, a.api_endpoints, a.skill_names
         FROM agents a
-        LEFT JOIN agent_skills ask ON ask.agent_id = a.id
-        LEFT JOIN skills s ON s.id = ask.skill_id
         WHERE a.workflow_id = ?
-        GROUP BY a.id
         ORDER BY a.name
     """,
         (workflow_id,),
@@ -71,34 +66,18 @@ def api_export_workflow(workflow_id):
     """,
         (workflow_id,),
     )
-    skills_rows = query_db(
-        """
-        SELECT id, name, description, content, sort_order
-        FROM skills WHERE workflow_id = ?
-        ORDER BY sort_order, name
-    """,
-        (workflow_id,),
-    )
-    skills_export = []
-    for r in skills_rows:
-        d = row_to_dict(r)
-        pkg = read_skill_package(get_skill_dir(workflow_id, d["name"]))
-        if pkg:
-            d["description"] = pkg.get("description") or d.get("description")
-            d["content"] = pkg.get("content") or d.get("content")
-            d["subdirs"] = pkg.get("subdirs", [])
-        else:
-            d["subdirs"] = []
-        skills_export.append(d)
-    # Build agents with skill_ids
+    # Build agents with skill_names
     agents_export = []
     for a in agents:
         d = row_to_dict(a)
-        skill_names_str = d.pop("skill_names", None)
-        if skill_names_str:
-            d["skill_ids"] = [sn.strip() for sn in skill_names_str.split(",") if sn.strip()]
+        raw = d.pop("skill_names", None)
+        if raw:
+            try:
+                d["skill_names"] = json.loads(raw)
+            except (ValueError, TypeError):
+                d["skill_names"] = []
         else:
-            d["skill_ids"] = []
+            d["skill_names"] = []
         agents_export.append(d)
     payload = {
         "version": "1.0",
@@ -110,7 +89,6 @@ def api_export_workflow(workflow_id):
         "transitions": [row_to_dict(r) for r in transitions],
         "quality_gates": [row_to_dict(r) for r in quality_gates],
         "labels": [row_to_dict(r) for r in labels],
-        "skills": skills_export,
     }
     return jsonify(payload)
 
@@ -126,14 +104,12 @@ def api_import_workflow():  # noqa: C901
     agents_data = data.get("agents")
     statuses_data = data.get("statuses")
     transitions_data = data.get("transitions")
-    skills_data = data.get("skills", [])
     if (
         not isinstance(agents_data, list)
         or not isinstance(statuses_data, list)
         or not isinstance(transitions_data, list)
-        or not isinstance(skills_data, list)
     ):
-        return jsonify({"error": "agents, statuses, transitions, and skills must be arrays"}), 400
+        return jsonify({"error": "agents, statuses, and transitions must be arrays"}), 400
 
     defaults = [s for s in statuses_data if s.get("is_default")]
     if len(defaults) != 1:
@@ -154,13 +130,6 @@ def api_import_workflow():  # noqa: C901
         if ts not in status_names:
             return jsonify({"error": f"Transition references unknown to_status '{ts}'"}), 400
 
-    # Validate agent skill_ids reference known skills (if present)
-    skill_names = {sk.get("name") for sk in skills_data if sk.get("name")}
-    for a in agents_data:
-        for sk_id in a.get("skill_ids", []):
-            if sk_id not in skill_names:
-                return jsonify({"error": f"Agent '{a.get('name')}' references unknown skill '{sk_id}'"}), 400
-
     # Create new workflow
     wf_name = data.get("name", "Imported Workflow").strip()
     if not wf_name:
@@ -170,28 +139,12 @@ def api_import_workflow():  # noqa: C901
         wf_name = f"{wf_name} {datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
     wf_desc = (data.get("description") or "").strip() or None
 
-    # Actually we need the connection directly
     from pi_cowork.db import get_db
 
     db = get_db()
     try:
         cur = db.execute("INSERT INTO workflows (name, description) VALUES (?, ?)", (wf_name, wf_desc))
         workflow_id = cur.lastrowid
-
-        # Insert skills first (agents reference them)
-        skill_id_map = {}
-        for sk in skills_data:
-            name = sk.get("name", "").strip()
-            description = (sk.get("description") or "").strip() or None
-            content = sk.get("content") or ""
-            sort_order = int(sk.get("sort_order", 0))
-            cur = db.execute(
-                "INSERT INTO skills (workflow_id, name, description, content, sort_order) VALUES (?, ?, ?, ?, ?)",
-                (workflow_id, name, description, content, sort_order),
-            )
-            skill_id_map[name] = cur.lastrowid
-            # Create filesystem package so DB stays in sync with source of truth
-            write_skill_package(get_skill_dir(workflow_id, name), name, description, content)
 
         # Insert agents
         agent_id_map = {}
@@ -202,19 +155,14 @@ def api_import_workflow():  # noqa: C901
             thinking = a.get("thinking") or None
             api_endpoints = a.get("api_endpoints")
             api_endpoints_json = json.dumps(api_endpoints) if isinstance(api_endpoints, list) else None
+            skill_names = a.get("skill_names", [])
+            skill_names_json = json.dumps(skill_names) if isinstance(skill_names, list) else None
             cur = db.execute(
-                "INSERT INTO agents (name, description, workflow_id, model, thinking, api_endpoints) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (name, description, workflow_id, model, thinking, api_endpoints_json),
+                "INSERT INTO agents (name, description, workflow_id, model, thinking, api_endpoints, skill_names) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (name, description, workflow_id, model, thinking, api_endpoints_json, skill_names_json),
             )
             agent_id_map[name] = cur.lastrowid
-            # Rebuild agent_skills associations
-            for sk_name in a.get("skill_ids", []):
-                if sk_name in skill_id_map:
-                    db.execute(
-                        "INSERT INTO agent_skills (agent_id, skill_id) VALUES (?, ?)",
-                        (agent_id_map[name], skill_id_map[sk_name]),
-                    )
 
         # Insert statuses
         status_id_map = {}
@@ -297,6 +245,5 @@ def api_import_workflow():  # noqa: C901
             "transitions": len(transitions_data),
             "quality_gates": gate_count,
             "labels": len(labels_data),
-            "skills": len(skills_data),
         }
     ), 200

@@ -139,144 +139,31 @@ def delete_ticket_status_override(ticket_id, status_id):
 
 
 # ---------------------------------------------------------------------------
-# Skills
+# Skills (filesystem as source of truth)
 # ---------------------------------------------------------------------------
 
-from pi_cowork.skill_packages import (  # noqa: E402
-    delete_skill_package,
-    get_skill_dir,
-    read_skill_package,
-    rename_skill_package,
-    write_skill_package,
-)
+
+def get_agent_skill_names(agent_id):
+    """Return the list of skill names stored on the agent row."""
+    row = query_db("SELECT skill_names FROM agents WHERE id = ?", (agent_id,), one=True)
+    if not row or not row["skill_names"]:
+        return []
+    try:
+        names = json.loads(row["skill_names"])
+        return names if isinstance(names, list) else []
+    except (ValueError, TypeError):
+        return []
 
 
-def get_skills(workflow_id):
-    rows = query_db("SELECT * FROM skills WHERE workflow_id = ? ORDER BY sort_order, name", (workflow_id,))
-    result = []
-    for r in rows:
-        d = row_to_dict(r)
-        pkg = read_skill_package(get_skill_dir(workflow_id, d["name"]))
-        if pkg:
-            d["description"] = pkg.get("description") or d.get("description")
-            d["content"] = pkg.get("content") or d.get("content")
-            d["subdirs"] = pkg.get("subdirs", [])
-        else:
-            d["subdirs"] = []
-        result.append(d)
-    return result
-
-
-def get_skill(skill_id):
-    row = query_db("SELECT * FROM skills WHERE id = ?", (skill_id,), one=True)
-    if not row:
-        return None
-    d = row_to_dict(row)
-    pkg = read_skill_package(get_skill_dir(d["workflow_id"], d["name"]))
-    if pkg:
-        d["description"] = pkg.get("description") or d.get("description")
-        d["content"] = pkg.get("content") or d.get("content")
-        d["subdirs"] = pkg.get("subdirs", [])
-    else:
-        d["subdirs"] = []
-    return d
-
-
-def create_skill(workflow_id, name, description, content, sort_order=0):
-    skill_dir = get_skill_dir(workflow_id, name)
-    write_skill_package(skill_dir, name, description, content)
-    cur = run_db(
-        "INSERT INTO skills (workflow_id, name, description, content, sort_order) VALUES (?, ?, ?, ?, ?)",
-        (workflow_id, name.strip(), (description or "").strip() or None, content, sort_order),
-    )
-    return get_skill(cur.lastrowid)
-
-
-def update_skill(skill_id, name=None, description=None, content=None, sort_order=None):
-    skill = get_skill(skill_id)
-    if not skill:
-        return None
-    old_name = skill["name"]
-    old_workflow_id = skill["workflow_id"]
-    new_name = name.strip() if name is not None else old_name
-
-    # Rename filesystem package before updating DB so we fail early on collision
-    if name is not None and new_name != old_name:
-        old_dir = get_skill_dir(old_workflow_id, old_name)
-        new_dir = get_skill_dir(old_workflow_id, new_name)
-        if os.path.exists(new_dir):
-            raise sqlite3.IntegrityError("Skill name already exists in this workflow")
-        if os.path.exists(old_dir):
-            renamed = rename_skill_package(old_dir, new_name)
-            if renamed is None:
-                raise sqlite3.IntegrityError("Skill name already exists in this workflow")
-
-    updates = []
-    args = []
-    if name is not None:
-        updates.append("name = ?")
-        args.append(new_name)
-    if description is not None:
-        updates.append("description = ?")
-        args.append((description or "").strip() or None)
-    if content is not None:
-        updates.append("content = ?")
-        args.append(content)
-    if sort_order is not None:
-        updates.append("sort_order = ?")
-        args.append(sort_order)
-    if not updates:
-        return skill
-    args.append(skill_id)
-    run_db(f"UPDATE skills SET {', '.join(updates)} WHERE id = ?", tuple(args))  # noqa: S608
-
-    # Sync filesystem SKILL.md with latest metadata
-    skill_dir = get_skill_dir(old_workflow_id, new_name)
-    write_skill_package(
-        skill_dir,
-        new_name,
-        description if description is not None else skill.get("description"),
-        content if content is not None else skill.get("content"),
-    )
-    return get_skill(skill_id)
-
-
-def delete_skill(skill_id):
-    skill = get_skill(skill_id)
-    if skill:
-        delete_skill_package(get_skill_dir(skill["workflow_id"], skill["name"]))
-    run_db("DELETE FROM skills WHERE id = ?", (skill_id,))
-
-
-def get_agent_skills(agent_id):
-    rows = query_db(
-        """SELECT s.* FROM skills s
-           JOIN agent_skills ask ON ask.skill_id = s.id
-           WHERE ask.agent_id = ?
-           ORDER BY s.sort_order, s.name""",
-        (agent_id,),
-    )
-    return [row_to_dict(r) for r in rows]
-
-
-def set_agent_skills(agent_id, skill_ids):
-    """Replace an agent's skills with the given list of skill IDs."""
-    if not isinstance(skill_ids, list):
+def set_agent_skill_names(agent_id, names):
+    """Replace an agent's skill names with the given list of strings."""
+    if not isinstance(names, list):
         return False
-    run_db("DELETE FROM agent_skills WHERE agent_id = ?", (agent_id,))
-    if skill_ids:
-        placeholders = ",".join("?" * len(skill_ids))
-        # Validate that skill_ids belong to the same workflow as the agent
-        agent = get_agent(agent_id)
-        if agent:
-            valid = query_db(
-                f"SELECT id FROM skills WHERE workflow_id = ? AND id IN ({placeholders})",  # noqa: S608
-                (agent["workflow_id"], *skill_ids),
-            )
-            valid_ids = {r["id"] for r in valid}
-            for sid in valid_ids:
-                with contextlib.suppress(Exception):
-                    run_db("INSERT INTO agent_skills (agent_id, skill_id) VALUES (?, ?)", (agent_id, sid))
+    cleaned = [str(n).strip() for n in names if str(n).strip()]
+    run_db(
+        "UPDATE agents SET skill_names = ? WHERE id = ?",
+        (json.dumps(cleaned), agent_id),
+    )
     return True
 
 
@@ -1025,8 +912,6 @@ def cleanup_old_notification_dismissals(max_age_days=None):
 
     Returns the number of rows deleted.
     """
-    import os
-    import sqlite3
     from datetime import datetime, timedelta
 
     from pi_cowork.config import get_config

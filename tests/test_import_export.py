@@ -1,5 +1,4 @@
 import json
-import os
 
 
 def test_export_workflow(client, default_workflow):
@@ -11,20 +10,19 @@ def test_export_workflow(client, default_workflow):
     assert isinstance(data["agents"], list)
     assert isinstance(data["statuses"], list)
     assert isinstance(data["transitions"], list)
-    assert isinstance(data["skills"], list)
-    # Should have the seeded agents
+    # Skills no longer included in export
+    assert "skills" not in data
     agent_names = [a["name"] for a in data["agents"]]
     assert "Researcher" in agent_names
     assert "Developer" in agent_names
 
 
-def test_import_workflow_with_skills(client):
+def test_import_workflow_with_skill_names(client):
     workflow_json = {
         "version": "1.0",
         "name": "Skills Import Workflow",
         "description": "Testing skills import",
-        "skills": [{"name": "pytest-skill", "description": "d", "content": "## hello", "sort_order": 1}],
-        "agents": [{"name": "SkilledAgent", "description": "d", "skill_ids": ["pytest-skill"]}],
+        "agents": [{"name": "SkilledAgent", "description": "d", "skill_names": ["pytest-skill"]}],
         "statuses": [
             {
                 "name": "Start",
@@ -48,32 +46,11 @@ def test_import_workflow_with_skills(client):
     res = client.post("/api/workflows/import", json=workflow_json)
     assert res.status_code == 200
     data = json.loads(res.data)
-    assert data["skills"] == 1
     assert data["agents"] == 1
 
-    # Verify skills and associations
     wf_id = data["workflow_id"]
-    skills = json.loads(client.get(f"/api/skills?workflow_id={wf_id}").data)
-    assert len(skills) == 1
-    assert skills[0]["name"] == "pytest-skill"
-
     agents = json.loads(client.get(f"/api/agents?workflow_id={wf_id}").data)
-    assert len(agents[0]["skills"]) == 1
-    assert agents[0]["skills"][0]["name"] == "pytest-skill"
-
-
-def test_import_rejects_unknown_skill_ref(client):
-    workflow_json = {
-        "version": "1.0",
-        "name": "Bad Skills",
-        "skills": [],
-        "agents": [{"name": "A1", "description": "d", "skill_ids": ["nonexistent-skill"]}],
-        "statuses": [{"name": "S1", "sort_order": 1, "is_default": True, "is_terminal": False, "agent_name": None}],
-        "transitions": [],
-    }
-    res = client.post("/api/workflows/import", json=workflow_json)
-    assert res.status_code == 400
-    assert b"unknown skill" in res.data
+    assert agents[0]["skill_names"] == ["pytest-skill"]
 
 
 def test_export_nonexistent_workflow(client):
@@ -116,7 +93,6 @@ def test_import_workflow(client):
     assert data["statuses"] == 2
     assert data["transitions"] == 1
 
-    # Verify the workflow was created
     wf_res = client.get(f"/api/workflows/{data['workflow_id']}")
     wf = json.loads(wf_res.data)
     assert wf["name"] == "Imported Test Workflow"
@@ -132,16 +108,13 @@ def test_import_workflow_duplicate_name(client):
         ],
         "transitions": [],
     }
-    # First import
     res = client.post("/api/workflows/import", json=workflow_json)
     assert res.status_code == 200
-    # Second import with same name should succeed with a unique name
     res = client.post("/api/workflows/import", json=workflow_json)
     assert res.status_code == 200
     data = json.loads(res.data)
     assert data["workflow_id"]
 
-    # Verify both workflows exist
     wf_list = json.loads(client.get("/api/workflows").data)
     names = [w["name"] for w in wf_list]
     assert any("Duplicate Workflow" in n for n in names)
@@ -194,12 +167,18 @@ def test_import_workflow_invalid_status_ref(client):
 
 
 def test_import_export_roundtrip(client):
-    # Create a simple workflow
     workflow_json = {
         "version": "1.0",
         "name": "Roundtrip Workflow",
         "description": "Testing roundtrip",
-        "agents": [{"name": "RTAgent", "description": "Roundtrip agent", "working_directory": "/tmp/rt"}],  # noqa: S108
+        "agents": [
+            {
+                "name": "RTAgent",
+                "description": "Roundtrip agent",
+                "working_directory": "/tmp/rt",  # noqa: S108
+                "skill_names": ["my-skill"],
+            }
+        ],  # noqa: S108
         "statuses": [
             {
                 "name": "Open",
@@ -224,20 +203,28 @@ def test_import_export_roundtrip(client):
     assert res.status_code == 200
     wf_id = json.loads(res.data)["workflow_id"]
 
-    # Export it
     res = client.get(f"/api/workflows/{wf_id}/export")
     exported = json.loads(res.data)
 
-    # Verify structure matches
     assert exported["name"] == "Roundtrip Workflow"
     assert exported["description"] == "Testing roundtrip"
     assert len(exported["agents"]) == 1
     assert exported["agents"][0]["name"] == "RTAgent"
+    assert exported["agents"][0]["skill_names"] == ["my-skill"]
     assert len(exported["statuses"]) == 2
     assert exported["statuses"][0]["name"] == "Open"
     assert exported["statuses"][0]["agent_name"] == "RTAgent"
     assert len(exported["transitions"]) == 1
     assert exported["transitions"][0]["from_status_name"] == "Open"
+
+    # Re-import from exported JSON
+    exported["name"] = "Roundtrip Workflow Reimport"
+    res2 = client.post("/api/workflows/import", json=exported)
+    assert res2.status_code == 200
+    wf_id2 = json.loads(res2.data)["workflow_id"]
+
+    agents = json.loads(client.get(f"/api/agents?workflow_id={wf_id2}").data)
+    assert agents[0]["skill_names"] == ["my-skill"]
 
 
 # ---------------------------------------------------------------------------
@@ -246,7 +233,6 @@ def test_import_export_roundtrip(client):
 
 
 def test_export_includes_status_model_and_thinking(client, default_workflow):
-    # Create an agent and a status with model/thinking
     agent = client.post(
         "/api/agents",
         json={
@@ -278,7 +264,6 @@ def test_export_includes_status_model_and_thinking(client, default_workflow):
     assert status["model"] == "gpt-4o"
     assert status["thinking"] == "high"
 
-    # Status without overrides should have null model/thinking
     backlog = next(s for s in data["statuses"] if s["name"] == "Backlog")
     assert backlog["model"] is None
     assert backlog["thinking"] is None
@@ -348,7 +333,6 @@ def test_import_export_roundtrip_with_status_model_thinking(client):
     assert res.status_code == 200
     wf_id = json.loads(res.data)["workflow_id"]
 
-    # Export and verify
     res = client.get(f"/api/workflows/{wf_id}/export")
     exported = json.loads(res.data)
     s1 = next(s for s in exported["statuses"] if s["name"] == "S1")
@@ -358,7 +342,6 @@ def test_import_export_roundtrip_with_status_model_thinking(client):
     assert s2["model"] is None
     assert s2["thinking"] is None
 
-    # Re-import from exported JSON
     exported["name"] = "Status MT Roundtrip Reimport"
     res2 = client.post("/api/workflows/import", json=exported)
     assert res2.status_code == 200
@@ -371,64 +354,3 @@ def test_import_export_roundtrip_with_status_model_thinking(client):
     s2_re = next(s for s in statuses if s["name"] == "S2")
     assert s2_re["model"] is None
     assert s2_re["thinking"] is None
-
-
-def test_import_creates_filesystem_packages(client, temp_skills_folder):
-    """Importing a workflow with skills must create filesystem packages."""
-    workflow_json = {
-        "version": "1.0",
-        "name": "Filesystem Skills Workflow",
-        "skills": [
-            {
-                "name": "fs-skill",
-                "description": "Filesystem skill",
-                "content": "## FS Skill\n\nDetails.",
-                "sort_order": 1,
-            }
-        ],
-        "agents": [],
-        "statuses": [
-            {"name": "S1", "sort_order": 1, "is_default": True, "is_terminal": False, "agent_name": None},
-        ],
-        "transitions": [],
-    }
-    res = client.post("/api/workflows/import", json=workflow_json)
-    assert res.status_code == 200
-    wf_id = json.loads(res.data)["workflow_id"]
-
-    skill_dir = os.path.join(temp_skills_folder, str(wf_id), "fs-skill")
-    assert os.path.isdir(skill_dir)
-    skill_md = os.path.join(skill_dir, "SKILL.md")
-    assert os.path.isfile(skill_md)
-    with open(skill_md) as f:
-        content = f.read()
-    assert "name: fs-skill" in content
-    assert "Filesystem skill" in content
-    assert "## FS Skill" in content
-
-
-def test_export_includes_subdirs(client, new_workflow, temp_skills_folder):
-    """Export must include subdirs read from the filesystem package."""
-    # Create a skill with subdirectories
-    res = client.post(
-        "/api/skills",
-        json={
-            "workflow_id": new_workflow["id"],
-            "name": "export-subdir-skill",
-            "description": "desc",
-            "content": "content",
-        },
-    )
-    assert res.status_code == 201
-    json.loads(res.data)
-
-    skill_dir = os.path.join(temp_skills_folder, str(new_workflow["id"]), "export-subdir-skill")
-    os.makedirs(os.path.join(skill_dir, "examples"))
-    os.makedirs(os.path.join(skill_dir, "schemas"))
-
-    res = client.get(f"/api/workflows/{new_workflow['id']}/export")
-    assert res.status_code == 200
-    exported = json.loads(res.data)
-    sk = next(s for s in exported["skills"] if s["name"] == "export-subdir-skill")
-    assert "subdirs" in sk
-    assert sorted(sk["subdirs"]) == ["examples", "schemas"]
