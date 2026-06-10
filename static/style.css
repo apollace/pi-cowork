@@ -2481,6 +2481,42 @@ textarea.edit-input { resize: vertical; min-height: 2.5rem; }
   cursor: not-allowed;
 }
 
+.assistant-quick-config {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-elevated);
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.assistant-quick-config-field {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.assistant-quick-config-field label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.assistant-quick-config-field select {
+  flex: 1;
+  min-width: 0;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
 .assistant-settings {
   display: none;
   flex-direction: column;
