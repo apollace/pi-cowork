@@ -1,4 +1,4 @@
-"""Tests for directory-based skills system (Ticket #143)."""
+"""Tests for directory-based skills system (Ticket #143 / #146)."""
 
 import io
 import json
@@ -9,20 +9,12 @@ import pytest
 
 
 @pytest.fixture
-def sample_skill(client, new_workflow):
-    res = client.post(
-        "/api/skills",
-        json={
-            "workflow_id": new_workflow["id"],
-            "name": "test-skill",
-            "description": "A test skill",
-            "content": "## Test Skill\n\nThis is a test.",
-            "sort_order": 1,
-        },
-    )
-    assert res.status_code == 201
-    data = json.loads(res.data)
-    return data, new_workflow
+def sample_skill(client, new_workflow, temp_skills_folder):
+    skill_dir = os.path.join(temp_skills_folder, str(new_workflow["id"]), "test-skill")
+    os.makedirs(skill_dir, exist_ok=True)
+    with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: test-skill\ndescription: A test skill\n---\n\n## Test Skill\n\nThis is a test.")
+    return {"name": "test-skill", "workflow_id": new_workflow["id"]}, new_workflow
 
 
 def test_skill_package_filesystem_roundtrip(client, sample_skill, temp_skills_folder):
@@ -45,44 +37,45 @@ def test_skill_package_read_from_disk(client, sample_skill, temp_skills_folder):
     # Modify on disk
     with open(skill_md, "w") as f:
         f.write("---\nname: test-skill\ndescription: modified\n---\n\nModified content.")
-    res = client.get(f"/api/skills/{skill['id']}")
+    res = client.get(f"/api/skills?workflow_id={workflow['id']}")
     assert res.status_code == 200
     data = json.loads(res.data)
-    assert data["description"] == "modified"
-    assert data["content"] == "Modified content."
+    assert len(data) == 1
+    assert data[0]["description"] == "modified"
 
 
 def test_skill_package_rename_move_dir(client, sample_skill, temp_skills_folder):
     skill, workflow = sample_skill
     old_dir = os.path.join(temp_skills_folder, str(workflow["id"]), "test-skill")
     assert os.path.isdir(old_dir)
-    res = client.put(f"/api/skills/{skill['id']}", json={"name": "renamed-skill"})
-    assert res.status_code == 200
     new_dir = os.path.join(temp_skills_folder, str(workflow["id"]), "renamed-skill")
+    os.rename(old_dir, new_dir)
     assert os.path.isdir(new_dir)
     assert not os.path.isdir(old_dir)
     skill_md = os.path.join(new_dir, "SKILL.md")
     with open(skill_md) as f:
         content = f.read()
-    assert "name: renamed-skill" in content
+    assert "name: test-skill" in content
 
 
 def test_skill_package_update_content(client, sample_skill, temp_skills_folder):
     skill, workflow = sample_skill
-    res = client.put(f"/api/skills/{skill['id']}", json={"content": "Updated body."})
-    assert res.status_code == 200
     skill_dir = os.path.join(temp_skills_folder, str(workflow["id"]), "test-skill")
     skill_md = os.path.join(skill_dir, "SKILL.md")
-    with open(skill_md) as f:
-        content = f.read()
-    assert "Updated body." in content
+    with open(skill_md, "w") as f:
+        f.write("---\nname: test-skill\ndescription: A test skill\n---\n\nUpdated body.")
+    res = client.get(f"/api/skills?workflow_id={workflow['id']}")
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    assert len(data) == 1
+    assert data[0]["description"] == "A test skill"
 
 
 def test_skill_package_delete_removes_dir(client, sample_skill, temp_skills_folder):
     skill, workflow = sample_skill
     skill_dir = os.path.join(temp_skills_folder, str(workflow["id"]), "test-skill")
     assert os.path.isdir(skill_dir)
-    res = client.delete(f"/api/skills/{skill['id']}")
+    res = client.delete(f"/api/skills/test-skill?workflow_id={workflow['id']}")
     assert res.status_code == 200
     assert not os.path.exists(skill_dir)
 
@@ -100,7 +93,6 @@ def test_skill_package_subdirs(client, sample_skill, temp_skills_folder):
 
 
 def test_skill_import_zip_success(client, new_workflow, temp_skills_folder):
-    # Build a ZIP in memory
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr(
@@ -122,7 +114,6 @@ def test_skill_import_zip_success(client, new_workflow, temp_skills_folder):
     assert data["content"] == "ZIP content here."
     assert data["subdirs"] == ["examples"]
 
-    # Verify filesystem
     skill_dir = os.path.join(temp_skills_folder, str(new_workflow["id"]), "zip-skill")
     assert os.path.isdir(skill_dir)
     assert os.path.isfile(os.path.join(skill_dir, "examples", "demo.py"))
@@ -164,7 +155,6 @@ def test_skill_import_zip_missing_skill_md(client, new_workflow):
 
 def test_skill_import_zip_duplicate_name(client, sample_skill, new_workflow):
     skill, workflow = sample_skill
-    # skill is named "test-skill" in workflow
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr(
@@ -213,8 +203,6 @@ def test_skill_setting_default(monkeypatch):
     from pi_cowork.config import get_config
 
     monkeypatch.delenv("PI_SKILLS_FOLDER", raising=False)
-    # Clear any monkeypatch on get_skills_folder so this test
-    # sees the real get_config fallback chain.
     import pi_cowork.skill_packages as _sp
 
     original = _sp.get_skills_folder
@@ -230,26 +218,16 @@ def test_skill_setting_env_override(monkeypatch, tmp_path):
 
     test_dir = str(tmp_path / "skills-test")
     monkeypatch.setenv("PI_SKILLS_FOLDER", test_dir)
-    # get_config reads env dynamically each call
     assert get_config("skills_folder_path") == test_dir
 
 
 def test_spawn_agent_copies_skill_directory(client, default_workflow, default_board, temp_skills_folder):
     from unittest.mock import patch
 
-    skill_res = client.post(
-        "/api/skills",
-        json={
-            "workflow_id": default_workflow["id"],
-            "name": "dir-skill",
-            "description": "Dir skill",
-            "content": "## Dir Skill",
-        },
-    )
-    skill_data = json.loads(skill_res.data)
-
-    # Add extra file to the global skill package
     skill_dir = os.path.join(temp_skills_folder, str(default_workflow["id"]), "dir-skill")
+    os.makedirs(skill_dir, exist_ok=True)
+    with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: dir-skill\ndescription: Dir skill\n---\n\n## Dir Skill")
     with open(os.path.join(skill_dir, "examples.txt"), "w") as f:
         f.write("example data")
 
@@ -259,7 +237,7 @@ def test_spawn_agent_copies_skill_directory(client, default_workflow, default_bo
             "name": "DirSkillAgent",
             "description": "You are a dir skill agent.",
             "workflow_id": default_workflow["id"],
-            "skill_ids": [skill_data["id"]],
+            "skill_names": ["dir-skill"],
         },
     )
     aid = json.loads(agent.data)["id"]
@@ -294,6 +272,7 @@ def test_spawn_agent_copies_skill_directory(client, default_workflow, default_bo
         res = client.put(f"/api/tickets/{tid}", json={"status_id": sid})
         assert res.status_code == 200
 
+    assert "--skill" in captured_cmd
     idx = captured_cmd.index("--skill")
     session_skill_dir = captured_cmd[idx + 1]
     assert session_skill_dir.endswith("dir-skill")
@@ -304,17 +283,57 @@ def test_spawn_agent_copies_skill_directory(client, default_workflow, default_bo
     assert "name: dir-skill" in data
 
 
-def test_workflow_delete_cleans_skills_folder(client, new_workflow, temp_skills_folder):
-    res = client.post(
-        "/api/skills",
+def test_spawn_agent_missing_skill_warning(client, default_workflow, default_board, temp_skills_folder):
+    from unittest.mock import patch
+
+    agent = client.post(
+        "/api/agents",
         json={
-            "workflow_id": new_workflow["id"],
-            "name": "wf-skill",
-            "description": "desc",
-            "content": "content",
+            "name": "MissingSkillAgent",
+            "description": "You are a missing skill agent.",
+            "workflow_id": default_workflow["id"],
+            "skill_names": ["nonexistent-skill"],
         },
     )
-    assert res.status_code == 201
+    aid = json.loads(agent.data)["id"]
+
+    s1 = client.post(
+        "/api/statuses",
+        json={
+            "name": "MissingSkillStage",
+            "sort_order": 1,
+            "agent_id": aid,
+            "workflow_id": default_workflow["id"],
+        },
+    )
+    sid = json.loads(s1.data)["id"]
+
+    ticket = client.post(
+        "/api/tickets",
+        json={"title": "Missing Skill Ticket", "board_id": default_board["id"]},
+    )
+    tid = json.loads(ticket.data)["id"]
+
+    def capture_popen(cmd, **kwargs):
+        class FakeProc:
+            pid = 9999
+
+        return FakeProc()
+
+    with patch("app.subprocess.Popen", side_effect=capture_popen):
+        res = client.put(f"/api/tickets/{tid}", json={"status_id": sid})
+        assert res.status_code == 200
+
+    comments = json.loads(client.get(f"/api/tickets/{tid}/comments").data)
+    bodies = [c["body"] for c in comments]
+    assert any("Missing skill packages" in b for b in bodies)
+
+
+def test_workflow_delete_cleans_skills_folder(client, new_workflow, temp_skills_folder):
+    skill_dir = os.path.join(temp_skills_folder, str(new_workflow["id"]), "wf-skill")
+    os.makedirs(skill_dir, exist_ok=True)
+    with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: wf-skill\n---\n\nContent.")
     wf_dir = os.path.join(temp_skills_folder, str(new_workflow["id"]))
     assert os.path.isdir(wf_dir)
 
@@ -328,7 +347,6 @@ def test_parse_frontmatter_with_dashes_in_body(client, sample_skill, temp_skills
     skill, workflow = sample_skill
     skill_dir = os.path.join(temp_skills_folder, str(workflow["id"]), "test-skill")
     skill_md = os.path.join(skill_dir, "SKILL.md")
-    # Write content that contains --- inside the body
     body_with_dashes = "Some text\n---\nMore text after separator"
     with open(skill_md, "w") as f:
         f.write(f"---\nname: test-skill\ndescription: A test skill\n---\n\n{body_with_dashes}")

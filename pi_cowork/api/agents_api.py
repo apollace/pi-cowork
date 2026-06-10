@@ -8,7 +8,7 @@ from flask import Blueprint, jsonify, request
 from pi_cowork.api.pi_models import get_model_ids, get_thinking_levels
 from pi_cowork.api_docs import _REGISTRY_MAP
 from pi_cowork.db import query_db, row_to_dict, run_db
-from pi_cowork.models import get_agent, get_agent_skills, get_workflow, set_agent_skills
+from pi_cowork.models import get_agent, get_agent_skill_names, get_workflow, set_agent_skill_names
 
 agents_api_bp = Blueprint("agents_api", __name__)
 
@@ -22,7 +22,7 @@ def api_agents():
     result = []
     for r in rows:
         agent = row_to_dict(r)
-        agent["skills"] = get_agent_skills(agent["id"])
+        agent["skill_names"] = get_agent_skill_names(agent["id"])
         result.append(agent)
     return jsonify(result)
 
@@ -69,9 +69,9 @@ def api_create_agent():
             (name, description, workflow_id, model, thinking, api_endpoints_json),
         )
         agent_id = cur.lastrowid
-        skill_ids = data.get("skill_ids")
-        if skill_ids is not None and isinstance(skill_ids, list):
-            set_agent_skills(agent_id, skill_ids)
+        skill_names = data.get("skill_names")
+        if skill_names is not None and isinstance(skill_names, list):
+            set_agent_skill_names(agent_id, skill_names)
         return jsonify({"id": agent_id}), 201
     except sqlite3.IntegrityError:
         return jsonify({"error": "Agent name already exists"}), 409
@@ -83,7 +83,7 @@ def api_get_agent(agent_id):
     if not agent:
         return jsonify({"error": "Agent not found"}), 404
     agent = dict(agent)
-    agent["skills"] = get_agent_skills(agent_id)
+    agent["skill_names"] = get_agent_skill_names(agent_id)
     return jsonify(agent)
 
 
@@ -141,9 +141,9 @@ def api_update_agent(agent_id):
     if error:
         return error
     if not updates:
-        skill_ids = data.get("skill_ids")
-        if skill_ids is not None and isinstance(skill_ids, list):
-            set_agent_skills(agent_id, skill_ids)
+        skill_names = data.get("skill_names")
+        if skill_names is not None and isinstance(skill_names, list):
+            set_agent_skill_names(agent_id, skill_names)
             return jsonify({"success": True})
         return jsonify({"error": "No fields to update"}), 400
     args.append(agent_id)
@@ -151,9 +151,9 @@ def api_update_agent(agent_id):
         run_db(f"UPDATE agents SET {', '.join(updates)} WHERE id = ?", tuple(args))  # noqa: S608
     except sqlite3.IntegrityError:
         return jsonify({"error": "Agent name already exists"}), 409
-    skill_ids = data.get("skill_ids")
-    if skill_ids is not None and isinstance(skill_ids, list):
-        set_agent_skills(agent_id, skill_ids)
+    skill_names = data.get("skill_names")
+    if skill_names is not None and isinstance(skill_names, list):
+        set_agent_skill_names(agent_id, skill_names)
     return jsonify({"success": True})
 
 

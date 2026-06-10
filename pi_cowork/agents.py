@@ -20,7 +20,7 @@ from pi_cowork.models import (
     add_comment,
     count_unanswered_questions,
     get_agent,
-    get_agent_skills,
+    get_agent_skill_names,
     get_board,
     get_comments,
     get_quality_gates,
@@ -483,34 +483,32 @@ def spawn_agent(ticket, status, agent, old_status_id=None):  # noqa: C901
         knowledge_block = "\n".join(lines)
 
     # ── Skills integration (must run before context_msg is built) ──
-    from pi_cowork.skill_packages import copy_skill_to_session, get_skill_dir, read_skill_package
+    from pi_cowork.skill_packages import copy_skill_to_session, read_skill_package, resolve_skill_dir
 
-    skills = get_agent_skills(agent["id"])
+    skill_names = get_agent_skill_names(agent["id"])
     skill_args = []
     skill_meta_lines = []
-    for sk in skills:
-        global_skill_dir = get_skill_dir(workflow_id, sk["name"])
-        session_skill_dir = os.path.join(session_dir, "skills", sk["name"])
+    missing_skills = []
+    for name in skill_names:
+        skill_dir = resolve_skill_dir(workflow_id, name)
+        session_skill_dir = os.path.join(session_dir, "skills", name)
 
-        if os.path.isdir(global_skill_dir):
-            copy_skill_to_session(global_skill_dir, session_skill_dir)
+        if skill_dir and os.path.isdir(skill_dir):
+            copy_skill_to_session(skill_dir, session_skill_dir)
+            skill_args += ["--skill", session_skill_dir]
+            pkg = read_skill_package(session_skill_dir)
+            if pkg:
+                skill_meta_lines.append(f"- {pkg['name']}: {pkg.get('description') or 'No description'}")
+            else:
+                skill_meta_lines.append(f"- {name}: No description")
         else:
-            # Legacy fallback: write SKILL.md from DB content when no package exists
-            Path(session_skill_dir).mkdir(parents=True, exist_ok=True)
-            skill_md_path = os.path.join(session_skill_dir, "SKILL.md")
-            skill_body = (
-                f"---\nname: {sk['name']}\ndescription: {sk.get('description') or ''}\n---\n\n{sk['content'] or ''}"
-            )
-            with open(skill_md_path, "w", encoding="utf-8") as f:
-                f.write(skill_body)
+            missing_skills.append(name)
 
-        skill_args += ["--skill", session_skill_dir]
-
-        pkg = read_skill_package(session_skill_dir)
-        if pkg:
-            skill_meta_lines.append(f"- {pkg['name']}: {pkg.get('description') or 'No description'}")
-        else:
-            skill_meta_lines.append(f"- {sk['name']}: {sk.get('description') or 'No description'}")
+    if missing_skills:
+        add_comment(
+            ticket_id,
+            f"⚠️ Missing skill packages for: {', '.join(missing_skills)}. Skipped.",
+        )
 
     skills_block = ""
     if skill_meta_lines:

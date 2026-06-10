@@ -283,13 +283,23 @@ ENDPOINT_REGISTRY = [
         ],
     },
     {
-        "key": "skill_get",
+        "key": "skill_export",
         "category": "Skills",
         "method": "GET",
-        "path_template": "/api/skills/{skill_id}",
-        "label": "get skill details",
+        "path_template": "/api/skills/{name}/export",
+        "label": "export skill as ZIP (query: workflow_id)",
         "doc_lines": [
-            "- GET {base_url}/api/skills/{skill_id} → get skill details",
+            "- GET {base_url}/api/skills/{name}/export?workflow_id={workflow_id} → download skill ZIP",
+        ],
+    },
+    {
+        "key": "skill_delete",
+        "category": "Skills",
+        "method": "DELETE",
+        "path_template": "/api/skills/{name}",
+        "label": "delete skill folder (query: workflow_id)",
+        "doc_lines": [
+            "- DELETE {base_url}/api/skills/{name}?workflow_id={workflow_id} → remove skill folder",
         ],
     },
     # ── Labels ──

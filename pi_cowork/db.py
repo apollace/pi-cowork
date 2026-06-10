@@ -382,35 +382,30 @@ def _migrate(db):
             "seed_notification_dismissal_retention_days",
             "INSERT OR IGNORE INTO settings (key, value) VALUES ('notification_dismissal_retention_days', '7')",
         ),
-        # Ticket #133 — Skills support
-        (
-            "create_skills_table",
-            """
-            CREATE TABLE IF NOT EXISTS skills (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
-                name TEXT NOT NULL,
-                description TEXT,
-                content TEXT NOT NULL,
-                sort_order INTEGER NOT NULL DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(name, workflow_id)
-            )
-        """,
-        ),
-        (
-            "create_agent_skills_table",
-            """
-            CREATE TABLE IF NOT EXISTS agent_skills (
-                agent_id INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-                skill_id INTEGER NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
-                PRIMARY KEY (agent_id, skill_id)
-            )
-        """,
-        ),
-        ("idx_skills_workflow_id", "CREATE INDEX IF NOT EXISTS idx_skills_workflow_id ON skills(workflow_id)"),
         # Ticket #84 — Store ticket status_id in agent_runs
         ("add_agent_runs_status_id", "ALTER TABLE agent_runs ADD COLUMN status_id INTEGER"),
+        # Ticket #146 — Refactor skills to pure filesystem packages
+        ("add_agents_skill_names", "ALTER TABLE agents ADD COLUMN skill_names TEXT DEFAULT '[]'"),
+        (
+            "migrate_agent_skills_to_json",
+            """
+            UPDATE agents
+            SET skill_names = (
+                SELECT COALESCE('[' || GROUP_CONCAT('"' || s.name || '"') || ']', '[]')
+                FROM agent_skills ask
+                JOIN skills s ON s.id = ask.skill_id
+                WHERE ask.agent_id = agents.id
+            )
+            WHERE EXISTS (
+                SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_skills'
+            ) AND EXISTS (
+                SELECT 1 FROM sqlite_master WHERE type='table' AND name='skills'
+            )
+            """,
+        ),
+        ("drop_skills_table", "DROP TABLE IF EXISTS skills"),
+        ("drop_agent_skills_table", "DROP TABLE IF EXISTS agent_skills"),
+        ("drop_idx_skills_workflow_id", "DROP INDEX IF EXISTS idx_skills_workflow_id"),
     ]
     for name, sql in migrations:
         already_applied = db.execute("SELECT 1 FROM _migrations WHERE name = ?", (name,)).fetchone()
@@ -420,8 +415,8 @@ def _migrate(db):
             db.execute(sql)
         except sqlite3.OperationalError as e:
             err = str(e).lower()
-            if "duplicate column" in err or "already exists" in err:
-                pass  # Column/table already present on a pre-migration DB
+            if "duplicate column" in err or "already exists" in err or "no such table" in err:
+                pass  # Column/table already present or table already dropped on a pre-migration DB
             else:
                 raise
         db.execute("INSERT INTO _migrations (name) VALUES (?)", (name,))
