@@ -4,8 +4,193 @@ import io
 import json
 import os
 import zipfile
+from unittest.mock import patch
 
 import pytest
+
+from pi_cowork.skill_packages import (
+    parse_github_url,
+    import_skill_from_github,
+)
+
+
+def _make_skill_zip_bytes(name="github-skill", description="GitHub skill"):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(
+            "SKILL.md",
+            f"---\nname: {name}\ndescription: {description}\n---\n\nContent.",
+        )
+    buf.seek(0)
+    return buf.read()
+
+
+def _make_github_zipball_bytes(skill_name="github-skill", subpath="", description="GitHub skill"):
+    """Create a zipball that mimics GitHub's zipball format (single top-level dir)."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        prefix = "owner-repo-abc123/"
+        if subpath:
+            prefix += subpath.rstrip("/") + "/"
+        zf.writestr(
+            prefix + "SKILL.md",
+            f"---\nname: {skill_name}\ndescription: {description}\n---\n\nContent.",
+        )
+    buf.seek(0)
+    return buf.read()
+
+
+class FakeHTTPResponse:
+    def __init__(self, body_bytes):
+        self._body = body_bytes
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+
+class TestParseGitHubUrl:
+    @pytest.mark.parametrize("url,expected", [
+        ("github.com/owner/repo", ("owner", "repo", None)),
+        ("https://github.com/owner/repo.git", ("owner", "repo", None)),
+        ("https://github.com/owner/repo/tree/main/sub/folder", ("owner", "repo", "sub/folder")),
+        ("http://www.github.com/owner/repo/blob/main/sub/folder", ("owner", "repo", "sub/folder")),
+        ("github.com/owner/repo/", ("owner", "repo", None)),
+    ])
+    def test_valid_urls(self, url, expected):
+        assert parse_github_url(url) == expected
+
+    @pytest.mark.parametrize("url", [
+        "https://gitlab.com/owner/repo",
+        "not-a-url",
+        "github.com/",
+        "github.com/owner",
+    ])
+    def test_invalid_urls(self, url):
+        with pytest.raises(ValueError):
+            parse_github_url(url)
+
+
+class TestImportSkillFromGitHub:
+    def test_import_skill_from_github_whole_repo(self, temp_skills_folder):
+        zip_bytes = _make_github_zipball_bytes("gh-skill")
+        with patch("urllib.request.urlopen", return_value=FakeHTTPResponse(zip_bytes)):
+            info, error = import_skill_from_github("https://github.com/owner/repo", workflow_id=None)
+        assert error is None
+        assert info["name"] == "gh-skill"
+        skill_dir = os.path.join(temp_skills_folder, "global", "gh-skill")
+        assert os.path.isdir(skill_dir)
+
+    def test_import_skill_from_github_subpath(self, temp_skills_folder):
+        zip_bytes = _make_github_zipball_bytes("gh-sub-skill", subpath="skills/my-skill")
+        with patch("urllib.request.urlopen", return_value=FakeHTTPResponse(zip_bytes)):
+            info, error = import_skill_from_github("https://github.com/owner/repo/tree/main/skills/my-skill", workflow_id=None)
+        assert error is None
+        assert info["name"] == "gh-sub-skill"
+        skill_dir = os.path.join(temp_skills_folder, "global", "gh-sub-skill")
+        assert os.path.isdir(skill_dir)
+
+    def test_import_skill_from_github_404(self):
+        from urllib.error import HTTPError
+        with patch("urllib.request.urlopen", side_effect=HTTPError(None, 404, "Not Found", None, None)):
+            info, error = import_skill_from_github("https://github.com/owner/repo", workflow_id=None)
+        assert info is None
+        assert "not found" in error.lower()
+
+    def test_import_skill_from_github_403(self):
+        from urllib.error import HTTPError
+        with patch("urllib.request.urlopen", side_effect=HTTPError(None, 403, "Forbidden", None, None)):
+            info, error = import_skill_from_github("https://github.com/owner/repo", workflow_id=None)
+        assert info is None
+        assert "rate limit" in error.lower() or "denied" in error.lower()
+
+    def test_import_skill_from_github_missing_skill_md(self, temp_skills_folder):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("owner-repo-abc123/sub/README.md", "Hello")
+        zip_bytes = buf.getvalue()
+        with patch("urllib.request.urlopen", return_value=FakeHTTPResponse(zip_bytes)):
+            info, error = import_skill_from_github("https://github.com/owner/repo/tree/main/sub", workflow_id=None)
+        assert info is None
+        assert "SKILL.md" in error
+
+    def test_import_skill_from_github_duplicate(self, temp_skills_folder):
+        skill_dir = os.path.join(temp_skills_folder, "global", "dup-gh-skill")
+        os.makedirs(skill_dir, exist_ok=True)
+        with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+            f.write("---\nname: dup-gh-skill\n---\n\nContent.")
+        zip_bytes = _make_github_zipball_bytes("dup-gh-skill")
+        with patch("urllib.request.urlopen", return_value=FakeHTTPResponse(zip_bytes)):
+            info, error = import_skill_from_github("https://github.com/owner/repo", workflow_id=None)
+        assert info is None
+        assert "already exists" in error.lower()
+
+    def test_import_skill_from_github_invalid_url(self):
+        info, error = import_skill_from_github("https://gitlab.com/owner/repo", workflow_id=None)
+        assert info is None
+        assert "Invalid GitHub URL" in error
+
+
+class TestImportSkillGitHubAPI:
+    def test_api_import_skill_github_global(self, client, temp_skills_folder):
+        zip_bytes = _make_github_zipball_bytes("api-gh-skill")
+        with patch("urllib.request.urlopen", return_value=FakeHTTPResponse(zip_bytes)):
+            res = client.post("/api/skills/import-github", json={"url": "https://github.com/owner/repo"})
+        assert res.status_code == 201
+        data = json.loads(res.data)
+        assert data["name"] == "api-gh-skill"
+        skill_dir = os.path.join(temp_skills_folder, "global", "api-gh-skill")
+        assert os.path.isdir(skill_dir)
+
+    def test_api_import_skill_github_workflow(self, client, new_workflow, temp_skills_folder):
+        zip_bytes = _make_github_zipball_bytes("api-gh-wf-skill")
+        with patch("urllib.request.urlopen", return_value=FakeHTTPResponse(zip_bytes)):
+            res = client.post("/api/skills/import-github", json={"url": "https://github.com/owner/repo", "workflow_id": new_workflow["id"]})
+        assert res.status_code == 201
+        data = json.loads(res.data)
+        assert data["name"] == "api-gh-wf-skill"
+        skill_dir = os.path.join(temp_skills_folder, str(new_workflow["id"]), "api-gh-wf-skill")
+        assert os.path.isdir(skill_dir)
+
+    def test_api_import_skill_github_missing_url(self, client):
+        res = client.post("/api/skills/import-github", json={})
+        assert res.status_code == 400
+        assert b"url is required" in res.data
+
+    def test_api_import_skill_github_repo_not_found(self, client):
+        from urllib.error import HTTPError
+        with patch("urllib.request.urlopen", side_effect=HTTPError(None, 404, "Not Found", None, None)):
+            res = client.post("/api/skills/import-github", json={"url": "https://github.com/owner/repo"})
+        assert res.status_code == 404
+        assert b"not found" in res.data.lower()
+
+    def test_api_import_skill_github_rate_limit(self, client):
+        from urllib.error import HTTPError
+        with patch("urllib.request.urlopen", side_effect=HTTPError(None, 403, "Forbidden", None, None)):
+            res = client.post("/api/skills/import-github", json={"url": "https://github.com/owner/repo"})
+        assert res.status_code == 400
+        assert b"rate limit" in res.data.lower() or b"denied" in res.data.lower()
+
+    def test_api_import_skill_github_duplicate(self, client, temp_skills_folder):
+        skill_dir = os.path.join(temp_skills_folder, "global", "dup-api-gh")
+        os.makedirs(skill_dir, exist_ok=True)
+        with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+            f.write("---\nname: dup-api-gh\n---\n\nContent.")
+        zip_bytes = _make_github_zipball_bytes("dup-api-gh")
+        with patch("urllib.request.urlopen", return_value=FakeHTTPResponse(zip_bytes)):
+            res = client.post("/api/skills/import-github", json={"url": "https://github.com/owner/repo"})
+        assert res.status_code == 409
+        assert b"already exists" in res.data
+
+    def test_api_import_skill_github_invalid_workflow_id(self, client):
+        res = client.post("/api/skills/import-github", json={"url": "https://github.com/owner/repo", "workflow_id": "not-an-int"})
+        assert res.status_code == 400
+        assert b"workflow_id must be an integer" in res.data
 
 
 @pytest.fixture

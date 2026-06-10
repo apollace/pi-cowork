@@ -12,6 +12,7 @@ from pi_cowork.skill_packages import (
     get_built_in_skills_folder,
     get_skill_dir,
     get_skills_folder,
+    import_skill_from_github,
     import_skill_from_zip,
     is_built_in_skill,
     list_skills,
@@ -41,6 +42,33 @@ def api_skills():
     for sk in skills:
         sk["used_by"] = used_by.get(sk["name"], [])
     return jsonify(skills)
+
+
+@skills_bp.route("/api/skills/import-github", methods=["POST"])
+def api_import_skill_github():
+    data = request.get_json(silent=True) or {}
+    url = data.get("url", "").strip()
+    workflow_id = data.get("workflow_id")
+    if workflow_id is not None:
+        try:
+            workflow_id = int(workflow_id)
+        except (ValueError, TypeError):
+            return jsonify({"error": "workflow_id must be an integer"}), 400
+
+    if not url:
+        return jsonify({"error": "url is required"}), 400
+
+    skill_info, error = import_skill_from_github(url, workflow_id)
+    if error:
+        if "already exists" in error.lower():
+            status = 409
+        elif "not found" in error.lower():
+            status = 404
+        else:
+            status = 400
+        return jsonify({"error": error}), status
+
+    return jsonify(skill_info), 201
 
 
 @skills_bp.route("/api/skills/import", methods=["POST"])
