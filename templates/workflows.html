@@ -411,6 +411,15 @@ async function loadWorkflowDetail(id) {
   // Cache agents/statuses/skills for forms
   workflowsData[id] = { ...workflowsData[id], agents, statuses, transitions, gates, labels, skills };
 
+  // Build reverse mapping: skill_id -> agent names
+  const skillAgents = {};
+  for (const a of agents) {
+    for (const s of (a.skills || [])) {
+      if (!skillAgents[s.id]) skillAgents[s.id] = [];
+      skillAgents[s.id].push(a.name);
+    }
+  }
+
   let boardsHtml = '';
   if (wfBoards.length > 0) {
     boardsHtml = `
@@ -435,6 +444,7 @@ async function loadWorkflowDetail(id) {
           <div class="wf-card agent-card">
             <div class="wf-card-name">🤖 ${escapeHtml(a.name)}${a.model ? ' 📦 ' + escapeHtml(a.model) : ''}${a.thinking ? ' 🧠 ' + escapeHtml(a.thinking) : ''}</div>
             <div class="wf-card-desc">${escapeHtml(a.description)}</div>
+            ${(a.skills && a.skills.length) ? `<div class="wf-card-skills">${a.skills.map(s => `<span class="badge muted">${escapeHtml(s.name)}</span>`).join(' ')}</div>` : ''}
             <div class="wf-card-actions">
               <button class="btn small ghost" onclick="showAgentEdit(${a.id}, ${id})">✏️</button>
               <button class="btn small ghost danger-text" onclick="deleteAgent(${a.id}, ${id})">🗑️</button>
@@ -524,12 +534,13 @@ async function loadWorkflowDetail(id) {
       ${skills.length === 0 ? '<p class="empty-sm">No skills yet.</p>' : `
       <div class="table-wrapper" style="margin-top:0.5rem;">
         <table class="data-table">
-          <thead><tr><th>Name</th><th>Description</th><th>Sort</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Description</th><th>Agents</th><th>Sort</th><th></th></tr></thead>
           <tbody>
             ${skills.map(sk => `
               <tr>
                 <td><strong>${escapeHtml(sk.name)}</strong>${sk.subdirs && sk.subdirs.length ? '<br><span class="badge muted">' + sk.subdirs.join(', ') + '</span>' : ''}</td>
                 <td>${escapeHtml(sk.description || '—')}</td>
+                <td>${(skillAgents[sk.id] || []).map(n => `<span class="badge muted">${escapeHtml(n)}</span>`).join(' ') || '—'}</td>
                 <td>${sk.sort_order}</td>
                 <td class="row-actions">
                   <button class="btn small ghost" onclick="showSkillEdit(${sk.id}, ${id})">✏️</button>
@@ -1456,6 +1467,11 @@ loadWorkflows();
     display: flex;
     gap: 0.3rem;
     justify-content: flex-end;
+  }
+  .wf-card-skills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
   }
 
   .empty-sm {

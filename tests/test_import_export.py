@@ -1,4 +1,5 @@
 import json
+import os
 
 
 def test_export_workflow(client, default_workflow):
@@ -370,3 +371,64 @@ def test_import_export_roundtrip_with_status_model_thinking(client):
     s2_re = next(s for s in statuses if s["name"] == "S2")
     assert s2_re["model"] is None
     assert s2_re["thinking"] is None
+
+
+def test_import_creates_filesystem_packages(client, temp_skills_folder):
+    """Importing a workflow with skills must create filesystem packages."""
+    workflow_json = {
+        "version": "1.0",
+        "name": "Filesystem Skills Workflow",
+        "skills": [
+            {
+                "name": "fs-skill",
+                "description": "Filesystem skill",
+                "content": "## FS Skill\n\nDetails.",
+                "sort_order": 1,
+            }
+        ],
+        "agents": [],
+        "statuses": [
+            {"name": "S1", "sort_order": 1, "is_default": True, "is_terminal": False, "agent_name": None},
+        ],
+        "transitions": [],
+    }
+    res = client.post("/api/workflows/import", json=workflow_json)
+    assert res.status_code == 200
+    wf_id = json.loads(res.data)["workflow_id"]
+
+    skill_dir = os.path.join(temp_skills_folder, str(wf_id), "fs-skill")
+    assert os.path.isdir(skill_dir)
+    skill_md = os.path.join(skill_dir, "SKILL.md")
+    assert os.path.isfile(skill_md)
+    with open(skill_md) as f:
+        content = f.read()
+    assert "name: fs-skill" in content
+    assert "Filesystem skill" in content
+    assert "## FS Skill" in content
+
+
+def test_export_includes_subdirs(client, new_workflow, temp_skills_folder):
+    """Export must include subdirs read from the filesystem package."""
+    # Create a skill with subdirectories
+    res = client.post(
+        "/api/skills",
+        json={
+            "workflow_id": new_workflow["id"],
+            "name": "export-subdir-skill",
+            "description": "desc",
+            "content": "content",
+        },
+    )
+    assert res.status_code == 201
+    json.loads(res.data)
+
+    skill_dir = os.path.join(temp_skills_folder, str(new_workflow["id"]), "export-subdir-skill")
+    os.makedirs(os.path.join(skill_dir, "examples"))
+    os.makedirs(os.path.join(skill_dir, "schemas"))
+
+    res = client.get(f"/api/workflows/{new_workflow['id']}/export")
+    assert res.status_code == 200
+    exported = json.loads(res.data)
+    sk = next(s for s in exported["skills"] if s["name"] == "export-subdir-skill")
+    assert "subdirs" in sk
+    assert sorted(sk["subdirs"]) == ["examples", "schemas"]

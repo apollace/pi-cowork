@@ -38,11 +38,18 @@ def _parse_frontmatter(text):
     """
     if not text.startswith("---"):
         return {}, text
-    parts = text.split("---", 2)
-    if len(parts) < 3:
+    lines = text.splitlines()
+    if lines[0].strip() != "---":
         return {}, text
-    fm_text = parts[1].strip()
-    content = parts[2].strip()
+    end_idx = None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            end_idx = i
+            break
+    if end_idx is None:
+        return {}, text
+    fm_text = "\n".join(lines[1:end_idx]).strip()
+    content = "\n".join(lines[end_idx + 1 :]).strip()
     meta = {}
     for line in fm_text.splitlines():
         line = line.strip()
@@ -54,9 +61,14 @@ def _parse_frontmatter(text):
         key = key.strip()
         val = val.strip()
         if val.startswith('"') and val.endswith('"'):
-            val = val[1:-1].replace('\\"', '"')
+            val = val[1:-1]
+            # Unescape basic sequences: \\ -> \, \" -> ", \n -> newline, \r -> carriage return
+            val = val.replace("\\\\", "\x00").replace('\\"', '"').replace("\\n", "\n").replace("\\r", "\r")
+            val = val.replace("\x00", "\\")
         elif val.startswith("'") and val.endswith("'"):
-            val = val[1:-1].replace("\\'", "'")
+            val = val[1:-1]
+            val = val.replace("\\\\", "\x00").replace("\\'", "'").replace("\\n", "\n").replace("\\r", "\r")
+            val = val.replace("\x00", "\\")
         meta[key] = val
     return meta, content
 
@@ -94,7 +106,8 @@ def write_skill_package(skill_dir, name, description, content):
     Path(skill_dir).mkdir(parents=True, exist_ok=True)
     lines = ["---", f"name: {name}"]
     if description:
-        safe_desc = description.replace('"', '\\"')
+        # Proper YAML inline-string escaping
+        safe_desc = description.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
         lines.append(f'description: "{safe_desc}"')
     else:
         lines.append('description: ""')

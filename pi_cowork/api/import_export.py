@@ -8,6 +8,7 @@ from flask import Blueprint, jsonify, request
 
 from pi_cowork.db import query_db, row_to_dict
 from pi_cowork.models import get_workflow
+from pi_cowork.skill_packages import get_skill_dir, read_skill_package, write_skill_package
 
 import_export_bp = Blueprint("import_export", __name__)
 
@@ -70,14 +71,25 @@ def api_export_workflow(workflow_id):
     """,
         (workflow_id,),
     )
-    skills = query_db(
+    skills_rows = query_db(
         """
-        SELECT name, description, content, sort_order
+        SELECT id, name, description, content, sort_order
         FROM skills WHERE workflow_id = ?
         ORDER BY sort_order, name
     """,
         (workflow_id,),
     )
+    skills_export = []
+    for r in skills_rows:
+        d = row_to_dict(r)
+        pkg = read_skill_package(get_skill_dir(workflow_id, d["name"]))
+        if pkg:
+            d["description"] = pkg.get("description") or d.get("description")
+            d["content"] = pkg.get("content") or d.get("content")
+            d["subdirs"] = pkg.get("subdirs", [])
+        else:
+            d["subdirs"] = []
+        skills_export.append(d)
     # Build agents with skill_ids
     agents_export = []
     for a in agents:
@@ -98,7 +110,7 @@ def api_export_workflow(workflow_id):
         "transitions": [row_to_dict(r) for r in transitions],
         "quality_gates": [row_to_dict(r) for r in quality_gates],
         "labels": [row_to_dict(r) for r in labels],
-        "skills": [row_to_dict(r) for r in skills],
+        "skills": skills_export,
     }
     return jsonify(payload)
 
@@ -178,6 +190,8 @@ def api_import_workflow():  # noqa: C901
                 (workflow_id, name, description, content, sort_order),
             )
             skill_id_map[name] = cur.lastrowid
+            # Create filesystem package so DB stays in sync with source of truth
+            write_skill_package(get_skill_dir(workflow_id, name), name, description, content)
 
         # Insert agents
         agent_id_map = {}

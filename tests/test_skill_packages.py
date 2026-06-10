@@ -321,3 +321,36 @@ def test_workflow_delete_cleans_skills_folder(client, new_workflow, temp_skills_
     del_res = client.delete(f"/api/workflows/{new_workflow['id']}")
     assert del_res.status_code == 200
     assert not os.path.exists(wf_dir)
+
+
+def test_parse_frontmatter_with_dashes_in_body(client, sample_skill, temp_skills_folder):
+    """--- inside markdown body must not be mistaken for frontmatter delimiter."""
+    skill, workflow = sample_skill
+    skill_dir = os.path.join(temp_skills_folder, str(workflow["id"]), "test-skill")
+    skill_md = os.path.join(skill_dir, "SKILL.md")
+    # Write content that contains --- inside the body
+    body_with_dashes = "Some text\n---\nMore text after separator"
+    with open(skill_md, "w") as f:
+        f.write(f"---\nname: test-skill\ndescription: A test skill\n---\n\n{body_with_dashes}")
+
+    from pi_cowork.skill_packages import read_skill_package
+
+    pkg = read_skill_package(skill_dir)
+    assert pkg["name"] == "test-skill"
+    assert pkg["description"] == "A test skill"
+    assert pkg["content"] == body_with_dashes
+
+
+def test_write_skill_package_newlines_and_quotes(client, sample_skill, temp_skills_folder):
+    """Descriptions with newlines, quotes, and backslashes round-trip correctly."""
+    skill, workflow = sample_skill
+    skill_dir = os.path.join(temp_skills_folder, str(workflow["id"]), "test-skill")
+
+    from pi_cowork.skill_packages import read_skill_package, write_skill_package
+
+    desc = 'Line one\nLine two\nSay "hello" and \\ backslash'
+    write_skill_package(skill_dir, "test-skill", desc, "content")
+    pkg = read_skill_package(skill_dir)
+    assert pkg["name"] == "test-skill"
+    assert pkg["description"] == desc
+    assert pkg["content"] == "content"
