@@ -137,7 +137,7 @@ Skills are **pure filesystem packages** — there is no DB table for skills. The
 - **Discovery**: `GET /api/skills?workflow_id=` scans the workflow directory, the `global/` directory, and the built-in directory, returning `name`, `scope` (`workflow`, `global`, or `system`), `description`, `subdirs`, and `used_by` (agent names that reference the skill). Names are deduplicated with precedence: workflow > global > built-in. Omitting `workflow_id` returns **only global skills** (no workflow or built-in skills).
 - **Agent association**: Agents store `skill_names` as a JSON text array directly in `agents.skill_names` (default `'[]'`). No junction table.
 - **Agent spawn resolution**: When spawning an agent, each `skill_name` is resolved to `{workflow_id}/{name}` first, then `global/{name}` fallback, then the built-in directory. If a referenced directory is missing, a warning comment is posted on the ticket and the skill is skipped.
-- **Import / Export**: `POST /api/skills/import` extracts a ZIP to the filesystem. Provide `workflow_id` to import into a workflow scope; omit it to import into the global scope. `GET /api/skills/{name}/export` streams a skill directory as a ZIP, falling back to global and then built-in. Workflow export no longer includes a `skills` section; agents export their `skill_names` array directly.
+- **Import / Export**: `POST /api/skills/import` extracts a ZIP to the filesystem. `POST /api/skills/import-github` downloads a public GitHub repo (or subpath) as a zipball and imports it. Provide `workflow_id` to import into a workflow scope; omit for **global scope**. `GET /api/skills/{name}/export` streams a skill directory as a ZIP, falling back to global and then built-in. Workflow export no longer includes a `skills` section; agents export their `skill_names` array directly.
 - **Deletion**: `DELETE /api/skills/{name}?workflow_id=` removes the filesystem directory only. Provide `workflow_id` to delete a workflow-scoped skill; omit it to delete a global skill. Built-in skills cannot be deleted (returns 403). Workflow deletion still cleans up `{skills_folder}/{workflow_id}/` (existing code).
 
 ## Pre-built Default Workflow (8 Agents)
@@ -350,6 +350,7 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 | `/api/skills/<name>/export?workflow_id=<id>` | GET | Export skill directory as ZIP (falls back to global scope, then built-in) |
 | `/api/skills/<name>?workflow_id=<id>` | DELETE | Delete skill folder from filesystem. Omit `workflow_id` to delete from **global scope**. |
 | `/api/skills/import` | POST | Import skill from ZIP (multipart/form-data). Provide `workflow_id` for workflow scope; omit for **global scope**. |
+| `/api/skills/import-github` | POST | Import skill from a public GitHub repository (JSON body: `url`, optional `workflow_id`). URL may point to repo root or a `tree/branch/subpath`. |
 
 ### Agents (scoped by workflow)
 | Route | Method | Description |

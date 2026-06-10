@@ -282,21 +282,23 @@ def download_github_repo(owner, repo):
     Raises ConnectionError for other network / HTTP errors.
     """
     url = f"https://api.github.com/repos/{owner}/{repo}/zipball"
-    req = urllib.request.Request(
+    if not url.startswith("https://"):
+        raise ValueError("Only HTTPS URLs are supported")
+    req = urllib.request.Request(  # noqa: S310
         url,
         headers={"User-Agent": "pi-cowork/github-skill-importer"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
             return resp.read()
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
-            raise LookupError(f"Repository {owner}/{repo} not found")
+            raise LookupError(f"Repository {owner}/{repo} not found") from exc
         if exc.code == 403:
-            raise PermissionError("GitHub API rate limit or access denied")
-        raise ConnectionError(f"GitHub download failed: HTTP {exc.code}")
+            raise PermissionError("GitHub API rate limit or access denied") from exc
+        raise ConnectionError(f"GitHub download failed: HTTP {exc.code}") from exc
     except urllib.error.URLError as exc:
-        raise ConnectionError(f"Network error: {exc.reason}")
+        raise ConnectionError(f"Network error: {exc.reason}") from exc
 
 
 def import_skill_from_github(url, workflow_id=None):
@@ -340,7 +342,10 @@ def import_skill_from_github(url, workflow_id=None):
 
         # If a subpath was specified, navigate into it
         if subpath:
-            target = os.path.join(root_dir, subpath)
+            target = os.path.normpath(os.path.join(root_dir, subpath))
+            norm_root = os.path.normpath(root_dir) + os.sep
+            if not target.startswith(norm_root) and target != os.path.normpath(root_dir):
+                return None, "Invalid subpath"
             if not os.path.isdir(target):
                 return None, f"Subpath '{subpath}' not found in repository"
             root_dir = target
