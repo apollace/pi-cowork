@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Observations — pi-CoWork{% endblock %}
+
+{% block content %}
+<div class="system-logs-page">
+  <h2>🔍 Observations</h2>
+
+  <div class="logs-filters">
+    <div class="filter-row">
+      <label>
+        Ticket ID
+        <input type="number" id="filter-ticket-id" placeholder="e.g. 37" min="1">
+      </label>
+
+      <label>
+        Type
+        <input type="text" id="filter-type" placeholder="e.g. agent.failed">
+      </label>
+
+      <label>
+        From
+        <input type="datetime-local" id="filter-date-from">
+      </label>
+
+      <label>
+        To
+        <input type="datetime-local" id="filter-date-to">
+      </label>
+
+      <label>
+        Search
+        <input type="text" id="filter-search" placeholder="Search title or body...">
+      </label>
+    </div>
+
+    <div class="filter-actions">
+      <button class="btn" onclick="loadObservations()">Apply Filters</button>
+      <button class="btn ghost" onclick="clearFilters()">Clear</button>
+    </div>
+  </div>
+
+  <div class="logs-table-container">
+    <table class="logs-table">
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Source</th>
+          <th>Type</th>
+          <th>Title</th>
+          <th>Body</th>
+          <th>Ticket</th>
+          <th>Run</th>
+        </tr>
+      </thead>
+      <tbody id="obs-tbody">
+        <tr><td colspan="7" class="logs-empty">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="logs-pagination" id="obs-pagination"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  let currentPage = 1;
+  let totalPages = 1;
+  const perPage = 50;
+
+  function getFilters() {
+    const params = new URLSearchParams();
+    const ticketId = document.getElementById('filter-ticket-id').value;
+    const type = document.getElementById('filter-type').value;
+    const dateFrom = document.getElementById('filter-date-from').value;
+    const dateTo = document.getElementById('filter-date-to').value;
+    const search = document.getElementById('filter-search').value;
+
+    if (ticketId) params.set('ticket_id', ticketId);
+    if (type) params.set('type', type);
+    if (dateFrom) params.set('date_from', dateFrom + ':00');
+    if (dateTo) params.set('date_to', dateTo + ':59');
+    if (search) params.set('search', search);
+    return params;
+  }
+
+  window.loadObservations = function(page) {
+    if (page) currentPage = page;
+    const params = getFilters();
+    params.set('page', currentPage);
+    params.set('per_page', perPage);
+
+    fetch('/api/observations?' + params.toString())
+      .then(res => res.json())
+      .then(data => {
+        const tbody = document.getElementById('obs-tbody');
+        if (!data.observations || data.observations.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="logs-empty">No observations found</td></tr>';
+          document.getElementById('obs-pagination').innerHTML = '';
+          return;
+        }
+
+        currentPage = data.page;
+        totalPages = data.total_pages;
+
+        tbody.innerHTML = data.observations.map(obs => {
+          const ticketLink = obs.ticket_id ? `<a href="/ticket/${obs.ticket_id}">#${obs.ticket_id}</a>` : '';
+          const runLink = obs.agent_run_id ? `<a href="/api/agent_runs/${obs.agent_run_id}/log">Run #${obs.agent_run_id}</a>` : '';
+          const sourceBadge = `<span class="type-badge">${escapeHtml(obs.source_table)}</span>`;
+          const bodyPreview = obs.body ? escapeHtml(obs.body.substring(0, 200)) + (obs.body.length > 200 ? '...' : '') : '';
+          return `<tr>
+            <td>${escapeHtml(obs.created_at || '')}</td>
+            <td>${sourceBadge}</td>
+            <td>${escapeHtml(obs.type || '')}</td>
+            <td>${escapeHtml(obs.title || '')}</td>
+            <td class="details-cell" title="${escapeHtml(obs.body || '')}">${bodyPreview}</td>
+            <td>${ticketLink}</td>
+            <td>${runLink}</td>
+          </tr>`;
+        }).join('');
+
+        renderPagination(data.total, data.page, data.total_pages);
+      })
+      .catch(err => {
+        console.error('Failed to load observations:', err);
+        document.getElementById('obs-tbody').innerHTML = '<tr><td colspan="7" class="logs-empty">Error loading observations</td></tr>';
+      });
+  };
+
+  function renderPagination(total, page, total_pages) {
+    const container = document.getElementById('obs-pagination');
+    if (total_pages <= 1) {
+      container.innerHTML = `<span class="page-info">${total} observation entries</span>`;
+      return;
+    }
+    let html = '';
+    html += `<button class="btn small" ${page <= 1 ? 'disabled' : ''} onclick="loadObservations(${page - 1})">← Prev</button>`;
+
+    const maxButtons = 7;
+    let startPage = Math.max(1, page - Math.floor(maxButtons / 2));
+    let endPage = Math.min(total_pages, startPage + maxButtons - 1);
+    if (endPage - startPage < maxButtons - 1) {
+      startPage = Math.max(1, endPage - maxButtons + 1);
+    }
+
+    if (startPage > 1) {
+      html += `<button class="btn small" onclick="loadObservations(1)">1</button>`;
+      if (startPage > 2) html += `<span class="page-info">...</span>`;
+    }
+    for (let i = startPage; i <= endPage; i++) {
+      html += `<button class="btn small ${i === page ? 'primary' : ''}" onclick="loadObservations(${i})">${i}</button>`;
+    }
+    if (endPage < total_pages) {
+      if (endPage < total_pages - 1) html += `<span class="page-info">...</span>`;
+      html += `<button class="btn small" onclick="loadObservations(${total_pages})">${total_pages}</button>`;
+    }
+
+    html += `<button class="btn small" ${page >= total_pages ? 'disabled' : ''} onclick="loadObservations(${page + 1})">Next →</button>`;
+    html += `<span class="page-info">${total} entries · Page ${page} of ${total_pages}</span>`;
+    container.innerHTML = html;
+  }
+
+  window.clearFilters = function() {
+    document.getElementById('filter-ticket-id').value = '';
+    document.getElementById('filter-type').value = '';
+    document.getElementById('filter-date-from').value = '';
+    document.getElementById('filter-date-to').value = '';
+    document.getElementById('filter-search').value = '';
+    currentPage = 1;
+    loadObservations(1);
+  };
+
+  // Load initial data
+  loadObservations(1);
+})();
+</script>
+{% endblock %}

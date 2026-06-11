@@ -12,6 +12,7 @@ from pi_cowork.api.import_export import import_export_bp
 from pi_cowork.api.knowledge import knowledge_bp
 from pi_cowork.api.labels import labels_bp
 from pi_cowork.api.notifications import notifications_bp
+from pi_cowork.api.observations import observations_bp
 from pi_cowork.api.pi_models import pi_models_bp
 from pi_cowork.api.quality_gates import quality_gates_bp
 from pi_cowork.api.questions import questions_bp
@@ -40,6 +41,7 @@ ALL_BLUEPRINTS = [
     gate_reviews_bp,
     agent_runs_bp,
     notifications_bp,
+    observations_bp,
     settings_bp,
     import_export_bp,
     system_logs_bp,
