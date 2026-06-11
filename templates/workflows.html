@@ -82,6 +82,10 @@
         <legend>Skills</legend>
         <div id="agent-skills-checkboxes"></div>
       </fieldset>
+      <fieldset class="skills-fieldset" id="agent-excluded-skills-fieldset" style="display:none;">
+        <legend>Excluded Skills (built-in)</legend>
+        <div id="agent-excluded-skills-checkboxes"></div>
+      </fieldset>
       <div class="form-actions">
         <button type="submit" class="btn primary">Save</button>
         <button type="button" class="btn" onclick="hideAgentModal()">Cancel</button>
@@ -816,6 +820,7 @@ async function showAgentCreate(workflowId) {
   await loadEndpointRegistry();
   renderEndpointCheckboxes(null);
   renderAgentSkillCheckboxes(workflowId, []);
+  renderAgentExcludedSkillCheckboxes(workflowId, []);
   openModal('agent-modal');
 }
 async function showAgentEdit(agentId, workflowId) {
@@ -843,6 +848,8 @@ async function showAgentEdit(agentId, workflowId) {
   renderEndpointCheckboxes(epKeys);
   const selectedSkillNames = agent.skill_names || [];
   renderAgentSkillCheckboxes(workflowId, selectedSkillNames);
+  const excludedSkillNames = agent.excluded_skill_names || [];
+  renderAgentExcludedSkillCheckboxes(workflowId, excludedSkillNames);
   openModal('agent-modal');
 }
 function hideAgentModal() { closeModal('agent-modal'); }
@@ -862,6 +869,25 @@ function renderAgentSkillCheckboxes(workflowId, selectedNames) {
   for (const sk of skills) {
     const checked = selectedSet.has(sk.name) ? 'checked' : '';
     html += `<label class="ep-checkbox-label"><input type="checkbox" class="skill-checkbox" value="${escapeHtml(sk.name)}" ${checked}> ${escapeHtml(sk.name)}</label>`;
+  }
+  container.innerHTML = html;
+}
+
+function renderAgentExcludedSkillCheckboxes(workflowId, excludedNames) {
+  const container = document.getElementById('agent-excluded-skills-checkboxes');
+  const fieldset = document.getElementById('agent-excluded-skills-fieldset');
+  const skills = (workflowsData[workflowId]?.skills || []).filter(sk => sk.scope === 'system');
+  if (skills.length === 0) {
+    fieldset.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+  fieldset.style.display = 'block';
+  const excludedSet = new Set(excludedNames);
+  let html = '';
+  for (const sk of skills) {
+    const checked = excludedSet.has(sk.name) ? 'checked' : '';
+    html += `<label class="ep-checkbox-label"><input type="checkbox" class="excluded-skill-checkbox" value="${escapeHtml(sk.name)}" ${checked}> ${escapeHtml(sk.name)}</label>`;
   }
   container.innerHTML = html;
 }
@@ -897,6 +923,9 @@ document.getElementById('agent-form').addEventListener('submit', async (e) => {
   // Collect selected skill names
   const checkedSkills = document.querySelectorAll('#agent-skills-checkboxes .skill-checkbox:checked');
   body.skill_names = Array.from(checkedSkills).map(cb => cb.value);
+  // Collect excluded skill names
+  const checkedExcluded = document.querySelectorAll('#agent-excluded-skills-checkboxes .excluded-skill-checkbox:checked');
+  body.excluded_skill_names = Array.from(checkedExcluded).map(cb => cb.value);
   const url = id ? `/api/agents/${id}` : '/api/agents';
   const method = id ? 'PUT' : 'POST';
   if (!id) body.workflow_id = workflowId;

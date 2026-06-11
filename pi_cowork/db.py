@@ -600,6 +600,12 @@ def _migrate(db):
                   WHERE rt.board_id = b.id AND rt.title = 'Self-improvement batch'
               )""",
         ),
+        # Ticket #151 — Default-enable built-in skills for agents and assistant
+        ("add_agents_excluded_skill_names", "ALTER TABLE agents ADD COLUMN excluded_skill_names TEXT DEFAULT '[]'"),
+        (
+            "add_assistant_config_excluded_skill_names",
+            "ALTER TABLE assistant_config ADD COLUMN excluded_skill_names TEXT DEFAULT '[]'",
+        ),
     ]
     for item in migrations:
         name = item[0]

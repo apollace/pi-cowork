@@ -1,4 +1,5 @@
 import json
+import os
 from unittest.mock import MagicMock, patch
 
 
@@ -1098,3 +1099,127 @@ def test_spawn_agent_no_status_override_uses_agent(client, default_workflow, def
     assert "--thinking" in captured_cmd
     idx = captured_cmd.index("--thinking")
     assert captured_cmd[idx + 1] == "medium"
+
+
+# ---------------------------------------------------------------------------
+# Built-in skills default-enable (Ticket #151)
+# ---------------------------------------------------------------------------
+
+
+def test_spawn_agent_includes_built_in_skills_by_default(client, default_workflow, default_board, temp_skills_folder):
+    """Agents should receive built-in skills automatically unless excluded."""
+    from pi_cowork.skill_packages import get_built_in_skills_folder
+
+    folder = get_built_in_skills_folder()
+    os.makedirs(os.path.join(folder, "auto-skill"), exist_ok=True)
+    with open(os.path.join(folder, "auto-skill", "SKILL.md"), "w") as f:
+        f.write("---\nname: auto-skill\ndescription: Auto skill\n---\n\nContent.")
+
+    agent = client.post(
+        "/api/agents",
+        json={
+            "name": "AutoSkillAgent",
+            "description": "You are an auto-skill agent.",
+            "workflow_id": default_workflow["id"],
+        },
+    )
+    aid = json.loads(agent.data)["id"]
+
+    s1 = client.post(
+        "/api/statuses",
+        json={
+            "name": "AutoSkillStage",
+            "sort_order": 1,
+            "agent_id": aid,
+            "workflow_id": default_workflow["id"],
+        },
+    )
+    sid = json.loads(s1.data)["id"]
+
+    ticket = client.post(
+        "/api/tickets",
+        json={"title": "Auto Skill Ticket", "board_id": default_board["id"]},
+    )
+    tid = json.loads(ticket.data)["id"]
+
+    captured_cmd = []
+
+    def capture_popen(cmd, **kwargs):
+        class FakeProc:
+            pid = 9999
+
+        captured_cmd[:] = cmd
+        return FakeProc()
+
+    with patch("app.subprocess.Popen", side_effect=capture_popen):
+        client.put(f"/api/tickets/{tid}", json={"status_id": sid})
+
+    assert "--skill" in captured_cmd
+    idx = captured_cmd.index("--skill")
+    assert "auto-skill" in captured_cmd[idx + 1]
+    context_msg = captured_cmd[-1]
+    assert "Skills available to you:" in context_msg
+    assert "auto-skill" in context_msg
+
+
+def test_spawn_agent_excluded_skill_not_included(client, default_workflow, default_board, temp_skills_folder):
+    """Excluded built-in skills should not be passed to the agent."""
+    from pi_cowork.skill_packages import get_built_in_skills_folder
+
+    folder = get_built_in_skills_folder()
+    os.makedirs(os.path.join(folder, "excluded-skill"), exist_ok=True)
+    with open(os.path.join(folder, "excluded-skill", "SKILL.md"), "w") as f:
+        f.write("---\nname: excluded-skill\ndescription: Excluded\n---\n\nContent.")
+    os.makedirs(os.path.join(folder, "included-skill"), exist_ok=True)
+    with open(os.path.join(folder, "included-skill", "SKILL.md"), "w") as f:
+        f.write("---\nname: included-skill\ndescription: Included\n---\n\nContent.")
+
+    agent = client.post(
+        "/api/agents",
+        json={
+            "name": "ExcludedSkillAgent",
+            "description": "You are an excluded-skill agent.",
+            "workflow_id": default_workflow["id"],
+            "excluded_skill_names": ["excluded-skill"],
+        },
+    )
+    aid = json.loads(agent.data)["id"]
+
+    s1 = client.post(
+        "/api/statuses",
+        json={
+            "name": "ExcludedSkillStage",
+            "sort_order": 1,
+            "agent_id": aid,
+            "workflow_id": default_workflow["id"],
+        },
+    )
+    sid = json.loads(s1.data)["id"]
+
+    ticket = client.post(
+        "/api/tickets",
+        json={"title": "Excluded Skill Ticket", "board_id": default_board["id"]},
+    )
+    tid = json.loads(ticket.data)["id"]
+
+    captured_cmd = []
+
+    def capture_popen(cmd, **kwargs):
+        class FakeProc:
+            pid = 9999
+
+        captured_cmd[:] = cmd
+        return FakeProc()
+
+    with patch("app.subprocess.Popen", side_effect=capture_popen):
+        client.put(f"/api/tickets/{tid}", json={"status_id": sid})
+
+    context_msg = captured_cmd[-1]
+    # included-skill should be present
+    assert "included-skill" in context_msg
+    # excluded-skill should NOT be in context or cmd
+    assert "excluded-skill" not in context_msg
+    # Verify only included-skill --skill arg is present
+    skill_args = [captured_cmd[i + 1] for i in range(len(captured_cmd) - 1) if captured_cmd[i] == "--skill"]
+    assert any("included-skill" in s for s in skill_args)
+    assert not any("excluded-skill" in s for s in skill_args)

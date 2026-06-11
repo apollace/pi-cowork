@@ -109,3 +109,57 @@ def test_create_agent_same_name_different_workflow(client, default_workflow, new
         },
     )
     assert res2.status_code == 201
+
+
+def test_create_agent_with_excluded_skill_names(client, default_workflow):
+    res = client.post(
+        "/api/agents",
+        json={
+            "name": "ExcludedAgent",
+            "description": "An agent with exclusions",
+            "workflow_id": default_workflow["id"],
+            "excluded_skill_names": ["ux-design", "some-skill"],
+        },
+    )
+    assert res.status_code == 201
+    agent_id = json.loads(res.data)["id"]
+    get_res = client.get(f"/api/agents/{agent_id}")
+    data = json.loads(get_res.data)
+    assert data["excluded_skill_names"] == ["ux-design", "some-skill"]
+
+
+def test_update_agent_excluded_skill_names(client, default_workflow):
+    res = client.post(
+        "/api/agents",
+        json={
+            "name": "UpdateExcludedAgent",
+            "description": "Before update",
+            "workflow_id": default_workflow["id"],
+        },
+    )
+    agent_id = json.loads(res.data)["id"]
+    put_res = client.put(
+        f"/api/agents/{agent_id}",
+        json={"excluded_skill_names": ["ux-design"]},
+    )
+    assert put_res.status_code == 200
+    get_res = client.get(f"/api/agents/{agent_id}")
+    data = json.loads(get_res.data)
+    assert data["excluded_skill_names"] == ["ux-design"]
+
+
+def test_list_agents_includes_excluded_skill_names(client, default_workflow):
+    client.post(
+        "/api/agents",
+        json={
+            "name": "ListedExcludedAgent",
+            "description": "d",
+            "workflow_id": default_workflow["id"],
+            "excluded_skill_names": ["ux-design"],
+        },
+    )
+    res = client.get(f"/api/agents?workflow_id={default_workflow['id']}")
+    data = json.loads(res.data)
+    agent = next((a for a in data if a["name"] == "ListedExcludedAgent"), None)
+    assert agent is not None
+    assert agent["excluded_skill_names"] == ["ux-design"]

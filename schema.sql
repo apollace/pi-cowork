@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS agents (
     thinking TEXT,
     api_endpoints TEXT,
     skill_names TEXT DEFAULT '[]',
+    excluded_skill_names TEXT DEFAULT '[]',
     workflow_id INTEGER NOT NULL REFERENCES workflows(id),
     UNIQUE(name, workflow_id)
 );
@@ -184,6 +185,7 @@ CREATE TABLE IF NOT EXISTS assistant_config (
     system_prompt TEXT,
     auto_context BOOLEAN NOT NULL DEFAULT 1,
     api_endpoints TEXT,
+    excluded_skill_names TEXT DEFAULT '[]',
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 INSERT OR IGNORE INTO assistant_config (id) VALUES (1);

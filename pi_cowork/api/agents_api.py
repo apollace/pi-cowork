@@ -8,7 +8,14 @@ from flask import Blueprint, jsonify, request
 from pi_cowork.api.pi_models import get_model_ids, get_thinking_levels
 from pi_cowork.api_docs import _REGISTRY_MAP
 from pi_cowork.db import query_db, row_to_dict, run_db
-from pi_cowork.models import get_agent, get_agent_skill_names, get_workflow, set_agent_skill_names
+from pi_cowork.models import (
+    get_agent,
+    get_agent_excluded_skill_names,
+    get_agent_skill_names,
+    get_workflow,
+    set_agent_excluded_skill_names,
+    set_agent_skill_names,
+)
 
 agents_api_bp = Blueprint("agents_api", __name__)
 
@@ -23,6 +30,7 @@ def api_agents():
     for r in rows:
         agent = row_to_dict(r)
         agent["skill_names"] = get_agent_skill_names(agent["id"])
+        agent["excluded_skill_names"] = get_agent_excluded_skill_names(agent["id"])
         result.append(agent)
     return jsonify(result)
 
@@ -72,6 +80,9 @@ def api_create_agent():
         skill_names = data.get("skill_names")
         if skill_names is not None and isinstance(skill_names, list):
             set_agent_skill_names(agent_id, skill_names)
+        excluded_skill_names = data.get("excluded_skill_names")
+        if excluded_skill_names is not None and isinstance(excluded_skill_names, list):
+            set_agent_excluded_skill_names(agent_id, excluded_skill_names)
         return jsonify({"id": agent_id}), 201
     except sqlite3.IntegrityError:
         return jsonify({"error": "Agent name already exists"}), 409
@@ -84,6 +95,7 @@ def api_get_agent(agent_id):
         return jsonify({"error": "Agent not found"}), 404
     agent = dict(agent)
     agent["skill_names"] = get_agent_skill_names(agent_id)
+    agent["excluded_skill_names"] = get_agent_excluded_skill_names(agent_id)
     return jsonify(agent)
 
 
@@ -128,6 +140,16 @@ def _build_agent_updates(data):
         else:
             updates.append("api_endpoints = ?")
             args.append(None)
+    if "excluded_skill_names" in data:
+        excluded_skill_names = data.get("excluded_skill_names")
+        if excluded_skill_names is not None:
+            if not isinstance(excluded_skill_names, list):
+                return None, None, (jsonify({"error": "excluded_skill_names must be a list of strings or null"}), 400)
+            updates.append("excluded_skill_names = ?")
+            args.append(json.dumps([str(n).strip() for n in excluded_skill_names if str(n).strip()]))
+        else:
+            updates.append("excluded_skill_names = ?")
+            args.append(None)
     return updates, args, None
 
 
@@ -144,6 +166,9 @@ def api_update_agent(agent_id):
         skill_names = data.get("skill_names")
         if skill_names is not None and isinstance(skill_names, list):
             set_agent_skill_names(agent_id, skill_names)
+        excluded_skill_names = data.get("excluded_skill_names")
+        if excluded_skill_names is not None and isinstance(excluded_skill_names, list):
+            set_agent_excluded_skill_names(agent_id, excluded_skill_names)
             return jsonify({"success": True})
         return jsonify({"error": "No fields to update"}), 400
     args.append(agent_id)
@@ -154,6 +179,9 @@ def api_update_agent(agent_id):
     skill_names = data.get("skill_names")
     if skill_names is not None and isinstance(skill_names, list):
         set_agent_skill_names(agent_id, skill_names)
+    excluded_skill_names = data.get("excluded_skill_names")
+    if excluded_skill_names is not None and isinstance(excluded_skill_names, list):
+        set_agent_excluded_skill_names(agent_id, excluded_skill_names)
     return jsonify({"success": True})
 
 
