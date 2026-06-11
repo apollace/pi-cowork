@@ -66,12 +66,17 @@ def api_create_quality_gate():
 
     config_str = json.dumps(config) if isinstance(config, dict) else (config or None)
     enabled = 1 if data.get("enabled", True) else 0
+    # Default notify_on_failure based on gate_type: true for manual, false for cli
+    if "notify_on_failure" in data:
+        notify_on_failure = 1 if data["notify_on_failure"] else 0
+    else:
+        notify_on_failure = 1 if gate_type == "manual" else 0
 
     try:
         cur = run_db(
             "INSERT INTO quality_gates (from_status_id, to_status_id, gate_type, name, "
-            "config, sort_order, enabled, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (from_status_id, to_status_id, gate_type, name, config_str, int(sort_order), enabled, workflow_id),
+            "config, sort_order, enabled, notify_on_failure, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (from_status_id, to_status_id, gate_type, name, config_str, int(sort_order), enabled, notify_on_failure, workflow_id),
         )
         add_log(
             "INFO",
@@ -119,6 +124,9 @@ def api_update_quality_gate(gate_id):
     if "enabled" in data:
         updates.append("enabled = ?")
         args.append(1 if data["enabled"] else 0)
+    if "notify_on_failure" in data:
+        updates.append("notify_on_failure = ?")
+        args.append(1 if data["notify_on_failure"] else 0)
     if "from_status_id" in data:
         from_status_id = int(data["from_status_id"])
         status = get_status(from_status_id)

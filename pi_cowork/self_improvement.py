@@ -137,9 +137,12 @@ def _on_agent_failed(event_name=None, ticket_id=None, agent_name=None, exit_code
     _create_observation_ticket(title, body, board_id, observe_status_id)
 
 
-def _on_gate_failed(event_name=None, ticket_id=None, gate_name=None, **kwargs):
+def _on_gate_failed(event_name=None, ticket_id=None, gate_name=None, notify_on_failure=None, **kwargs):
     """Create an observation when a quality gate fails."""
     if not _enabled():
+        return
+    if notify_on_failure is False:
+        logger.info("Skipping gate-failed observation for ticket %d — notify_on_failure=False", ticket_id)
         return
     board_id = _get_system_board_id()
     if not board_id:
@@ -155,9 +158,12 @@ def _on_gate_failed(event_name=None, ticket_id=None, gate_name=None, **kwargs):
     _create_observation_ticket(title, body, board_id, observe_status_id)
 
 
-def _on_gate_review_rejected(event_name=None, ticket_id=None, gate_name=None, **kwargs):
+def _on_gate_review_rejected(event_name=None, ticket_id=None, gate_name=None, notify_on_failure=None, **kwargs):
     """Create an observation when a manual gate review is rejected."""
     if not _enabled():
+        return
+    if notify_on_failure is False:
+        logger.info("Skipping gate-rejected observation for ticket %d — notify_on_failure=False", ticket_id)
         return
     board_id = _get_system_board_id()
     if not board_id:
@@ -173,9 +179,30 @@ def _on_gate_review_rejected(event_name=None, ticket_id=None, gate_name=None, **
     _create_observation_ticket(title, body, board_id, observe_status_id)
 
 
+def _has_recent_gate_failure(ticket_id):
+    """Check if the ticket had a gate failure or rejection within the last 10 minutes."""
+    row = query_db(
+        """
+        SELECT 1 FROM comments
+        WHERE ticket_id = ?
+          AND (body LIKE '❌ Gate%' OR body LIKE '🚫 Transition%')
+          AND created_at > datetime('now', '-10 minutes')
+        LIMIT 1
+        """,
+        (ticket_id,),
+        one=True,
+    )
+    return row is not None
+
+
 def _on_ticket_rerun_detected(event_name=None, ticket_id=None, old_status_id=None, new_status_id=None, **kwargs):
     """Create an observation when a ticket moves backward (rerun)."""
     if not _enabled():
+        return
+    # Skip if this rerun is likely a consequence of a recent gate failure/rejection
+    # (system-initiated re-trigger). User-initiated backward moves don't have recent gate comments.
+    if _has_recent_gate_failure(ticket_id):
+        logger.info("Skipping rerun observation for ticket %d — recent gate activity detected", ticket_id)
         return
     board_id = _get_system_board_id()
     if not board_id:

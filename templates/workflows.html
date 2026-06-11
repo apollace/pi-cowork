@@ -200,6 +200,7 @@
       <label id="gate-config-label" style="display:none;">Command *<input type="text" name="config_command" placeholder="pytest --cov"></label>
       <label>Sort Order<input type="number" name="sort_order" value="0"></label>
       <label><input type="checkbox" name="enabled" checked> Enabled</label>
+      <label><input type="checkbox" name="notify_on_failure" id="gate-notify-on-failure" checked> Create self-improvement observation on failure</label>
       <div class="form-actions">
         <button type="submit" class="btn primary">Save</button>
         <button type="button" class="btn" onclick="hideGateModal()">Cancel</button>
@@ -499,7 +500,7 @@ async function loadWorkflowDetail(id) {
       ${gates.length === 0 ? '<p class="empty-sm">No quality gates configured.</p>' : `
       <div class="table-wrapper" style="margin-top:0.5rem;">
         <table class="data-table">
-          <thead><tr><th>From → To</th><th>Name</th><th>Type</th><th>Sort</th><th>Enabled</th><th></th></tr></thead>
+          <thead><tr><th>From → To</th><th>Name</th><th>Type</th><th>Sort</th><th>Enabled</th><th>Notify on Failure</th><th></th></tr></thead>
           <tbody>
             ${gates.map(g => {
               const fromName = g.from_status_name || statuses.find(s => s.id === g.from_status_id)?.name || '?';
@@ -511,6 +512,7 @@ async function loadWorkflowDetail(id) {
                 <td><span class="badge muted">${g.gate_type === 'cli' ? 'CLI' : 'Manual'}</span></td>
                 <td>${g.sort_order}</td>
                 <td>${g.enabled ? '✅' : '—'}</td>
+                <td>${g.notify_on_failure ? '✅' : '—'}</td>
                 <td class="row-actions">
                   <button class="btn small ghost" onclick="showGateEdit(${g.id}, ${id})">✏️</button>
                   <button class="btn small ghost danger-text" onclick="deleteGate(${g.id}, ${id})">🗑️</button>
@@ -1160,6 +1162,11 @@ function toggleGateConfig() {
   const cmdInput = cmdLabel.querySelector('input');
   cmdLabel.style.display = type === 'cli' ? 'block' : 'none';
   cmdInput.required = type === 'cli';
+  // Default notify_on_failure only on create (no id set)
+  const form = document.getElementById('gate-form');
+  if (!form.elements.id.value) {
+    document.getElementById('gate-notify-on-failure').checked = type === 'manual';
+  }
 }
 
 function showGateCreate(workflowId) {
@@ -1171,6 +1178,7 @@ function showGateCreate(workflowId) {
   form.elements.config_command.value = '';
   form.elements.sort_order.value = '0';
   form.elements.enabled.checked = true;
+  document.getElementById('gate-notify-on-failure').checked = true;
   document.getElementById('gate-modal-title').textContent = 'New Quality Gate';
   // Populate from/to status dropdowns
   const wf = workflowsData[workflowId];
@@ -1194,6 +1202,7 @@ async function showGateEdit(gateId, workflowId) {
   form.elements.config_command.value = cmd;
   form.elements.sort_order.value = gate.sort_order;
   form.elements.enabled.checked = !!gate.enabled;
+  document.getElementById('gate-notify-on-failure').checked = !!gate.notify_on_failure;
   document.getElementById('gate-modal-title').textContent = 'Edit Quality Gate';
   // Populate from/to status dropdowns with current selection
   const wf = workflowsData[workflowId];
@@ -1242,6 +1251,7 @@ document.getElementById('gate-form').addEventListener('submit', async (e) => {
     gate_type: gateType,
     sort_order: parseInt(fd.get('sort_order') || '0'),
     enabled: fd.has('enabled'),
+    notify_on_failure: fd.has('notify_on_failure'),
     workflow_id: workflowId,
   };
   if (gateType === 'cli') {
@@ -1250,7 +1260,7 @@ document.getElementById('gate-form').addEventListener('submit', async (e) => {
   const url = id ? `/api/quality_gates/${id}` : '/api/quality_gates';
   const method = id ? 'PUT' : 'POST';
   if (id) {
-    const updateBody = { name: body.name, gate_type: body.gate_type, sort_order: body.sort_order, enabled: body.enabled, from_status_id: body.from_status_id, to_status_id: body.to_status_id };
+    const updateBody = { name: body.name, gate_type: body.gate_type, sort_order: body.sort_order, enabled: body.enabled, notify_on_failure: body.notify_on_failure, from_status_id: body.from_status_id, to_status_id: body.to_status_id };
     if (gateType === 'cli') updateBody.config = body.config;
     const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(updateBody) });
     if (res.ok) { hideGateModal(); loadWorkflowDetail(workflowId); }
