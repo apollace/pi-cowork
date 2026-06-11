@@ -263,16 +263,25 @@ def test_list_skills_used_by_agents(client, new_workflow, temp_skills_folder):
     os.makedirs(skill_dir, exist_ok=True)
     with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
         f.write("---\nname: linked-skill\ndescription: Linked\n---\n\nContent.")
-    agent_res = client.post(
+    # Default-enable model: agents automatically use available skills
+    client.post(
         "/api/agents",
         json={
             "workflow_id": new_workflow["id"],
             "name": "LinkedAgent",
             "description": "d",
-            "skill_names": ["linked-skill"],
         },
     )
-    assert agent_res.status_code == 201
+    # Excluding agent should not appear in used_by
+    client.post(
+        "/api/agents",
+        json={
+            "workflow_id": new_workflow["id"],
+            "name": "ExcludedAgent",
+            "description": "d",
+            "excluded_skill_names": ["linked-skill"],
+        },
+    )
     res = client.get(f"/api/skills?workflow_id={new_workflow['id']}")
     data = json.loads(res.data)
     sk = next(s for s in data if s["name"] == "linked-skill")
@@ -327,7 +336,7 @@ def test_list_skills_global_only_used_by_all_workflows(client, new_workflow, tem
     os.makedirs(global_dir, exist_ok=True)
     with open(os.path.join(global_dir, "SKILL.md"), "w") as f:
         f.write("---\nname: shared-skill\ndescription: Shared\n---\n\nContent.")
-    # Create two workflows, each with an agent referencing the global skill
+    # Create two workflows, each with an agent (default-enable: no skill_names needed)
     wf2_res = client.post("/api/workflows", json={"name": "WF2", "description": "d"})
     assert wf2_res.status_code == 201
     wf2 = json.loads(wf2_res.data)
@@ -337,7 +346,6 @@ def test_list_skills_global_only_used_by_all_workflows(client, new_workflow, tem
             "workflow_id": new_workflow["id"],
             "name": "Agent1",
             "description": "d",
-            "skill_names": ["shared-skill"],
         },
     )
     client.post(
@@ -346,14 +354,26 @@ def test_list_skills_global_only_used_by_all_workflows(client, new_workflow, tem
             "workflow_id": wf2["id"],
             "name": "Agent2",
             "description": "d",
-            "skill_names": ["shared-skill"],
+        },
+    )
+    # Excluding agent should not appear in used_by
+    client.post(
+        "/api/agents",
+        json={
+            "workflow_id": new_workflow["id"],
+            "name": "ExcludedAgent",
+            "description": "d",
+            "excluded_skill_names": ["shared-skill"],
         },
     )
     res = client.get("/api/skills")
     assert res.status_code == 200
     data = json.loads(res.data)
     sk = next(s for s in data if s["name"] == "shared-skill")
-    assert sorted(sk["used_by"]) == ["Agent1", "Agent2"]
+    used = sk["used_by"]
+    assert "Agent1" in used
+    assert "Agent2" in used
+    assert "ExcludedAgent" not in used
 
 
 def test_delete_skill_missing_workflow_targets_global(client, temp_skills_folder):

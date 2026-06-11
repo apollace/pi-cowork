@@ -22,7 +22,14 @@ def test_import_workflow_with_skill_names(client):
         "version": "1.0",
         "name": "Skills Import Workflow",
         "description": "Testing skills import",
-        "agents": [{"name": "SkilledAgent", "description": "d", "skill_names": ["pytest-skill"]}],
+        "agents": [
+            {
+                "name": "SkilledAgent",
+                "description": "d",
+                "skill_names": ["pytest-skill"],
+                "excluded_skill_names": ["excluded-skill"],
+            }
+        ],
         "statuses": [
             {
                 "name": "Start",
@@ -51,6 +58,7 @@ def test_import_workflow_with_skill_names(client):
     wf_id = data["workflow_id"]
     agents = json.loads(client.get(f"/api/agents?workflow_id={wf_id}").data)
     assert agents[0]["skill_names"] == ["pytest-skill"]
+    assert agents[0]["excluded_skill_names"] == ["excluded-skill"]
 
 
 def test_export_nonexistent_workflow(client):
@@ -177,6 +185,7 @@ def test_import_export_roundtrip(client):
                 "description": "Roundtrip agent",
                 "working_directory": "/tmp/rt",  # noqa: S108
                 "skill_names": ["my-skill"],
+                "excluded_skill_names": ["excluded-skill"],
             }
         ],  # noqa: S108
         "statuses": [
@@ -211,6 +220,7 @@ def test_import_export_roundtrip(client):
     assert len(exported["agents"]) == 1
     assert exported["agents"][0]["name"] == "RTAgent"
     assert exported["agents"][0]["skill_names"] == ["my-skill"]
+    assert exported["agents"][0]["excluded_skill_names"] == ["excluded-skill"]
     assert len(exported["statuses"]) == 2
     assert exported["statuses"][0]["name"] == "Open"
     assert exported["statuses"][0]["agent_name"] == "RTAgent"
@@ -225,6 +235,7 @@ def test_import_export_roundtrip(client):
 
     agents = json.loads(client.get(f"/api/agents?workflow_id={wf_id2}").data)
     assert agents[0]["skill_names"] == ["my-skill"]
+    assert agents[0]["excluded_skill_names"] == ["excluded-skill"]
 
 
 # ---------------------------------------------------------------------------

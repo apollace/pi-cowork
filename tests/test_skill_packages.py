@@ -237,7 +237,6 @@ def test_spawn_agent_copies_skill_directory(client, default_workflow, default_bo
             "name": "DirSkillAgent",
             "description": "You are a dir skill agent.",
             "workflow_id": default_workflow["id"],
-            "skill_names": ["dir-skill"],
         },
     )
     aid = json.loads(agent.data)["id"]
@@ -284,6 +283,7 @@ def test_spawn_agent_copies_skill_directory(client, default_workflow, default_bo
 
 
 def test_spawn_agent_missing_skill_warning(client, default_workflow, default_board, temp_skills_folder):
+    """Nonexistent skill_names no longer triggers a warning since skill_names is ignored."""
     from unittest.mock import patch
 
     agent = client.post(
@@ -326,7 +326,7 @@ def test_spawn_agent_missing_skill_warning(client, default_workflow, default_boa
 
     comments = json.loads(client.get(f"/api/tickets/{tid}/comments").data)
     bodies = [c["body"] for c in comments]
-    assert any("Missing skill packages" in b for b in bodies)
+    assert not any("Missing skill packages" in b for b in bodies)
 
 
 def test_workflow_delete_cleans_skills_folder(client, new_workflow, temp_skills_folder):
