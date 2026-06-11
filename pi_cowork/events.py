@@ -67,6 +67,8 @@ AGENT_FAILED = "agent.failed"
 GATE_PENDING = "gate.pending"
 GATE_PASSED = "gate.passed"
 GATE_FAILED = "gate.failed"
+GATE_REVIEW_REJECTED = "gate.review_rejected"
+TICKET_RERUN_DETECTED = "ticket.rerun_detected"
 RECURRING_TRIGGERED = "recurring.triggered"
 
 # Module-level singleton

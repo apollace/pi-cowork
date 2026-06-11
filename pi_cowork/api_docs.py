@@ -208,6 +208,19 @@ ENDPOINT_REGISTRY = [
             "- GET {base_url}/api/workflows/{workflow_id} → get workflow details",
         ],
     },
+    {
+        "key": "agent_put",
+        "category": "Agents",
+        "method": "PUT",
+        "path_template": "/api/agents/{agent_id}",
+        "label": ("update agent (fields: name, description, model, thinking, api_endpoints, skill_names)"),
+        "doc_lines": [
+            (
+                "- PUT {base_url}/api/agents/{agent_id} → update agent (fields:"
+                " name, description, model, thinking, api_endpoints, skill_names)"
+            ),
+        ],
+    },
     # ── Statuses ──
     {
         "key": "statuses_list",
@@ -229,6 +242,20 @@ ENDPOINT_REGISTRY = [
             "- GET {base_url}/api/statuses/{status_id} → get status details",
         ],
     },
+    {
+        "key": "status_put",
+        "category": "Statuses",
+        "method": "PUT",
+        "path_template": "/api/statuses/{status_id}",
+        "label": ("update status (fields: name, sort_order, is_default, is_terminal, agent_id, goal, model, thinking)"),
+        "doc_lines": [
+            (
+                "- PUT {base_url}/api/statuses/{status_id} → update status"
+                " (fields: name, sort_order, is_default, is_terminal, agent_id,"
+                " goal, model, thinking)"
+            ),
+        ],
+    },
     # ── Transitions ──
     {
         "key": "transitions_list",
@@ -248,6 +275,16 @@ ENDPOINT_REGISTRY = [
         "label": "get transition details",
         "doc_lines": [
             "- GET {base_url}/api/transitions/{transition_id} → get transition details",
+        ],
+    },
+    {
+        "key": "transition_put",
+        "category": "Transitions",
+        "method": "PUT",
+        "path_template": "/api/transitions/{transition_id}",
+        "label": "update transition instructions",
+        "doc_lines": [
+            "- PUT {base_url}/api/transitions/{transition_id} → update transition instructions",
         ],
     },
     # ── Agents ──
@@ -281,6 +318,17 @@ ENDPOINT_REGISTRY = [
         "doc_lines": [
             "- GET {base_url}/api/skills?workflow_id={workflow_id} → list skills for workflow (workflow + global + "
             "system). Omit workflow_id to list only global skills.",
+        ],
+    },
+    {
+        "key": "skill_create",
+        "category": "Skills",
+        "method": "POST",
+        "path_template": "/api/skills",
+        "label": "create a skill (fields: name, description, content, workflow_id optional)",
+        "doc_lines": [
+            "- POST {base_url}/api/skills → create a skill (fields: name, description, content, workflow_id). "
+            "Omit workflow_id to create a global skill.",
         ],
     },
     {

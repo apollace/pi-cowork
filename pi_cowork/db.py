@@ -406,13 +406,210 @@ def _migrate(db):
         ("drop_skills_table", "DROP TABLE IF EXISTS skills"),
         ("drop_agent_skills_table", "DROP TABLE IF EXISTS agent_skills"),
         ("drop_idx_skills_workflow_id", "DROP INDEX IF EXISTS idx_skills_workflow_id"),
+        # Ticket #150 — Hermes self-evaluation and self-improvement loop
+        (
+            "seed_system_improvement_workflow",
+            "INSERT OR IGNORE INTO workflows (name, description) VALUES "
+            "('System Improvement', 'Self-evaluation and improvement workflow')",
+        ),
+        (
+            "seed_system_board",
+            "INSERT OR IGNORE INTO boards (name, workflow_id, working_directory) "
+            "SELECT 'System', id, 'workspace/system' FROM workflows "
+            "WHERE name='System Improvement'",
+        ),
+        (
+            "seed_synthesizer_agent",
+            """INSERT OR IGNORE INTO agents (name, description, workflow_id, api_endpoints)
+            SELECT 'Synthesizer',
+                   'You are a Synthesizer. You analyze system observations,'
+                   || ' synthesize improvements, and apply changes to the system.',
+                   id,
+                   ?
+            FROM workflows WHERE name='System Improvement'""",
+            '["knowledge_list","knowledge_get","knowledge_create",'
+            '"knowledge_update","knowledge_delete","agents_list",'
+            '"agent_get","agent_put","statuses_list","status_get",'
+            '"status_put","transitions_list","transition_get",'
+            '"transition_put","skills_list","skill_create",'
+            '"ticket_get","ticket_comments_post","ticket_put",'
+            '"workflows_list","workflow_get"]',
+        ),
+        (
+            "seed_system_status_observe",
+            "INSERT OR IGNORE INTO statuses "
+            "(name, sort_order, is_default, is_terminal, agent_id, goal, workflow_id) "
+            "SELECT 'Observe', 1, 1, 0, NULL, NULL, id FROM workflows "
+            "WHERE name='System Improvement'",
+        ),
+        (
+            "seed_system_status_analyze",
+            """INSERT OR IGNORE INTO statuses
+            (name, sort_order, is_default, is_terminal, agent_id, goal, workflow_id)
+            SELECT 'Analyze', 2, 0, 0, a.id,
+                   'Analyze all unprocessed observations, group by root cause,'
+                   || ' write findings as comments.', w.id
+            FROM workflows w, agents a
+            WHERE w.name='System Improvement' AND a.name='Synthesizer'
+              AND a.workflow_id=w.id""",
+        ),
+        (
+            "seed_system_status_synthesize",
+            """INSERT OR IGNORE INTO statuses
+            (name, sort_order, is_default, is_terminal, agent_id, goal, workflow_id)
+            SELECT 'Synthesize', 3, 0, 0, a.id,
+                   'Write concrete improvement proposals as knowledge entries'
+                   || ' with category draft-improvement.', w.id
+            FROM workflows w, agents a
+            WHERE w.name='System Improvement' AND a.name='Synthesizer'
+              AND a.workflow_id=w.id""",
+        ),
+        (
+            "seed_system_status_apply",
+            """INSERT OR IGNORE INTO statuses
+            (name, sort_order, is_default, is_terminal, agent_id, goal, workflow_id)
+            SELECT 'Apply', 4, 0, 0, a.id,
+                   'Read draft-improvement entries and apply changes via API.', w.id
+            FROM workflows w, agents a
+            WHERE w.name='System Improvement' AND a.name='Synthesizer'
+              AND a.workflow_id=w.id""",
+        ),
+        (
+            "seed_system_status_validate",
+            """INSERT OR IGNORE INTO statuses
+            (name, sort_order, is_default, is_terminal, agent_id, goal, workflow_id)
+            SELECT 'Validate', 5, 0, 0, a.id,
+                   'Verify improvements resolve the original observations.', w.id
+            FROM workflows w, agents a
+            WHERE w.name='System Improvement' AND a.name='Synthesizer'
+              AND a.workflow_id=w.id""",
+        ),
+        (
+            "seed_system_status_closed",
+            "INSERT OR IGNORE INTO statuses "
+            "(name, sort_order, is_default, is_terminal, agent_id, goal, workflow_id) "
+            "SELECT 'Closed', 6, 0, 1, NULL, NULL, id FROM workflows "
+            "WHERE name='System Improvement'",
+        ),
+        (
+            "seed_system_transition_observe_analyze",
+            """INSERT OR IGNORE INTO transitions
+            (from_status_id, to_status_id, instructions, workflow_id)
+            SELECT s1.id, s2.id, 'When there are observations to analyze.', w.id
+            FROM workflows w, statuses s1, statuses s2
+            WHERE w.name='System Improvement' AND s1.name='Observe'
+              AND s1.workflow_id=w.id AND s2.name='Analyze' AND s2.workflow_id=w.id""",
+        ),
+        (
+            "seed_system_transition_analyze_synthesize",
+            """INSERT OR IGNORE INTO transitions
+            (from_status_id, to_status_id, instructions, workflow_id)
+            SELECT s1.id, s2.id,
+                   'When analysis is complete and improvements are needed.', w.id
+            FROM workflows w, statuses s1, statuses s2
+            WHERE w.name='System Improvement' AND s1.name='Analyze'
+              AND s1.workflow_id=w.id AND s2.name='Synthesize'
+              AND s2.workflow_id=w.id""",
+        ),
+        (
+            "seed_system_transition_analyze_closed",
+            """INSERT OR IGNORE INTO transitions
+            (from_status_id, to_status_id, instructions, workflow_id)
+            SELECT s1.id, s2.id, 'When analysis reveals no action is needed.', w.id
+            FROM workflows w, statuses s1, statuses s2
+            WHERE w.name='System Improvement' AND s1.name='Analyze'
+              AND s1.workflow_id=w.id AND s2.name='Closed' AND s2.workflow_id=w.id""",
+        ),
+        (
+            "seed_system_transition_synthesize_apply",
+            """INSERT OR IGNORE INTO transitions
+            (from_status_id, to_status_id, instructions, workflow_id)
+            SELECT s1.id, s2.id,
+                   'When improvement proposals are ready to apply.', w.id
+            FROM workflows w, statuses s1, statuses s2
+            WHERE w.name='System Improvement' AND s1.name='Synthesize'
+              AND s1.workflow_id=w.id AND s2.name='Apply' AND s2.workflow_id=w.id""",
+        ),
+        (
+            "seed_system_transition_synthesize_closed",
+            """INSERT OR IGNORE INTO transitions
+            (from_status_id, to_status_id, instructions, workflow_id)
+            SELECT s1.id, s2.id, 'When no concrete improvements are needed.', w.id
+            FROM workflows w, statuses s1, statuses s2
+            WHERE w.name='System Improvement' AND s1.name='Synthesize'
+              AND s1.workflow_id=w.id AND s2.name='Closed' AND s2.workflow_id=w.id""",
+        ),
+        (
+            "seed_system_transition_apply_validate",
+            """INSERT OR IGNORE INTO transitions
+            (from_status_id, to_status_id, instructions, workflow_id)
+            SELECT s1.id, s2.id, 'When changes have been applied.', w.id
+            FROM workflows w, statuses s1, statuses s2
+            WHERE w.name='System Improvement' AND s1.name='Apply'
+              AND s1.workflow_id=w.id AND s2.name='Validate' AND s2.workflow_id=w.id""",
+        ),
+        (
+            "seed_system_transition_apply_observe",
+            """INSERT OR IGNORE INTO transitions
+            (from_status_id, to_status_id, instructions, workflow_id)
+            SELECT s1.id, s2.id,
+                   'When application failed and re-observation is needed.', w.id
+            FROM workflows w, statuses s1, statuses s2
+            WHERE w.name='System Improvement' AND s1.name='Apply'
+              AND s1.workflow_id=w.id AND s2.name='Observe' AND s2.workflow_id=w.id""",
+        ),
+        (
+            "seed_system_transition_validate_closed",
+            """INSERT OR IGNORE INTO transitions
+            (from_status_id, to_status_id, instructions, workflow_id)
+            SELECT s1.id, s2.id, 'When improvements are validated.', w.id
+            FROM workflows w, statuses s1, statuses s2
+            WHERE w.name='System Improvement' AND s1.name='Validate'
+              AND s1.workflow_id=w.id AND s2.name='Closed' AND s2.workflow_id=w.id""",
+        ),
+        (
+            "seed_system_transition_validate_observe",
+            """INSERT OR IGNORE INTO transitions
+            (from_status_id, to_status_id, instructions, workflow_id)
+            SELECT s1.id, s2.id,
+                   'When validation failed and re-observation is needed.', w.id
+            FROM workflows w, statuses s1, statuses s2
+            WHERE w.name='System Improvement' AND s1.name='Validate'
+              AND s1.workflow_id=w.id AND s2.name='Observe' AND s2.workflow_id=w.id""",
+        ),
+        (
+            "seed_self_improvement_settings",
+            "INSERT OR IGNORE INTO settings (key, value) VALUES "
+            "('self_improvement_enabled', '1'), "
+            "('self_improvement_batch_cron', '0 2 * * *'), "
+            "('high_comment_threshold', '10')",
+        ),
+        (
+            "seed_self_improvement_recurring_task",
+            """INSERT INTO recurring_tasks
+            (board_id, title, body, status_id, cron_expression, next_trigger_at, enabled)
+            SELECT b.id, 'Self-improvement batch',
+                   'Batch analysis ticket for self-improvement loop.', s.id,
+                   '0 2 * * *', datetime('now', '+1 day'), 1
+            FROM boards b
+            JOIN workflows w ON b.workflow_id = w.id
+            JOIN statuses s ON s.workflow_id = w.id AND s.name = 'Analyze'
+            WHERE b.name = 'System' AND w.name = 'System Improvement'
+              AND NOT EXISTS (
+                  SELECT 1 FROM recurring_tasks rt
+                  WHERE rt.board_id = b.id AND rt.title = 'Self-improvement batch'
+              )""",
+        ),
     ]
-    for name, sql in migrations:
+    for item in migrations:
+        name = item[0]
+        sql = item[1]
+        params = (item[2],) if len(item) > 2 else ()
         already_applied = db.execute("SELECT 1 FROM _migrations WHERE name = ?", (name,)).fetchone()
         if already_applied:
             continue
         try:
-            db.execute(sql)
+            db.execute(sql, params)
         except sqlite3.OperationalError as e:
             err = str(e).lower()
             if "duplicate column" in err or "already exists" in err or "no such table" in err:

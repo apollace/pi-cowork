@@ -127,6 +127,11 @@ def create_app():
 
     register_system_log_subscribers()
 
+    # Register self-improvement observation subscribers
+    from pi_cowork.self_improvement import register_self_improvement_subscribers
+
+    register_self_improvement_subscribers()
+
     # Initialize DB once and start background tasks once
     @app.before_request
     def _auto_init_db():
