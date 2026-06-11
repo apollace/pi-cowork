@@ -364,14 +364,15 @@ class TestSelfImprovementObservations:
         review_id = reviews[0]["id"]
 
         from conftest import HUMAN_ACTION_SECRET_FOR_TESTS
-        HUMAN_HEADERS = {"Content-Type": "application/json", "X-Human-Action": HUMAN_ACTION_SECRET_FOR_TESTS}
+
+        human_headers = {"Content-Type": "application/json", "X-Human-Action": HUMAN_ACTION_SECRET_FOR_TESTS}
 
         before = _count_system_observations(client, board["id"], observe_id)
         with patch("app.subprocess.Popen"):
             res = client.put(
                 f"/api/gate_reviews/{review_id}",
                 json={"status": "rejected", "comment": "Needs work"},
-                headers=HUMAN_HEADERS,
+                headers=human_headers,
             )
         assert res.status_code == 200
 

@@ -75,8 +75,19 @@ def api_create_quality_gate():
     try:
         cur = run_db(
             "INSERT INTO quality_gates (from_status_id, to_status_id, gate_type, name, "
-            "config, sort_order, enabled, notify_on_failure, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (from_status_id, to_status_id, gate_type, name, config_str, int(sort_order), enabled, notify_on_failure, workflow_id),
+            "config, sort_order, enabled, notify_on_failure, workflow_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                from_status_id,
+                to_status_id,
+                gate_type,
+                name,
+                config_str,
+                int(sort_order),
+                enabled,
+                notify_on_failure,
+                workflow_id,
+            ),
         )
         add_log(
             "INFO",
@@ -95,6 +106,15 @@ def api_get_quality_gate(gate_id):
     if not row:
         return jsonify({"error": "Quality gate not found"}), 404
     return jsonify(row_to_dict(row))
+
+
+def _validate_status_workflow(status_id, wf_id):
+    status = get_status(status_id)
+    if not status:
+        return jsonify({"error": "Status not found"}), 404
+    if status["workflow_id"] != wf_id:
+        return jsonify({"error": "Status must belong to the gate's workflow"}), 400
+    return None
 
 
 @quality_gates_bp.route("/api/quality_gates/<int:gate_id>", methods=["PUT"])
@@ -127,24 +147,19 @@ def api_update_quality_gate(gate_id):
     if "notify_on_failure" in data:
         updates.append("notify_on_failure = ?")
         args.append(1 if data["notify_on_failure"] else 0)
+    wf_id = gate["workflow_id"]
     if "from_status_id" in data:
         from_status_id = int(data["from_status_id"])
-        status = get_status(from_status_id)
-        if not status:
-            return jsonify({"error": "From status not found"}), 404
-        wf_id = gate["workflow_id"]
-        if status["workflow_id"] != wf_id:
-            return jsonify({"error": "Status must belong to the gate's workflow"}), 400
+        err = _validate_status_workflow(from_status_id, wf_id)
+        if err:
+            return err
         updates.append("from_status_id = ?")
         args.append(from_status_id)
     if "to_status_id" in data:
         to_status_id = int(data["to_status_id"])
-        status = get_status(to_status_id)
-        if not status:
-            return jsonify({"error": "To status not found"}), 404
-        wf_id = gate["workflow_id"]
-        if status["workflow_id"] != wf_id:
-            return jsonify({"error": "Status must belong to the gate's workflow"}), 400
+        err = _validate_status_workflow(to_status_id, wf_id)
+        if err:
+            return err
         updates.append("to_status_id = ?")
         args.append(to_status_id)
     if not updates:
