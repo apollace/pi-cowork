@@ -20,9 +20,9 @@ from pi_cowork.models import (
     add_comment,
     count_unanswered_questions,
     get_agent,
-    get_agent_skill_names,
     get_board,
     get_comments,
+    get_effective_skill_names,
     get_quality_gates,
     get_status,
     get_transitions_from,
@@ -485,7 +485,7 @@ def spawn_agent(ticket, status, agent, old_status_id=None):  # noqa: C901
     # ── Skills integration (must run before context_msg is built) ──
     from pi_cowork.skill_packages import copy_skill_to_session, read_skill_package, resolve_skill_dir
 
-    skill_names = get_agent_skill_names(agent["id"])
+    skill_names = get_effective_skill_names(agent["id"], workflow_id)
     skill_args = []
     skill_meta_lines = []
     missing_skills = []

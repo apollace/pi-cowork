@@ -1179,3 +1179,80 @@ def test_quick_config_api_updates_model_and_thinking(client):
     data = json.loads(res.data)
     assert data["model"] == "custom-model"
     assert data["thinking"] == "high"
+
+
+# ---------------------------------------------------------------------------
+# Excluded Skills (Ticket #151)
+# ---------------------------------------------------------------------------
+
+
+def test_get_config_includes_excluded_skill_names(client):
+    res = client.get("/api/assistant/config")
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    assert "excluded_skill_names" in data
+    assert data["excluded_skill_names"] == []
+
+
+def test_put_config_excluded_skill_names(client):
+    res = client.put("/api/assistant/config", json={"excluded_skill_names": ["ux-design"]})
+    assert res.status_code == 200
+    res = client.get("/api/assistant/config")
+    data = json.loads(res.data)
+    assert data["excluded_skill_names"] == ["ux-design"]
+
+
+def test_put_config_rejects_invalid_excluded_skill_names(client):
+    res = client.put("/api/assistant/config", json={"excluded_skill_names": "not-a-list"})
+    assert res.status_code == 400
+    data = json.loads(res.data)
+    assert "excluded_skill_names" in data["error"]
+
+
+def test_assistant_chat_includes_built_in_skills(client, temp_skills_folder):
+    from pi_cowork.skill_packages import get_built_in_skills_folder
+
+    folder = get_built_in_skills_folder()
+    os.makedirs(os.path.join(folder, "assistant-skill"), exist_ok=True)
+    with open(os.path.join(folder, "assistant-skill", "SKILL.md"), "w") as f:
+        f.write("---\nname: assistant-skill\ndescription: Assistant skill\n---\n\nContent.")
+
+    ndjson = '{"type":"text_delta","chunk":"Hello"}\n{"type":"done"}\n'
+    with patch("pi_cowork.assistant.subprocess.Popen", side_effect=_make_mock_popen(ndjson=ndjson)) as mock_popen:
+        res = client.post("/api/assistant/chat", json={"message": "Hi"})
+
+    assert res.status_code == 200
+    cmd = mock_popen.call_args[0][0]
+    assert "--skill" in cmd
+    idx = cmd.index("--skill")
+    assert "assistant-skill" in cmd[idx + 1]
+    context_msg = cmd[-1]
+    assert "Skills available to you:" in context_msg
+    assert "assistant-skill" in context_msg
+
+
+def test_assistant_chat_excludes_skills_when_configured(client, temp_skills_folder):
+    from pi_cowork.skill_packages import get_built_in_skills_folder
+
+    folder = get_built_in_skills_folder()
+    os.makedirs(os.path.join(folder, "blocked-skill"), exist_ok=True)
+    with open(os.path.join(folder, "blocked-skill", "SKILL.md"), "w") as f:
+        f.write("---\nname: blocked-skill\ndescription: Blocked\n---\n\nContent.")
+    os.makedirs(os.path.join(folder, "allowed-skill"), exist_ok=True)
+    with open(os.path.join(folder, "allowed-skill", "SKILL.md"), "w") as f:
+        f.write("---\nname: allowed-skill\ndescription: Allowed\n---\n\nContent.")
+
+    client.put("/api/assistant/config", json={"excluded_skill_names": ["blocked-skill"]})
+
+    ndjson = '{"type":"text_delta","chunk":"Hello"}\n{"type":"done"}\n'
+    with patch("pi_cowork.assistant.subprocess.Popen", side_effect=_make_mock_popen(ndjson=ndjson)) as mock_popen:
+        res = client.post("/api/assistant/chat", json={"message": "Hi"})
+
+    assert res.status_code == 200
+    cmd = mock_popen.call_args[0][0]
+    context_msg = cmd[-1]
+    assert "allowed-skill" in context_msg
+    assert "blocked-skill" not in context_msg
+    skill_args = [cmd[i + 1] for i in range(len(cmd) - 1) if cmd[i] == "--skill"]
+    assert any("allowed-skill" in s for s in skill_args)
+    assert not any("blocked-skill" in s for s in skill_args)

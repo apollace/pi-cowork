@@ -148,6 +148,24 @@ def get_built_in_skills_folder():
     return os.path.join(os.path.dirname(os.path.dirname(__file__)), "skills")
 
 
+def get_built_in_skill_names():
+    """Return a sorted list of built-in/system skill names from the repo skills/ directory.
+
+    Returns an empty list if the directory does not exist or is empty.
+    """
+    folder = get_built_in_skills_folder()
+    if not os.path.isdir(folder):
+        return []
+    names = []
+    for entry in sorted(os.listdir(folder)):
+        entry_path = os.path.join(folder, entry)
+        if os.path.isdir(entry_path) and not entry.startswith("."):
+            pkg = read_skill_package(entry_path)
+            if pkg is not None:
+                names.append(pkg.get("name") or entry)
+    return sorted(names)
+
+
 def get_global_skill_dir(name):
     """Return the filesystem path for a global skill package."""
     return os.path.join(get_skills_folder(), "global", name)

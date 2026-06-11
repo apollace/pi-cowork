@@ -143,16 +143,42 @@ def delete_ticket_status_override(ticket_id, status_id):
 # ---------------------------------------------------------------------------
 
 
+def _parse_json_array(text):
+    """Safely parse a JSON text column into a list of strings."""
+    if not text:
+        return []
+    try:
+        val = json.loads(text)
+        return val if isinstance(val, list) else []
+    except (ValueError, TypeError):
+        return []
+
+
 def get_agent_skill_names(agent_id):
     """Return the list of skill names stored on the agent row."""
     row = query_db("SELECT skill_names FROM agents WHERE id = ?", (agent_id,), one=True)
-    if not row or not row["skill_names"]:
-        return []
-    try:
-        names = json.loads(row["skill_names"])
-        return names if isinstance(names, list) else []
-    except (ValueError, TypeError):
-        return []
+    return _parse_json_array(row["skill_names"] if row else None)
+
+
+def get_agent_excluded_skill_names(agent_id):
+    """Return the list of excluded skill names stored on the agent row."""
+    row = query_db("SELECT excluded_skill_names FROM agents WHERE id = ?", (agent_id,), one=True)
+    return _parse_json_array(row["excluded_skill_names"] if row else None)
+
+
+def get_effective_skill_names(agent_id, workflow_id):
+    """Compute the effective skill names for an agent.
+
+    Effective skills = (built_in_skills - excluded_skill_names) + explicit_skill_names
+    """
+    from pi_cowork.skill_packages import get_built_in_skill_names
+
+    built_in = set(get_built_in_skill_names())
+    excluded = set(get_agent_excluded_skill_names(agent_id))
+    explicit = set(get_agent_skill_names(agent_id))
+    # Workflow-scoped and global skills are still opt-in via explicit skill_names.
+    # Built-in skills auto-enable unless excluded.
+    return sorted((built_in - excluded) | explicit)
 
 
 def set_agent_skill_names(agent_id, names):
@@ -165,6 +191,36 @@ def set_agent_skill_names(agent_id, names):
         (json.dumps(cleaned), agent_id),
     )
     return True
+
+
+def set_agent_excluded_skill_names(agent_id, names):
+    """Replace an agent's excluded skill names with the given list of strings."""
+    if not isinstance(names, list):
+        return False
+    cleaned = [str(n).strip() for n in names if str(n).strip()]
+    run_db(
+        "UPDATE agents SET excluded_skill_names = ? WHERE id = ?",
+        (json.dumps(cleaned), agent_id),
+    )
+    return True
+
+
+def get_assistant_excluded_skill_names():
+    """Return the list of excluded skill names from assistant_config."""
+    row = query_db("SELECT excluded_skill_names FROM assistant_config WHERE id = 1", one=True)
+    return _parse_json_array(row["excluded_skill_names"] if row else None)
+
+
+def get_assistant_effective_skill_names():
+    """Compute the effective skill names for the assistant.
+
+    Effective skills = built_in_skills - excluded_skill_names
+    """
+    from pi_cowork.skill_packages import get_built_in_skill_names
+
+    built_in = set(get_built_in_skill_names())
+    excluded = set(get_assistant_excluded_skill_names())
+    return sorted(built_in - excluded)
 
 
 # ---------------------------------------------------------------------------

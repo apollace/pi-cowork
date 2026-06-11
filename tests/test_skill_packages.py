@@ -372,3 +372,39 @@ def test_write_skill_package_newlines_and_quotes(client, sample_skill, temp_skil
     assert pkg["name"] == "test-skill"
     assert pkg["description"] == desc
     assert pkg["content"] == "content"
+
+
+def test_get_built_in_skill_names_empty_when_no_skills(temp_skills_folder):
+    from pi_cowork.skill_packages import get_built_in_skill_names
+
+    names = get_built_in_skill_names()
+    assert names == []
+
+
+def test_get_built_in_skill_names_returns_sorted_names(temp_skills_folder):
+    from pi_cowork.skill_packages import get_built_in_skill_names, get_built_in_skills_folder
+
+    folder = get_built_in_skills_folder()
+    os.makedirs(os.path.join(folder, "alpha-skill"), exist_ok=True)
+    with open(os.path.join(folder, "alpha-skill", "SKILL.md"), "w") as f:
+        f.write("---\nname: alpha-skill\ndescription: Alpha\n---\n\nAlpha content.")
+    os.makedirs(os.path.join(folder, "beta-skill"), exist_ok=True)
+    with open(os.path.join(folder, "beta-skill", "SKILL.md"), "w") as f:
+        f.write("---\nname: beta-skill\ndescription: Beta\n---\n\nBeta content.")
+
+    names = get_built_in_skill_names()
+    assert names == ["alpha-skill", "beta-skill"]
+
+
+def test_get_built_in_skill_names_ignores_invalid_dirs(temp_skills_folder):
+    from pi_cowork.skill_packages import get_built_in_skill_names, get_built_in_skills_folder
+
+    folder = get_built_in_skills_folder()
+    os.makedirs(os.path.join(folder, "valid-skill"), exist_ok=True)
+    with open(os.path.join(folder, "valid-skill", "SKILL.md"), "w") as f:
+        f.write("---\nname: valid-skill\n---\n")
+    # Directory without SKILL.md should be ignored
+    os.makedirs(os.path.join(folder, "no-skill-md"), exist_ok=True)
+
+    names = get_built_in_skill_names()
+    assert names == ["valid-skill"]

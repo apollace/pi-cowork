@@ -51,6 +51,12 @@
         </fieldset>
       </div>
       <div class="form-card" style="margin-top: 1rem;">
+        <fieldset class="api-endpoints-fieldset" id="assistant-excluded-skills-fieldset">
+          <legend>Excluded Skills (built-in)</legend>
+          <div id="assistant-excluded-skills-checkboxes">Loading…</div>
+        </fieldset>
+      </div>
+      <div class="form-card" style="margin-top: 1rem;">
         <h2>Saved Prompts</h2>
         <div id="saved-prompts-list" style="margin-bottom:0.75rem;">Loading…</div>
         <div class="saved-prompts-inline-add">
@@ -253,6 +259,8 @@
       window._assistantApiEndpoints = config.api_endpoints || null;
       await loadAssistantEndpointRegistry();
       renderAssistantEndpointCheckboxes(window._assistantApiEndpoints);
+      await loadBuiltInSkills();
+      renderAssistantExcludedSkills(config.excluded_skill_names || []);
 
       // Load general settings
       const generalKeys = ['pi_cowork_url', 'port', 'skills_folder_path', 'max_parallel', 'max_per_hour', 'warm_spawn_threshold', 'run_max_age'];
@@ -383,6 +391,7 @@
       working_directory: document.getElementById('cfg-working-directory').value.trim() || 'workspace',
       system_prompt: document.getElementById('cfg-system-prompt').value.trim() || null,
       api_endpoints: apiEndpoints,
+      excluded_skill_names: Array.from(document.querySelectorAll('#assistant-excluded-skills-checkboxes .excluded-skill-checkbox:checked')).map(cb => cb.value),
     };
 
     // Validate general settings
@@ -724,6 +733,39 @@
         html += `<label class="ep-checkbox-label"><input type="checkbox" class="ep-checkbox" value="${escapeHtml(ep.key)}" ${checked}> ${escapeHtml(ep.method)} ${escapeHtml(ep.path_template)} — ${escapeHtml(ep.label)}</label>`;
       }
       html += '</div>';
+    }
+    container.innerHTML = html;
+  }
+
+  let assistantBuiltInSkillsCache = null;
+
+  async function loadBuiltInSkills() {
+    if (assistantBuiltInSkillsCache) return assistantBuiltInSkillsCache;
+    const res = await fetch('/api/skills');
+    const data = await res.json();
+    assistantBuiltInSkillsCache = data;
+    return data;
+  }
+
+  function renderAssistantExcludedSkills(excludedNames) {
+    const container = document.getElementById('assistant-excluded-skills-checkboxes');
+    const fieldset = document.getElementById('assistant-excluded-skills-fieldset');
+    if (!assistantBuiltInSkillsCache) {
+      container.textContent = 'Loading…';
+      return;
+    }
+    const skills = assistantBuiltInSkillsCache.filter(sk => sk.scope === 'system');
+    if (skills.length === 0) {
+      fieldset.style.display = 'none';
+      container.innerHTML = '';
+      return;
+    }
+    fieldset.style.display = 'block';
+    const excludedSet = new Set(excludedNames);
+    let html = '';
+    for (const sk of skills) {
+      const checked = excludedSet.has(sk.name) ? 'checked' : '';
+      html += `<label class="ep-checkbox-label"><input type="checkbox" class="excluded-skill-checkbox" value="${escapeHtml(sk.name)}" ${checked}> ${escapeHtml(sk.name)}</label>`;
     }
     container.innerHTML = html;
   }

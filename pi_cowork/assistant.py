@@ -139,6 +139,7 @@ def _get_assistant_config():
             "working_directory": "workspace",
             "system_prompt": None,
             "auto_context": 1,
+            "excluded_skill_names": [],
         }
     d = row_to_dict(row)
     # Empty string/thin null means "use pi default" (no override)
@@ -157,6 +158,15 @@ def _get_assistant_config():
             d["api_endpoints"] = None
     else:
         d["api_endpoints"] = None
+    # Parse excluded_skill_names JSON (NULL/empty -> [])
+    ex = d.get("excluded_skill_names")
+    if ex:
+        try:
+            d["excluded_skill_names"] = json.loads(ex)
+        except (ValueError, TypeError):
+            d["excluded_skill_names"] = []
+    else:
+        d["excluded_skill_names"] = []
     return d
 
 
@@ -258,6 +268,8 @@ def _save_user_message_and_get_history(scope, message):
 
 def _build_context_text(rows, cfg, data, board_id, board):
     """Assemble the context text sent to the ``pi`` CLI."""
+    from pi_cowork.skill_packages import get_built_in_skill_names, get_built_in_skills_folder, read_skill_package
+
     history_parts = [f"{r['role'].upper()}: {r['content']}" for r in rows]
     context_text = "\n\n".join(history_parts)
 
@@ -266,9 +278,45 @@ def _build_context_text(rows, cfg, data, board_id, board):
         extra_context.append(f"Current page context: {data['page_url']}")
     if board_id is not None and board:
         extra_context.append(f"Current board context: {board['name']} (board_id={board_id})")
+
+    # Skills block
+    excluded = set(cfg.get("excluded_skill_names") or [])
+    built_in = get_built_in_skill_names()
+    skill_meta_lines = []
+    for name in built_in:
+        if name in excluded:
+            continue
+        pkg = read_skill_package(os.path.join(get_built_in_skills_folder(), name))
+        if pkg:
+            skill_meta_lines.append(f"- {pkg['name']}: {pkg.get('description') or 'No description'}")
+    if skill_meta_lines:
+        extra_context.append("Skills available to you:\n" + "\n".join(skill_meta_lines))
+
     if extra_context:
         context_text = "\n\n".join(extra_context + [context_text])
     return context_text
+
+
+def _prepare_assistant_skills(session_dir):
+    """Copy built-in skills to the assistant session directory.
+
+    Returns a list of --skill arguments (pairs of flag + dir) to append to the pi CLI.
+    """
+    from pi_cowork.skill_packages import copy_skill_to_session, get_built_in_skill_names, get_built_in_skills_folder
+
+    built_in = get_built_in_skill_names()
+    cfg = _get_assistant_config()
+    excluded = set(cfg.get("excluded_skill_names") or [])
+    skill_args = []
+    for name in built_in:
+        if name in excluded:
+            continue
+        src = os.path.join(get_built_in_skills_folder(), name)
+        dst = os.path.join(session_dir, "skills", name)
+        if os.path.isdir(src):
+            copy_skill_to_session(src, dst)
+            skill_args += ["--skill", dst]
+    return skill_args
 
 
 def _poll_queue_event(proc, q, run, last_keepalive):
@@ -413,6 +461,8 @@ def api_assistant_chat():
         # Stop any existing run for this scope (latest-wins)
         _stop_assistant_run(scope)
 
+        skill_args = _prepare_assistant_skills(session_dir)
+
         cmd = [
             "pi",
             "--system-prompt",
@@ -427,6 +477,7 @@ def api_assistant_chat():
             cmd += ["--thinking", thinking]
         if model:
             cmd += ["--model", model]
+        cmd += skill_args
         cmd += [context_text]
 
         proc = subprocess.Popen(  # noqa: S603
@@ -663,13 +714,25 @@ def api_assistant_config_put():
     else:
         api_endpoints_json = None
 
+    excluded_skill_names = data.get("excluded_skill_names")
+    if excluded_skill_names is not None:
+        if not isinstance(excluded_skill_names, list):
+            return jsonify({"error": "excluded_skill_names must be a list of strings or null"}), 400
+        cleaned = [str(n).strip() for n in excluded_skill_names if str(n).strip()]
+        excluded_skill_names_json = json.dumps(cleaned)
+    else:
+        excluded_skill_names_json = current.get("excluded_skill_names")
+        if isinstance(excluded_skill_names_json, list):
+            excluded_skill_names_json = json.dumps(excluded_skill_names_json)
+
     run_db(
         """
         INSERT INTO assistant_config (
             id, enabled, model, thinking, working_directory,
-            system_prompt, auto_context, api_endpoints, updated_at
+            system_prompt, auto_context, api_endpoints,
+            excluded_skill_names, updated_at
         )
-        VALUES (1, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(id) DO UPDATE SET
             enabled = excluded.enabled,
             model = excluded.model,
@@ -678,9 +741,19 @@ def api_assistant_config_put():
             system_prompt = excluded.system_prompt,
             auto_context = excluded.auto_context,
             api_endpoints = excluded.api_endpoints,
+            excluded_skill_names = excluded.excluded_skill_names,
             updated_at = excluded.updated_at
     """,
-        (enabled, model, thinking, working_directory, system_prompt, auto_context, api_endpoints_json),
+        (
+            enabled,
+            model,
+            thinking,
+            working_directory,
+            system_prompt,
+            auto_context,
+            api_endpoints_json,
+            excluded_skill_names_json,
+        ),
     )
     return jsonify({"success": True})
 
