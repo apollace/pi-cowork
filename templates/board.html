@@ -169,8 +169,14 @@
   let boardStats = {};
 
   function toggleBoardPanel() {
-    document.getElementById('board-panel').classList.toggle('open');
-    document.getElementById('board-panel-overlay').classList.toggle('open');
+    const panel = document.getElementById('board-panel');
+    const overlay = document.getElementById('board-panel-overlay');
+    const isOpening = !panel.classList.contains('open');
+    panel.classList.toggle('open');
+    overlay.classList.toggle('open');
+    if (isOpening) {
+      renderBoardList();
+    }
   }
 
   async function loadBoardStats() {
@@ -213,6 +219,7 @@
 
   function selectBoard(id) {
     localStorage.setItem('activeBoard', id);
+    renderBoardList();
     toggleBoardPanel();
     // Re-init board with new selection
     document.getElementById('board-selector-silent')?.remove();
@@ -335,7 +342,9 @@
     }
   }
 
-  initBoard();
-  renderBoardList();
+  (async function() {
+    await initBoard();
+    await renderBoardList();
+  })();
 </script>
 {% endblock %}
