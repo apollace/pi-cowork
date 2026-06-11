@@ -10,6 +10,7 @@ async function initBoard() {
   let tickets = [];
   let currentBoardId = null;
   let currentBoardData = null;
+  let workflowLabels = [];
   const collapsed = new Set();
   const filterState = {
     searchQuery: "",
@@ -63,6 +64,17 @@ async function initBoard() {
       }
     } catch {
       // Corrupt or stale data — fall back to defaults
+    }
+  }
+  async function loadWorkflowLabels() {
+    if (!currentBoardData) return;
+    try {
+      const res = await fetch(`/api/labels?workflow_id=${currentBoardData.workflow_id}`);
+      if (res.ok) {
+        workflowLabels = await res.json();
+      }
+    } catch {
+      // Silently ignore
     }
   }
   const searchInput = document.getElementById("ticket-search");
@@ -122,6 +134,7 @@ async function initBoard() {
       filterDropdownBtn.classList.add("active");
       positionFilterDropdown();
       _dropdownOpen = true;
+      loadWorkflowLabels().then(() => updateLabelFilters());
     }
   }
   function updateFilterBadge() {
@@ -197,6 +210,7 @@ async function initBoard() {
         return;
       }
       currentBoardData = await boardRes.json();
+      await loadWorkflowLabels();
       const [sRes, tRes, rRes] = await Promise.all([
         fetch(`/api/statuses?workflow_id=${currentBoardData.workflow_id}`),
         fetch(`/api/tickets?board_id=${currentBoardId}&include_terminal=${showTerminal.checked}`),
@@ -699,22 +713,15 @@ async function initBoard() {
 
   function updateLabelFilters() {
     if (!labelFiltersContainer) return;
-    const seen = new Map();
-    for (const t of tickets) {
-      for (const l of (t.labels || [])) {
-        if (!seen.has(l.name)) seen.set(l.name, l.color);
-      }
-    }
-    if (seen.size === 0) {
-      labelFiltersContainer.innerHTML = "";
+    labelFiltersContainer.innerHTML = "";
+    if (workflowLabels.length === 0) {
       updateFilterBadge();
       return;
     }
-    labelFiltersContainer.innerHTML = "";
-    for (const [name, color] of seen) {
+    for (const l of workflowLabels) {
       const label = document.createElement("label");
       label.className = "filter-label-pill";
-      label.innerHTML = `<input type="checkbox" value="${escapeHtml(name)}" ${filterState.selectedLabels.has(name) ? "checked" : ""}> <span style="color:${escapeHtml(color)};">●</span> ${escapeHtml(name)}`;
+      label.innerHTML = `<input type="checkbox" value="${escapeHtml(l.name)}" ${filterState.selectedLabels.has(l.name) ? "checked" : ""}> <span style="color:${escapeHtml(l.color)};">●</span> ${escapeHtml(l.name)}`;
       label.querySelector("input").addEventListener("change", (e) => {
         if (e.target.checked) {
           filterState.selectedLabels.add(e.target.value);
@@ -838,11 +845,9 @@ async function initBoard() {
     board.innerHTML = "";
     const visibleTickets = tickets.filter(matchesFilters);
     updateLabelFilters();
-    // Update priority toggle visibility based on available priorities
-    const availablePriorities = new Set(tickets.map(t => t.priority).filter(Boolean));
     priorityToggles.forEach(btn => {
       const p = btn.dataset.priority;
-      btn.style.display = availablePriorities.has(p) ? "inline-flex" : "none";
+      btn.style.display = "";
       if (filterState.selectedPriorities.has(p)) btn.classList.add("active");
       else btn.classList.remove("active");
     });
