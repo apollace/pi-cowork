@@ -135,9 +135,9 @@ Skills are **pure filesystem packages** — there is no DB table for skills. The
 - **Storage**: `{skills_folder_path}/{workflow_id}/{skill_name}/` for workflow-scoped skills, `{skills_folder_path}/global/{skill_name}/` for global skills, and `{repo_root}/skills/{skill_name}/` for built-in/system skills that ship with the app.
 - **Package contents**: Each directory contains a `SKILL.md` with YAML frontmatter (`name`, `description`) plus markdown body. Optional subdirectories (`examples/`, `tests/`, `schemas/`, `templates/`) are copied wholesale into agent sessions.
 - **Discovery**: `GET /api/skills?workflow_id=` scans the workflow directory, the `global/` directory, and the built-in directory, returning `name`, `scope` (`workflow`, `global`, or `system`), `description`, `subdirs`, and `used_by` (agent names that reference the skill). Names are deduplicated with precedence: workflow > global > built-in. Omitting `workflow_id` returns **only global skills** (no workflow or built-in skills).
-- **Agent association**: Agents store `skill_names` as a JSON text array directly in `agents.skill_names` (default `'[]'`). No junction table. Agents also store `excluded_skill_names` (default `'[]'`) to opt out of specific built-in skills. The assistant has the same `excluded_skill_names` field in `assistant_config`.
-- **Default enablement**: All built-in/system skills are automatically attached to every agent and the assistant unless explicitly excluded via `excluded_skill_names`. Workflow/global skills remain opt-in via `skill_names`.
-- **Effective skill resolution**: `get_effective_skill_names(agent_id, workflow_id)` computes `(built_in_names - excluded_names) + explicit_skill_names`. For the assistant, `get_assistant_effective_skill_names()` computes `built_in_names - excluded_names`.
+- **Agent association**: Agents store `skill_names` as a JSON text array directly in `agents.skill_names` (default `'[]'`). No junction table. Agents also store `excluded_skill_names` (default `'[]'`) to opt out of skills. The assistant has the same `excluded_skill_names` field in `assistant_config`.
+- **Default enablement**: All skills (built-in, global, and workflow-scoped) are automatically attached to every agent unless explicitly excluded via `excluded_skill_names`. The assistant only auto-enables built-in skills (not global or workflow-scoped). The `skill_names` column is kept for backward compatibility but no longer affects inclusion.
+- **Effective skill resolution**: `get_effective_skill_names(agent_id, workflow_id)` computes `all_available_skills(workflow_id) - excluded_names`, where `all_available_skills` comes from `list_skills(workflow_id)`. For the assistant, `get_assistant_effective_skill_names()` computes `built_in_names - excluded_names`.
 - **Agent spawn resolution**: When spawning an agent, each `skill_name` is resolved to `{workflow_id}/{name}` first, then `global/{name}` fallback, then the built-in directory. If a referenced directory is missing, a warning comment is posted on the ticket and the skill is skipped.
 - **Import / Export**: `POST /api/skills/import` extracts a ZIP to the filesystem. `POST /api/skills/import-github` downloads a public GitHub repo (or subpath) as a zipball and imports it. Provide `workflow_id` to import into a workflow scope; omit for **global scope**. `GET /api/skills/{name}/export` streams a skill directory as a ZIP, falling back to global and then built-in. Workflow export no longer includes a `skills` section; agents export their `skill_names` array directly.
 - **Deletion**: `DELETE /api/skills/{name}?workflow_id=` removes the filesystem directory only. Provide `workflow_id` to delete a workflow-scoped skill; omit it to delete a global skill. Built-in skills cannot be deleted (returns 403). Workflow deletion still cleans up `{skills_folder}/{workflow_id}/` (existing code).
@@ -217,7 +217,7 @@ When a ticket is moved to a status with an agent assigned, or when a ticket is c
 1. `pi` is spawned as a background subprocess in the **board's** `working_directory`
 2. Command: `pi --system-prompt "<prompt>" --print --session-dir <dir> [--thinking <level>] [--model <model>] [--skill <skill-dir> ...] "<context>"`
 3. `--thinking` and `--model` are only included if an override is active at any level; resolution order: ticket override → status override → agent setting → `pi` CLI built-in defaults (lowest). Each field resolves independently.
-4. **Skills**: Built-in/system skills are automatically included for all agents unless excluded. Effective skills are computed as `(built_in_names - excluded_names) + explicit_skill_names`. The full skill package directory is copied from `{skills_folder_path}/{workflow_id}/{name}/` (with `{skills_folder_path}/global/{name}/` fallback, then built-in) into `{session_dir}/skills/{name}/`, and `--skill {session_dir}/skills/{name}` is appended to the `pi` CLI command for each skill. When no skills are configured, `--skill` is not passed, preserving pi's default behavior. If a referenced skill directory is missing, a warning comment is posted on the ticket and the skill is skipped.
+4. **Skills**: Built-in/system skills are automatically included for all agents unless excluded. Effective skills are computed as `all_available_skills(workflow_id) - excluded_names`, where `all_available_skills` includes built-in, global, and workflow-scoped skills. The full skill package directory is copied from `{skills_folder_path}/{workflow_id}/{name}/` (with `{skills_folder_path}/global/{name}/` fallback, then built-in) into `{session_dir}/skills/{name}/`, and `--skill {session_dir}/skills/{name}` is appended to the `pi` CLI command for each skill. When no skills are configured, `--skill` is not passed, preserving pi's default behavior. If a referenced skill directory is missing, a warning comment is posted on the ticket and the skill is skipped.
 5. The agent context message lists skill names and descriptions (read from each package's `SKILL.md` YAML frontmatter) under a "Skills available to you:" block.
 5. The **system prompt** contains only the agent's description plus two short directives: follow the goal at the end of the context message, and always add a comment when done
 6. The **context message** is structured with the most important directives at the tail end (recency bias) — see structure below
@@ -451,8 +451,8 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 - `model` (string, nullable) — optional `--model` override for `pi`; `NULL` means use pi default
 - `thinking` (string, nullable) — optional `--thinking` level for `pi`; one of: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`; `NULL` means use pi default
 - `api_endpoints` (array of strings or null) — list of endpoint keys from `ENDPOINT_REGISTRY` to include in agent prompt; `NULL` uses defaults (`ticket_put`, `ticket_comments_post`, `ticket_questions_post`)
-- **`skill_names`** (array of strings, stored as JSON in `agents.skill_names` DEFAULT `'[]'`) — names of filesystem skill packages to explicitly attach to this agent (workflow/global scope)
-- **`excluded_skill_names`** (array of strings, stored as JSON in `agents.excluded_skill_names` DEFAULT `'[]'`) — built-in/system skill names to exclude from this agent's default skill set
+- **`skill_names`** (array of strings, stored as JSON in `agents.skill_names` DEFAULT `'[]'`) — kept for backward compatibility; no longer affects skill inclusion. All skills are default-enabled and only `excluded_skill_names` can remove them.
+- **`excluded_skill_names`** (array of strings, stored as JSON in `agents.excluded_skill_names` DEFAULT `'[]'`) — skill names to exclude from this agent's default skill set. Can exclude built-in, global, or workflow-scoped skills.
 - `workflow_id` (integer) — required
 
 **Status fields:**
@@ -498,7 +498,7 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
   "exported_at": "...",
   "name": "My Workflow",
   "description": "...",
-  "agents": [..., { "skill_names": ["skill-name"] }],
+  "agents": [..., { "skill_names": ["skill-name"], "excluded_skill_names": ["other-skill"] }],
   "statuses": [...],
   "transitions": [...],
   "quality_gates": [...],
@@ -506,7 +506,7 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 }
 ```
 
-**Import** — creates a **new workflow** from JSON. No existing data is deleted. If the name collides, a timestamp is appended. Agents store `skill_names` directly; no skill creation step is required.
+**Import** — creates a **new workflow** from JSON. No existing data is deleted. If the name collides, a timestamp is appended. Agents store `skill_names` and `excluded_skill_names` directly; no skill creation step is required.
 
 ## Quality Gates
 

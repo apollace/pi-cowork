@@ -29,18 +29,21 @@ def api_skills():
     workflow_id = request.args.get("workflow_id", type=int)
     skills = list_skills(workflow_id)
     # Enrich with used_by agents
+    # In the default-enable model, an agent uses a skill if it is available
+    # and NOT in the agent's excluded_skill_names.
     if workflow_id is not None:
-        agents = query_db("SELECT id, name, skill_names FROM agents WHERE workflow_id = ?", (workflow_id,))
+        agents = query_db("SELECT id, name, excluded_skill_names FROM agents WHERE workflow_id = ?", (workflow_id,))
     else:
-        agents = query_db("SELECT id, name, skill_names FROM agents")
+        agents = query_db("SELECT id, name, excluded_skill_names FROM agents")
     used_by = {}
     for a in agents:
         try:
-            names = __import__("json").loads(a["skill_names"] or "[]")
+            excluded = set(__import__("json").loads(a["excluded_skill_names"] or "[]"))
         except (ValueError, TypeError):
-            names = []
-        for name in names:
-            used_by.setdefault(name, []).append(a["name"])
+            excluded = set()
+        for sk in skills:
+            if sk["name"] not in excluded:
+                used_by.setdefault(sk["name"], []).append(a["name"])
     for sk in skills:
         sk["used_by"] = used_by.get(sk["name"], [])
     return jsonify(skills)

@@ -1223,3 +1223,163 @@ def test_spawn_agent_excluded_skill_not_included(client, default_workflow, defau
     skill_args = [captured_cmd[i + 1] for i in range(len(captured_cmd) - 1) if captured_cmd[i] == "--skill"]
     assert any("included-skill" in s for s in skill_args)
     assert not any("excluded-skill" in s for s in skill_args)
+
+
+def test_spawn_agent_includes_global_skills_by_default(client, default_workflow, default_board, temp_skills_folder):
+    """Global skills should be passed to the agent automatically."""
+    global_dir = os.path.join(temp_skills_folder, "global", "global-auto-skill")
+    os.makedirs(global_dir, exist_ok=True)
+    with open(os.path.join(global_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: global-auto-skill\ndescription: Global auto skill\n---\n\nContent.")
+
+    agent = client.post(
+        "/api/agents",
+        json={
+            "name": "GlobalAutoSkillAgent",
+            "description": "You are a global auto-skill agent.",
+            "workflow_id": default_workflow["id"],
+        },
+    )
+    aid = json.loads(agent.data)["id"]
+
+    s1 = client.post(
+        "/api/statuses",
+        json={
+            "name": "GlobalAutoSkillStage",
+            "sort_order": 1,
+            "agent_id": aid,
+            "workflow_id": default_workflow["id"],
+        },
+    )
+    sid = json.loads(s1.data)["id"]
+
+    ticket = client.post(
+        "/api/tickets",
+        json={"title": "Global Auto Skill Ticket", "board_id": default_board["id"]},
+    )
+    tid = json.loads(ticket.data)["id"]
+
+    captured_cmd = []
+
+    def capture_popen(cmd, **kwargs):
+        class FakeProc:
+            pid = 9999
+
+        captured_cmd[:] = cmd
+        return FakeProc()
+
+    with patch("app.subprocess.Popen", side_effect=capture_popen):
+        client.put(f"/api/tickets/{tid}", json={"status_id": sid})
+
+    assert "--skill" in captured_cmd
+    idx = captured_cmd.index("--skill")
+    assert "global-auto-skill" in captured_cmd[idx + 1]
+    context_msg = captured_cmd[-1]
+    assert "Skills available to you:" in context_msg
+    assert "global-auto-skill" in context_msg
+
+
+def test_spawn_agent_excludes_workflow_skill(client, default_workflow, default_board, temp_skills_folder):
+    """Workflow-scoped skills can be excluded via excluded_skill_names."""
+    wf_dir = os.path.join(temp_skills_folder, str(default_workflow["id"]), "wf-excluded")
+    os.makedirs(wf_dir, exist_ok=True)
+    with open(os.path.join(wf_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: wf-excluded\ndescription: WF excluded\n---\n\nContent.")
+
+    agent = client.post(
+        "/api/agents",
+        json={
+            "name": "ExcludeWorkflowSkillAgent",
+            "description": "You exclude a workflow skill.",
+            "workflow_id": default_workflow["id"],
+            "excluded_skill_names": ["wf-excluded"],
+        },
+    )
+    aid = json.loads(agent.data)["id"]
+
+    s1 = client.post(
+        "/api/statuses",
+        json={
+            "name": "ExcludeWorkflowSkillStage",
+            "sort_order": 1,
+            "agent_id": aid,
+            "workflow_id": default_workflow["id"],
+        },
+    )
+    sid = json.loads(s1.data)["id"]
+
+    ticket = client.post(
+        "/api/tickets",
+        json={"title": "Exclude Workflow Skill Ticket", "board_id": default_board["id"]},
+    )
+    tid = json.loads(ticket.data)["id"]
+
+    captured_cmd = []
+
+    def capture_popen(cmd, **kwargs):
+        class FakeProc:
+            pid = 9999
+
+        captured_cmd[:] = cmd
+        return FakeProc()
+
+    with patch("app.subprocess.Popen", side_effect=capture_popen):
+        client.put(f"/api/tickets/{tid}", json={"status_id": sid})
+
+    context_msg = captured_cmd[-1]
+    assert "wf-excluded" not in context_msg
+    skill_args = [captured_cmd[i + 1] for i in range(len(captured_cmd) - 1) if captured_cmd[i] == "--skill"]
+    assert not any("wf-excluded" in s for s in skill_args)
+
+
+def test_spawn_agent_excludes_global_skill(client, default_workflow, default_board, temp_skills_folder):
+    """Global skills can be excluded via excluded_skill_names."""
+    global_dir = os.path.join(temp_skills_folder, "global", "global-excluded")
+    os.makedirs(global_dir, exist_ok=True)
+    with open(os.path.join(global_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: global-excluded\ndescription: Global excluded\n---\n\nContent.")
+
+    agent = client.post(
+        "/api/agents",
+        json={
+            "name": "ExcludeGlobalSkillAgent",
+            "description": "You exclude a global skill.",
+            "workflow_id": default_workflow["id"],
+            "excluded_skill_names": ["global-excluded"],
+        },
+    )
+    aid = json.loads(agent.data)["id"]
+
+    s1 = client.post(
+        "/api/statuses",
+        json={
+            "name": "ExcludeGlobalSkillStage",
+            "sort_order": 1,
+            "agent_id": aid,
+            "workflow_id": default_workflow["id"],
+        },
+    )
+    sid = json.loads(s1.data)["id"]
+
+    ticket = client.post(
+        "/api/tickets",
+        json={"title": "Exclude Global Skill Ticket", "board_id": default_board["id"]},
+    )
+    tid = json.loads(ticket.data)["id"]
+
+    captured_cmd = []
+
+    def capture_popen(cmd, **kwargs):
+        class FakeProc:
+            pid = 9999
+
+        captured_cmd[:] = cmd
+        return FakeProc()
+
+    with patch("app.subprocess.Popen", side_effect=capture_popen):
+        client.put(f"/api/tickets/{tid}", json={"status_id": sid})
+
+    context_msg = captured_cmd[-1]
+    assert "global-excluded" not in context_msg
+    skill_args = [captured_cmd[i + 1] for i in range(len(captured_cmd) - 1) if captured_cmd[i] == "--skill"]
+    assert not any("global-excluded" in s for s in skill_args)

@@ -19,7 +19,7 @@ def api_export_workflow(workflow_id):
         return jsonify({"error": "Workflow not found"}), 404
     agents = query_db(
         """
-        SELECT a.name, a.description, a.model, a.thinking, a.api_endpoints, a.skill_names
+        SELECT a.name, a.description, a.model, a.thinking, a.api_endpoints, a.skill_names, a.excluded_skill_names
         FROM agents a
         WHERE a.workflow_id = ?
         ORDER BY a.name
@@ -66,7 +66,7 @@ def api_export_workflow(workflow_id):
     """,
         (workflow_id,),
     )
-    # Build agents with skill_names
+    # Build agents with skill_names and excluded_skill_names
     agents_export = []
     for a in agents:
         d = row_to_dict(a)
@@ -78,6 +78,14 @@ def api_export_workflow(workflow_id):
                 d["skill_names"] = []
         else:
             d["skill_names"] = []
+        raw_excluded = d.pop("excluded_skill_names", None)
+        if raw_excluded:
+            try:
+                d["excluded_skill_names"] = json.loads(raw_excluded)
+            except (ValueError, TypeError):
+                d["excluded_skill_names"] = []
+        else:
+            d["excluded_skill_names"] = []
         agents_export.append(d)
     payload = {
         "version": "1.0",
@@ -157,10 +165,24 @@ def api_import_workflow():  # noqa: C901
             api_endpoints_json = json.dumps(api_endpoints) if isinstance(api_endpoints, list) else None
             skill_names = a.get("skill_names", [])
             skill_names_json = json.dumps(skill_names) if isinstance(skill_names, list) else None
+            excluded_skill_names = a.get("excluded_skill_names", [])
+            excluded_skill_names_json = (
+                json.dumps(excluded_skill_names) if isinstance(excluded_skill_names, list) else None
+            )
             cur = db.execute(
-                "INSERT INTO agents (name, description, workflow_id, model, thinking, api_endpoints, skill_names) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (name, description, workflow_id, model, thinking, api_endpoints_json, skill_names_json),
+                "INSERT INTO agents (name, description, workflow_id, model, "
+                "thinking, api_endpoints, skill_names, excluded_skill_names) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    name,
+                    description,
+                    workflow_id,
+                    model,
+                    thinking,
+                    api_endpoints_json,
+                    skill_names_json,
+                    excluded_skill_names_json,
+                ),
             )
             agent_id_map[name] = cur.lastrowid
 

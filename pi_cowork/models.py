@@ -169,16 +169,14 @@ def get_agent_excluded_skill_names(agent_id):
 def get_effective_skill_names(agent_id, workflow_id):
     """Compute the effective skill names for an agent.
 
-    Effective skills = (built_in_skills - excluded_skill_names) + explicit_skill_names
+    Effective skills = all_available_skills(workflow_id) - excluded_skill_names
+    All skills (built-in, global, workflow-scoped) are default-enabled for every agent.
     """
-    from pi_cowork.skill_packages import get_built_in_skill_names
+    from pi_cowork.skill_packages import list_skills
 
-    built_in = set(get_built_in_skill_names())
+    available = set(sk["name"] for sk in list_skills(workflow_id))
     excluded = set(get_agent_excluded_skill_names(agent_id))
-    explicit = set(get_agent_skill_names(agent_id))
-    # Workflow-scoped and global skills are still opt-in via explicit skill_names.
-    # Built-in skills auto-enable unless excluded.
-    return sorted((built_in - excluded) | explicit)
+    return sorted(available - excluded)
 
 
 def set_agent_skill_names(agent_id, names):

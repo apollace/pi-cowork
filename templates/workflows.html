@@ -78,12 +78,9 @@
         <legend>API Endpoints</legend>
         <div id="api-endpoints-checkboxes">Loading…</div>
       </fieldset>
-      <fieldset class="skills-fieldset" id="agent-skills-fieldset" style="display:none;">
-        <legend>Skills</legend>
-        <div id="agent-skills-checkboxes"></div>
-      </fieldset>
       <fieldset class="skills-fieldset" id="agent-excluded-skills-fieldset" style="display:none;">
-        <legend>Excluded Skills (built-in)</legend>
+        <legend>Excluded Skills</legend>
+        <p class="muted" style="font-size:0.8rem;margin-bottom:0.5rem;">Skills are enabled by default for this agent. Check any to exclude.</p>
         <div id="agent-excluded-skills-checkboxes"></div>
       </fieldset>
       <div class="form-actions">
@@ -439,7 +436,7 @@ async function loadWorkflowDetail(id) {
           <div class="wf-card agent-card">
             <div class="wf-card-name">🤖 ${escapeHtml(a.name)}${a.model ? ' 📦 ' + escapeHtml(a.model) : ''}${a.thinking ? ' 🧠 ' + escapeHtml(a.thinking) : ''}</div>
             <div class="wf-card-desc">${escapeHtml(a.description)}</div>
-            ${(a.skills && a.skills.length) ? `<div class="wf-card-skills">${a.skills.map(s => `<span class="badge muted">${escapeHtml(s.name)}</span>`).join(' ')}</div>` : ''}
+            ${(a.excluded_skill_names && a.excluded_skill_names.length) ? `<div class="wf-card-skills"><span class="muted" style="font-size:0.8rem;">Excluded:</span> ${a.excluded_skill_names.map(s => `<span class="badge muted">${escapeHtml(s)}</span>`).join(' ')}</div>` : ''}
             <div class="wf-card-actions">
               <button class="btn small ghost" onclick="showAgentEdit(${a.id}, ${id})">✏️</button>
               <button class="btn small ghost danger-text" onclick="deleteAgent(${a.id}, ${id})">🗑️</button>
@@ -819,7 +816,6 @@ async function showAgentCreate(workflowId) {
   _agentEditEndpoints = null; // defaults
   await loadEndpointRegistry();
   renderEndpointCheckboxes(null);
-  renderAgentSkillCheckboxes(workflowId, []);
   renderAgentExcludedSkillCheckboxes(workflowId, []);
   openModal('agent-modal');
 }
@@ -846,37 +842,16 @@ async function showAgentEdit(agentId, workflowId) {
   document.getElementById('agent-modal-title').textContent = 'Edit Agent';
   await loadEndpointRegistry();
   renderEndpointCheckboxes(epKeys);
-  const selectedSkillNames = agent.skill_names || [];
-  renderAgentSkillCheckboxes(workflowId, selectedSkillNames);
   const excludedSkillNames = agent.excluded_skill_names || [];
   renderAgentExcludedSkillCheckboxes(workflowId, excludedSkillNames);
   openModal('agent-modal');
 }
 function hideAgentModal() { closeModal('agent-modal'); }
 
-function renderAgentSkillCheckboxes(workflowId, selectedNames) {
-  const container = document.getElementById('agent-skills-checkboxes');
-  const fieldset = document.getElementById('agent-skills-fieldset');
-  const skills = workflowsData[workflowId]?.skills || [];
-  if (skills.length === 0) {
-    fieldset.style.display = 'none';
-    container.innerHTML = '';
-    return;
-  }
-  fieldset.style.display = 'block';
-  const selectedSet = new Set(selectedNames);
-  let html = '';
-  for (const sk of skills) {
-    const checked = selectedSet.has(sk.name) ? 'checked' : '';
-    html += `<label class="ep-checkbox-label"><input type="checkbox" class="skill-checkbox" value="${escapeHtml(sk.name)}" ${checked}> ${escapeHtml(sk.name)}</label>`;
-  }
-  container.innerHTML = html;
-}
-
 function renderAgentExcludedSkillCheckboxes(workflowId, excludedNames) {
   const container = document.getElementById('agent-excluded-skills-checkboxes');
   const fieldset = document.getElementById('agent-excluded-skills-fieldset');
-  const skills = (workflowsData[workflowId]?.skills || []).filter(sk => sk.scope === 'system');
+  const skills = workflowsData[workflowId]?.skills || [];
   if (skills.length === 0) {
     fieldset.style.display = 'none';
     container.innerHTML = '';
@@ -920,9 +895,6 @@ document.getElementById('agent-form').addEventListener('submit', async (e) => {
   const isDefault = sorted.length === sortedDefault.length && sorted.every((k, i) => k === sortedDefault[i]);
   // Send null for defaults, the selected list otherwise
   body.api_endpoints = isDefault ? null : selectedKeys;
-  // Collect selected skill names
-  const checkedSkills = document.querySelectorAll('#agent-skills-checkboxes .skill-checkbox:checked');
-  body.skill_names = Array.from(checkedSkills).map(cb => cb.value);
   // Collect excluded skill names
   const checkedExcluded = document.querySelectorAll('#agent-excluded-skills-checkboxes .excluded-skill-checkbox:checked');
   body.excluded_skill_names = Array.from(checkedExcluded).map(cb => cb.value);

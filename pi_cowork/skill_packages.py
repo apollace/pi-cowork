@@ -193,7 +193,11 @@ def list_skills(workflow_id=None):
     for scope, path in scopes:
         if not os.path.isdir(path):
             continue
-        for entry in sorted(os.listdir(path)):
+        try:
+            entries = sorted(os.listdir(path))
+        except FileNotFoundError:
+            continue
+        for entry in entries:
             entry_path = os.path.join(path, entry)
             if not os.path.isdir(entry_path) or entry.startswith("."):
                 continue

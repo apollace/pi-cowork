@@ -213,11 +213,15 @@ ENDPOINT_REGISTRY = [
         "category": "Agents",
         "method": "PUT",
         "path_template": "/api/agents/{agent_id}",
-        "label": ("update agent (fields: name, description, model, thinking, api_endpoints, skill_names)"),
+        "label": (
+            "update agent (fields: name, description, model, thinking, "
+            "api_endpoints, skill_names (deprecated), excluded_skill_names)"
+        ),
         "doc_lines": [
             (
-                "- PUT {base_url}/api/agents/{agent_id} → update agent (fields:"
-                " name, description, model, thinking, api_endpoints, skill_names)"
+                "- PUT {base_url}/api/agents/{agent_id} → update agent"
+                " (fields: name, description, model, thinking, api_endpoints,"
+                " skill_names (deprecated), excluded_skill_names)"
             ),
         ],
     },
