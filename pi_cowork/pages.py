@@ -72,6 +72,10 @@ def knowledge_page():
     return render_template("knowledge.html")
 
 
+def observations_page():
+    return render_template("observations.html")
+
+
 def inject_persistent_flash():
     state = _read_and_clear_update_state()
     return {"persistent_flash": state}
@@ -91,4 +95,5 @@ def register_pages(app):
     app.route("/system-logs")(system_logs_page)
     app.route("/database-backup")(database_backup_page)
     app.route("/knowledge")(knowledge_page)
+    app.route("/observations")(observations_page)
     app.context_processor(inject_persistent_flash)

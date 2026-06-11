@@ -630,6 +630,21 @@ ENDPOINT_REGISTRY = [
             "'human'/'agent')",
         ],
     },
+    {
+        "key": "observations_list",
+        "category": "Observations",
+        "method": "GET",
+        "path_template": "/api/observations",
+        "label": (
+            "list observations across event_log, system_logs, agent_runs, and "
+            "gate_reviews (query: ticket_id, type, date_from, date_to, search, page, per_page)"
+        ),
+        "doc_lines": [
+            "- GET {base_url}/api/observations → list observations across event_log, system_logs, agent_runs, and "
+            "gate_reviews (query: ticket_id, type, date_from, date_to, search, page, per_page). Returns paginated "
+            "read-only aggregated audit view.",
+        ],
+    },
 ]
 
 # Key → registry entry lookup (built once at import time)
