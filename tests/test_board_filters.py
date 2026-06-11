@@ -268,7 +268,7 @@ def test_app_js_save_called_on_label_filter_change():
     """saveBoardPrefs must be called when a label filter checkbox changes."""
     js = _read_static("app.js")
     # Find the label filter change handler inside updateLabelFilters
-    idx = js.find('"change"', js.find("updateLabelFilters"))
+    idx = js.find('"change"', js.find("function updateLabelFilters"))
     assert idx != -1
     # Get a reasonable chunk around it
     block = js[idx : idx + 300]
