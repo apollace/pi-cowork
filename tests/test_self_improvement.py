@@ -254,6 +254,7 @@ class TestSelfImprovementObservations:
                 "name": "Failing Gate",
                 "config": json.dumps({"command": "false"}),
                 "workflow_id": cli_wf_id,
+                "notify_on_failure": True,
             },
         )
 
@@ -267,6 +268,177 @@ class TestSelfImprovementObservations:
             res = client.put(f"/api/tickets/{ticket_id}", json={"status_id": s2})
         assert res.status_code == 200
 
+        after = _count_system_observations(client, board["id"], observe_id)
+        assert after == before + 1
+
+    def test_cli_gate_default_notify_false_no_observation(self, client):
+        """CLI gates default to notify_on_failure=False, so failures create zero observations."""
+        board = _get_system_board(client)
+        assert board is not None
+        wf_id = _get_system_workflow_id(client)
+        observe_id = _get_observe_status_id(client, wf_id)
+        assert observe_id is not None
+
+        res = client.post("/api/workflows", json={"name": "CLI Silent WF", "description": "test"})
+        cli_wf_id = json.loads(res.data)["id"]
+        r1 = client.post("/api/statuses", json={"name": "Open", "sort_order": 1, "workflow_id": cli_wf_id})
+        s1 = json.loads(r1.data)["id"]
+        r2 = client.post("/api/statuses", json={"name": "Done", "sort_order": 2, "workflow_id": cli_wf_id})
+        s2 = json.loads(r2.data)["id"]
+
+        res = client.post("/api/boards", json={"name": "CLI Silent Board", "workflow_id": cli_wf_id})
+        cli_board_id = json.loads(res.data)["id"]
+
+        res = client.post(
+            "/api/tickets",
+            json={"title": "CLI Silent Ticket", "board_id": cli_board_id, "status_id": s1},
+        )
+        ticket_id = json.loads(res.data)["id"]
+
+        # Do NOT pass notify_on_failure — should default to False for CLI
+        client.post(
+            "/api/quality_gates",
+            json={
+                "from_status_id": s1,
+                "to_status_id": s2,
+                "gate_type": "cli",
+                "name": "Silent Gate",
+                "config": json.dumps({"command": "false"}),
+                "workflow_id": cli_wf_id,
+            },
+        )
+
+        before = _count_system_observations(client, board["id"], observe_id)
+        with patch("app.subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stdout = ""
+            mock_result.stderr = "fail"
+            mock_run.return_value = mock_result
+            res = client.put(f"/api/tickets/{ticket_id}", json={"status_id": s2})
+        assert res.status_code == 200
+
+        after = _count_system_observations(client, board["id"], observe_id)
+        assert after == before
+
+    def test_manual_gate_rejection_only_one_observation(self, client):
+        """One manual gate rejection creates exactly one observation (GATE_REVIEW_REJECTED only)."""
+        board = _get_system_board(client)
+        assert board is not None
+        wf_id = _get_system_workflow_id(client)
+        observe_id = _get_observe_status_id(client, wf_id)
+        assert observe_id is not None
+
+        res = client.post("/api/workflows", json={"name": "Manual Dedup WF", "description": "test"})
+        manual_wf_id = json.loads(res.data)["id"]
+        r1 = client.post("/api/statuses", json={"name": "Open", "sort_order": 1, "workflow_id": manual_wf_id})
+        s1 = json.loads(r1.data)["id"]
+        r2 = client.post("/api/statuses", json={"name": "Done", "sort_order": 2, "workflow_id": manual_wf_id})
+        s2 = json.loads(r2.data)["id"]
+
+        res = client.post("/api/boards", json={"name": "Manual Dedup Board", "workflow_id": manual_wf_id})
+        manual_board_id = json.loads(res.data)["id"]
+
+        res = client.post(
+            "/api/tickets",
+            json={"title": "Manual Dedup Ticket", "board_id": manual_board_id, "status_id": s1},
+        )
+        ticket_id = json.loads(res.data)["id"]
+
+        client.post(
+            "/api/quality_gates",
+            json={
+                "from_status_id": s1,
+                "to_status_id": s2,
+                "gate_type": "manual",
+                "name": "Approval Gate",
+                "workflow_id": manual_wf_id,
+            },
+        )
+
+        with patch("app.subprocess.Popen"):
+            res = client.put(f"/api/tickets/{ticket_id}", json={"status_id": s2})
+        assert res.status_code == 200
+
+        reviews = json.loads(client.get(f"/api/gate_reviews?ticket_id={ticket_id}").data)
+        review_id = reviews[0]["id"]
+
+        from conftest import HUMAN_ACTION_SECRET_FOR_TESTS
+
+        human_headers = {"Content-Type": "application/json", "X-Human-Action": HUMAN_ACTION_SECRET_FOR_TESTS}
+
+        before = _count_system_observations(client, board["id"], observe_id)
+        with patch("app.subprocess.Popen"):
+            res = client.put(
+                f"/api/gate_reviews/{review_id}",
+                json={"status": "rejected", "comment": "Needs work"},
+                headers=human_headers,
+            )
+        assert res.status_code == 200
+
+        after = _count_system_observations(client, board["id"], observe_id)
+        assert after == before + 1
+
+    def test_gate_notify_false_skips_observation(self, client):
+        """When notify_on_failure=False, both GATE_FAILED and GATE_REVIEW_REJECTED skip observations."""
+        board = _get_system_board(client)
+        assert board is not None
+        wf_id = _get_system_workflow_id(client)
+        observe_id = _get_observe_status_id(client, wf_id)
+        assert observe_id is not None
+
+        before = _count_system_observations(client, board["id"], observe_id)
+        with client.application.app_context():
+            bus.publish(GATE_FAILED, ticket_id=5001, gate_name="QuietGate", notify_on_failure=False)
+            bus.publish(GATE_REVIEW_REJECTED, ticket_id=5002, gate_name="QuietManual", notify_on_failure=False)
+        after = _count_system_observations(client, board["id"], observe_id)
+        assert after == before
+
+    def test_rerun_suppressed_after_recent_gate_failure(self, client, default_board):
+        """TICKET_RERUN_DETECTED is suppressed when a recent gate failure comment exists."""
+        board = _get_system_board(client)
+        assert board is not None
+        wf_id = _get_system_workflow_id(client)
+        observe_id = _get_observe_status_id(client, wf_id)
+        assert observe_id is not None
+
+        res = client.post(
+            "/api/tickets",
+            json={"title": "Rerun suppress test", "board_id": default_board["id"]},
+        )
+        ticket = json.loads(res.data)
+        tid = ticket["id"]
+
+        # Add a gate-failure-style system comment
+        client.post(f"/api/tickets/{tid}/comments", json={"body": "❌ Gate 'Lint' (CLI) failed.\noutput"})
+
+        before = _count_system_observations(client, board["id"], observe_id)
+        with client.application.app_context():
+            bus.publish(TICKET_RERUN_DETECTED, ticket_id=tid, old_status_id=10, new_status_id=5)
+        after = _count_system_observations(client, board["id"], observe_id)
+        assert after == before
+
+    def test_rerun_allowed_without_recent_gate_activity(self, client, default_board):
+        """TICKET_RERUN_DETECTED still creates an observation for user-initiated backward moves."""
+        board = _get_system_board(client)
+        assert board is not None
+        wf_id = _get_system_workflow_id(client)
+        observe_id = _get_observe_status_id(client, wf_id)
+        assert observe_id is not None
+
+        res = client.post(
+            "/api/tickets",
+            json={"title": "Rerun allow test", "board_id": default_board["id"]},
+        )
+        ticket = json.loads(res.data)
+        tid = ticket["id"]
+
+        # Add a regular human comment (not gate-related)
+        client.post(f"/api/tickets/{tid}/comments", json={"body": "Regular human comment"})
+
+        before = _count_system_observations(client, board["id"], observe_id)
+        with client.application.app_context():
+            bus.publish(TICKET_RERUN_DETECTED, ticket_id=tid, old_status_id=10, new_status_id=5)
         after = _count_system_observations(client, board["id"], observe_id)
         assert after == before + 1
 

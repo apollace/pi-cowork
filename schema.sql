@@ -125,6 +125,7 @@ CREATE TABLE IF NOT EXISTS quality_gates (
     config TEXT,  -- JSON, e.g. {"command": "pytest --cov"} for CLI gates
     sort_order INTEGER NOT NULL DEFAULT 0,
     enabled BOOLEAN NOT NULL DEFAULT 1,
+    notify_on_failure BOOLEAN NOT NULL DEFAULT 1,
     workflow_id INTEGER NOT NULL REFERENCES workflows(id),
     UNIQUE(from_status_id, to_status_id, name, workflow_id)
 );

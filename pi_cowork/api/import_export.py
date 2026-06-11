@@ -232,7 +232,7 @@ def api_import_workflow():  # noqa: C901
             enabled = 1 if g.get("enabled", True) else 0
             db.execute(
                 "INSERT INTO quality_gates (from_status_id, to_status_id, gate_type, name, "
-                "config, sort_order, enabled, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "config, sort_order, enabled, notify_on_failure, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     status_id_map[from_status_name],
                     status_id_map[to_status_name],
@@ -241,6 +241,7 @@ def api_import_workflow():  # noqa: C901
                     config,
                     sort_order,
                     enabled,
+                    1 if g.get("notify_on_failure", gate_type == "manual") else 0,
                     workflow_id,
                 ),
             )

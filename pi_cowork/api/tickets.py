@@ -388,7 +388,13 @@ def api_update_ticket(ticket_id):  # noqa: C901
                             add_comment(ticket_id, f"✅ Gate '{gate['name']}' (CLI) passed.\n{output}")
                         else:
                             add_comment(ticket_id, f"❌ Gate '{gate['name']}' (CLI) failed.\n{output}")
-                            bus.publish(GATE_FAILED, ticket_id=ticket_id, gate_name=gate["name"])
+                            bus.publish(
+                                GATE_FAILED,
+                                ticket_id=ticket_id,
+                                gate_name=gate["name"],
+                                gate_id=gate["id"],
+                                notify_on_failure=bool(gate.get("notify_on_failure", 1)),
+                            )
                             any_failed = True
                 elif gate["gate_type"] == "manual":
                     all_resolved = False

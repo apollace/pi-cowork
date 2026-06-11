@@ -606,6 +606,11 @@ def _migrate(db):
             "add_assistant_config_excluded_skill_names",
             "ALTER TABLE assistant_config ADD COLUMN excluded_skill_names TEXT DEFAULT '[]'",
         ),
+        # Ticket #162 — Per-gate self-improvement observation flag
+        (
+            "add_quality_gates_notify_on_failure",
+            "ALTER TABLE quality_gates ADD COLUMN notify_on_failure BOOLEAN NOT NULL DEFAULT 1",
+        ),
     ]
     for item in migrations:
         name = item[0]
