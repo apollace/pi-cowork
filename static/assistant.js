@@ -148,23 +148,26 @@
     }
   }
 
-  function openPanel() {
+  async function openPanel() {
     panel.classList.add("open");
     bubble.classList.add("panel-open");
-    loadConfig();
-    loadHistory();
-    loadSavedPrompts();
+    localStorage.setItem("assistantPanelOpen", "1");
+    await loadConfig();
+    await loadHistory();
+    await loadSavedPrompts();
     inputEl.focus();
     if (window.innerWidth <= 640) {
       savedScrollY = window.scrollY;
       document.documentElement.style.overflow = "hidden";
       document.body.style.overflow = "hidden";
     }
+    await checkActiveRun();
   }
 
   function closePanel() {
     panel.classList.remove("open");
     bubble.classList.remove("panel-open");
+    localStorage.removeItem("assistantPanelOpen");
     if (window.innerWidth <= 640) {
       document.documentElement.style.overflow = "";
       document.body.style.overflow = "";
@@ -172,11 +175,11 @@
     }
   }
 
-  function togglePanel() {
+  async function togglePanel() {
     if (panel.classList.contains("open")) {
       closePanel();
     } else {
-      openPanel();
+      await openPanel();
     }
   }
 
@@ -185,7 +188,7 @@
     msg.className = "assistant-message assistant-message-" + role;
     if (temporary) msg.classList.add("assistant-temporary");
     if (renderMd && window.renderMarkdown) {
-      msg.innerHTML = '<div class="markdown-content">' + window.renderMarkdown(content) + '</div>';
+      msg.innerHTML = `<div class="markdown-content">${window.renderMarkdown(content)}</div>`;
     } else {
       msg.textContent = content;
     }
@@ -310,10 +313,15 @@
         badge.textContent = (payload.name || "tool") + " ✅";
       }
     } else if (type === "done") {
-      // Final text is accumulated in rawText; payload.full_text is available if needed
+      if (payload.full_text) {
+        placeholder.rawText = payload.full_text;
+      }
     } else if (type === "error") {
       placeholder.error = payload.error || "Unknown error";
     } else if (type === "stopped") {
+      if (payload.partial) {
+        placeholder.rawText = payload.partial;
+      }
       placeholder.stopped = true;
     }
   }
@@ -334,6 +342,104 @@
       } else {
         placeholder.body.textContent = placeholder.rawText;
       }
+    }
+  }
+
+  async function checkActiveRun() {
+    try {
+      const boardId = localStorage.getItem("activeBoard") || "";
+      const url = "/api/assistant/active-run" + (boardId ? "?board_id=" + encodeURIComponent(boardId) : "");
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const run = await res.json();
+      if (run && run.id) {
+        reconnectToRun(run.id);
+      }
+    } catch (e) {
+      console.error("Failed to check active run", e);
+    }
+  }
+
+  async function reconnectToRun(runId) {
+    const placeholder = createStreamPlaceholder();
+    placeholder.timerInterval = setInterval(function () {
+      placeholder.timer.textContent = formatDuration(placeholder.startTime);
+    }, 1000);
+
+    sendBtn.disabled = true;
+    bubble.classList.add("assistant-bubble-active");
+
+    placeholder.stopBtn.onclick = async function () {
+      try {
+        await fetch("/api/assistant/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+      } catch (e) {
+        console.error("Stop failed", e);
+      }
+    };
+
+    let buffer = "";
+
+    try {
+      const boardId = localStorage.getItem("activeBoard") || "";
+      const url = "/api/assistant/stream?run_id=" + encodeURIComponent(runId) + (boardId ? "&board_id=" + encodeURIComponent(boardId) : "");
+      const res = await fetch(url);
+      if (!res.ok) {
+        const data = await res.json().catch(function () { return { error: "Request failed" }; });
+        throw new Error(data.error || "Request failed");
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
+
+        let start = 0;
+        while (true) {
+          const sep = buffer.indexOf("\n\n", start);
+          if (sep === -1) break;
+          const block = buffer.slice(start, sep);
+          start = sep + 2;
+
+          const lines = block.split("\n");
+          let eventName = "message";
+          const dataLines = [];
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (line.startsWith("event:")) {
+              eventName = line.slice(6).trim();
+            } else if (line.startsWith("data:")) {
+              dataLines.push(line.slice(5));
+            }
+          }
+          if (!dataLines.length) continue;
+
+          let payload;
+          try {
+            payload = JSON.parse(dataLines.join("\n"));
+          } catch (e) {
+            console.error("SSE JSON parse error", e, dataLines);
+            continue;
+          }
+          handleStreamEvent(placeholder, eventName, payload);
+        }
+        buffer = buffer.slice(start);
+      }
+    } catch (e) {
+      placeholder.error = e.message;
+    } finally {
+      clearInterval(placeholder.timerInterval);
+      sendBtn.disabled = false;
+      inputEl.focus();
+      bubble.classList.remove("assistant-bubble-active");
+      finalizePlaceholder(placeholder);
     }
   }
 
@@ -493,4 +599,8 @@
   }
 
   loadConfig();
+
+  if (localStorage.getItem("assistantPanelOpen") === "1") {
+    openPanel();
+  }
 })();

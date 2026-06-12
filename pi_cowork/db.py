@@ -417,6 +417,30 @@ def _migrate(db):
             "add_quality_gates_notify_on_failure",
             "ALTER TABLE quality_gates ADD COLUMN notify_on_failure BOOLEAN NOT NULL DEFAULT 1",
         ),
+        # Ticket #173 — Assistant run tracking for reconnect across refresh
+        (
+            "create_assistant_runs",
+            """
+            CREATE TABLE IF NOT EXISTS assistant_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                board_id INTEGER REFERENCES boards(id) ON DELETE CASCADE,
+                status TEXT CHECK(status IN ('running','completed','failed','stopped')) DEFAULT 'running',
+                log_path TEXT NOT NULL,
+                pid INTEGER,
+                started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                completed_at DATETIME,
+                full_text TEXT
+            )
+        """,
+        ),
+        (
+            "idx_assistant_runs_board_id_status",
+            "CREATE INDEX IF NOT EXISTS idx_assistant_runs_board_id_status ON assistant_runs(board_id, status)",
+        ),
+        (
+            "idx_assistant_runs_started_at",
+            "CREATE INDEX IF NOT EXISTS idx_assistant_runs_started_at ON assistant_runs(started_at)",
+        ),
     ]
     for item in migrations:
         name = item[0]
