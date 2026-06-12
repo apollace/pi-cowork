@@ -441,6 +441,47 @@ def _migrate(db):
             "idx_assistant_runs_started_at",
             "CREATE INDEX IF NOT EXISTS idx_assistant_runs_started_at ON assistant_runs(started_at)",
         ),
+        # Ticket #176 — agent_feedback table
+        (
+            "create_agent_feedback",
+            """
+            CREATE TABLE IF NOT EXISTS agent_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+                run_id INTEGER REFERENCES agent_runs(id) ON DELETE SET NULL,
+                gate_review_id INTEGER REFERENCES gate_reviews(id) ON DELETE SET NULL,
+                feedback_type TEXT NOT NULL
+                    CHECK(feedback_type IN (
+                        'gate_rejected', 'cli_failed', 'agent_killed',
+                        'agent_rerun', 'run_feedback'
+                    )),
+                reason TEXT,
+                expected_behavior TEXT,
+                context_json TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                consumed_at DATETIME,
+                consumed_by_run_id INTEGER,
+                source_event TEXT,
+                created_by TEXT
+            )
+            """,
+        ),
+        (
+            "idx_agent_feedback_ticket_id",
+            "CREATE INDEX IF NOT EXISTS idx_agent_feedback_ticket_id ON agent_feedback(ticket_id)",
+        ),
+        (
+            "idx_agent_feedback_run_id",
+            "CREATE INDEX IF NOT EXISTS idx_agent_feedback_run_id ON agent_feedback(run_id)",
+        ),
+        (
+            "idx_agent_feedback_type",
+            "CREATE INDEX IF NOT EXISTS idx_agent_feedback_type ON agent_feedback(feedback_type)",
+        ),
+        (
+            "idx_agent_feedback_consumed_at",
+            "CREATE INDEX IF NOT EXISTS idx_agent_feedback_consumed_at ON agent_feedback(consumed_at)",
+        ),
     ]
     for item in migrations:
         name = item[0]
