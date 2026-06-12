@@ -35,6 +35,8 @@ def api_list_feedback():
     feedback_type = request.args.get("feedback_type")
     ticket_id = request.args.get("ticket_id", type=int)
     agent_id = request.args.get("agent_id", type=int)
+    board_id = request.args.get("board_id", type=int)
+    workflow_id = request.args.get("workflow_id", type=int)
     date_from = request.args.get("date_from")
     date_to = request.args.get("date_to")
     search = request.args.get("search")
@@ -55,6 +57,8 @@ def api_list_feedback():
         feedback_type=feedback_type,
         ticket_id=ticket_id,
         agent_id=agent_id,
+        board_id=board_id,
+        workflow_id=workflow_id,
         date_from=date_from,
         date_to=date_to,
         search=search,
@@ -65,6 +69,8 @@ def api_list_feedback():
         feedback_type=feedback_type,
         ticket_id=ticket_id,
         agent_id=agent_id,
+        board_id=board_id,
+        workflow_id=workflow_id,
         date_from=date_from,
         date_to=date_to,
         search=search,
@@ -89,6 +95,10 @@ def api_list_feedback():
                 "created_at": row["created_at"],
                 "consumed_at": row.get("consumed_at"),
                 "consumed_by_run_id": row.get("consumed_by_run_id"),
+                "board_id": row.get("board_id"),
+                "board_name": row.get("board_name"),
+                "workflow_id": row.get("workflow_id"),
+                "workflow_name": row.get("workflow_name"),
             }
         )
 
@@ -130,7 +140,11 @@ def api_feedback_preview(feedback_id):
             qg.name AS gate_name,
             qg.gate_type AS gate_type,
             fs.name AS from_status,
-            ts.name AS to_status
+            ts.name AS to_status,
+            b.id AS board_id,
+            b.name AS board_name,
+            w.id AS workflow_id,
+            w.name AS workflow_name
         FROM agent_feedback af
         LEFT JOIN tickets t ON t.id = af.ticket_id
         LEFT JOIN agent_runs ar ON ar.id = af.run_id
@@ -139,6 +153,8 @@ def api_feedback_preview(feedback_id):
         LEFT JOIN quality_gates qg ON qg.id = gr.gate_id
         LEFT JOIN statuses fs ON fs.id = gr.from_status_id
         LEFT JOIN statuses ts ON ts.id = gr.to_status_id
+        LEFT JOIN boards b ON b.id = t.board_id
+        LEFT JOIN workflows w ON w.id = b.workflow_id
         WHERE af.id = ?
     """,
         (feedback_id,),
@@ -163,6 +179,20 @@ def api_feedback_preview(feedback_id):
     if runtime:
         context.update(runtime)
 
+    board_payload = None
+    if row["board_id"]:
+        board_payload = {
+            "id": row["board_id"],
+            "name": row["board_name"],
+        }
+
+    workflow_payload = None
+    if row["workflow_id"]:
+        workflow_payload = {
+            "id": row["workflow_id"],
+            "name": row["workflow_name"],
+        }
+
     payload = {
         "id": row["id"],
         "ticket": {
@@ -186,6 +216,8 @@ def api_feedback_preview(feedback_id):
         }
         if row["gate_review_id"]
         else None,
+        "board": board_payload,
+        "workflow": workflow_payload,
         "feedback_type": row["feedback_type"],
         "reason": row["reason"],
         "expected_behavior": row["expected_behavior"],
