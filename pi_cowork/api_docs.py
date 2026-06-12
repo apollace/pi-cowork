@@ -139,9 +139,20 @@ ENDPOINT_REGISTRY = [
         "category": "Agent Runs",
         "method": "POST",
         "path_template": "/api/tickets/{ticket_id}/spawn",
-        "label": "manually re-trigger agent for ticket",
+        "label": "manually re-trigger agent for ticket (optional field: reason)",
         "doc_lines": [
-            "- POST {base_url}/api/tickets/{ticket_id}/spawn → manually re-trigger agent for ticket",
+            "- POST {base_url}/api/tickets/{ticket_id}/spawn → manually re-trigger",
+            "  agent for ticket (optional field: reason)",
+        ],
+    },
+    {
+        "key": "feedback_put",
+        "category": "Feedback",
+        "method": "PUT",
+        "path_template": "/api/feedback/{feedback_id}",
+        "label": "update feedback reason and expected_behavior (human-only)",
+        "doc_lines": [
+            "- PUT {base_url}/api/feedback/{feedback_id} → update feedback reason and expected_behavior (human-only)",
         ],
     },
     # ── Tickets (global list/create) ──
@@ -666,6 +677,7 @@ AGENT_RESTRICTED_KEYS = {
     "quality_gates_list",
     "notifications_list",
     "db_backup_restore",
+    "feedback_put",
 }
 
 

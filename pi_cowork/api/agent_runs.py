@@ -10,7 +10,7 @@ from flask import Blueprint, jsonify, request, stream_with_context
 
 from pi_cowork import agents as _agents_mod
 from pi_cowork.db import query_db, row_to_dict, run_db
-from pi_cowork.models import add_comment
+from pi_cowork.models import add_agent_feedback, add_comment
 from pi_cowork.system_logs import add_log
 
 agent_runs_bp = Blueprint("agent_runs", __name__)
@@ -88,7 +88,16 @@ def api_kill_agent_run(run_id):
         run_db(
             "UPDATE agent_runs SET status = 'failed', completed_at = ?, exit_code = ? WHERE id = ?", (now, -15, run_id)
         )
-        add_comment(ticket_id, "🛑 Agent killed by user (process already terminated)")
+        comment = "🛑 Agent killed by user (process already terminated)"
+        add_comment(ticket_id, comment)
+        feedback_id = add_agent_feedback(
+            ticket_id=ticket_id,
+            feedback_type="agent_killed",
+            run_id=run_id,
+            reason=comment,
+            source_event="AGENT_RUN_KILLED",
+            created_by="human",
+        )
         add_log(
             "WARNING",
             "agent_event",
@@ -96,7 +105,7 @@ def api_kill_agent_run(run_id):
             details={"agent_name": run.get("agent_name", "Unknown"), "run_id": run_id, "exit_code": -15},
             ticket_id=ticket_id,
         )
-        return jsonify({"success": True, "exit_code": -15, "escalated": False})
+        return jsonify({"success": True, "exit_code": -15, "escalated": False, "feedback_id": feedback_id})
 
     escalated = False
     try:
@@ -106,7 +115,16 @@ def api_kill_agent_run(run_id):
         run_db(
             "UPDATE agent_runs SET status = 'failed', completed_at = ?, exit_code = ? WHERE id = ?", (now, -15, run_id)
         )
-        add_comment(ticket_id, "🛑 Agent killed by user (process already terminated)")
+        comment = "🛑 Agent killed by user (process already terminated)"
+        add_comment(ticket_id, comment)
+        feedback_id = add_agent_feedback(
+            ticket_id=ticket_id,
+            feedback_type="agent_killed",
+            run_id=run_id,
+            reason=comment,
+            source_event="AGENT_RUN_KILLED",
+            created_by="human",
+        )
         add_log(
             "WARNING",
             "agent_event",
@@ -114,7 +132,7 @@ def api_kill_agent_run(run_id):
             details={"agent_name": run.get("agent_name", "Unknown"), "run_id": run_id, "exit_code": -15},
             ticket_id=ticket_id,
         )
-        return jsonify({"success": True, "exit_code": -15, "escalated": False})
+        return jsonify({"success": True, "exit_code": -15, "escalated": False, "feedback_id": feedback_id})
 
     for _ in range(10):
         time.sleep(0.5)
@@ -135,6 +153,14 @@ def api_kill_agent_run(run_id):
     if escalated:
         comment += " (escalated to SIGKILL after SIGTERM timeout)"
     add_comment(ticket_id, comment)
+    feedback_id = add_agent_feedback(
+        ticket_id=ticket_id,
+        feedback_type="agent_killed",
+        run_id=run_id,
+        reason=comment,
+        source_event="AGENT_RUN_KILLED",
+        created_by="human",
+    )
     add_log(
         "WARNING",
         "agent_event",
@@ -147,7 +173,7 @@ def api_kill_agent_run(run_id):
         },
         ticket_id=ticket_id,
     )
-    return jsonify({"success": True, "exit_code": exit_code, "escalated": escalated})
+    return jsonify({"success": True, "exit_code": exit_code, "escalated": escalated, "feedback_id": feedback_id})
 
 
 @agent_runs_bp.route("/api/agent_runs/<int:run_id>/stream", methods=["GET"])

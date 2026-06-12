@@ -19,6 +19,7 @@ from pi_cowork.events import (
     bus,
 )
 from pi_cowork.models import (
+    add_agent_feedback,
     add_comment,
     count_unanswered_questions,
     get_agent,
@@ -388,6 +389,20 @@ def api_update_ticket(ticket_id):  # noqa: C901
                             add_comment(ticket_id, f"✅ Gate '{gate['name']}' (CLI) passed.\n{output}")
                         else:
                             add_comment(ticket_id, f"❌ Gate '{gate['name']}' (CLI) failed.\n{output}")
+                            if gate.get("notify_on_failure"):
+                                add_agent_feedback(
+                                    ticket_id=ticket_id,
+                                    feedback_type="cli_failed",
+                                    reason=output,
+                                    context_json=json.dumps(
+                                        {
+                                            "gate_name": gate["name"],
+                                            "command": config_json.get("command", ""),
+                                        }
+                                    ),
+                                    source_event="GATE_FAILED",
+                                    created_by="system",
+                                )
                             bus.publish(
                                 GATE_FAILED,
                                 ticket_id=ticket_id,
@@ -588,6 +603,16 @@ def api_spawn_agent(ticket_id):
     )
     if running_row and running_row["c"] > 0:
         return jsonify({"error": "Cannot spawn agent: an agent is already running on this ticket"}), 409
+
+    data = request.get_json(silent=True) or {}
+    reason = (data.get("reason") or "").strip()
+    add_agent_feedback(
+        ticket_id=ticket_id,
+        feedback_type="agent_rerun",
+        reason=reason or None,
+        source_event="AGENT_RERUN",
+        created_by="human",
+    )
 
     try_spawn_or_queue(row_to_dict(ticket), status, agent)
 

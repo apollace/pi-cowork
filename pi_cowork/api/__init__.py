@@ -7,6 +7,7 @@ from pi_cowork.api.comments import comments_bp
 from pi_cowork.api.db_backup import db_backup_bp
 from pi_cowork.api.endpoint_registry import endpoint_registry_bp
 from pi_cowork.api.events import events_bp
+from pi_cowork.api.feedback import feedback_bp
 from pi_cowork.api.gate_reviews import gate_reviews_bp
 from pi_cowork.api.import_export import import_export_bp
 from pi_cowork.api.knowledge import knowledge_bp
@@ -52,6 +53,7 @@ ALL_BLUEPRINTS = [
     db_backup_bp,
     ticket_status_overrides_bp,
     knowledge_bp,
+    feedback_bp,
 ]
 
 
