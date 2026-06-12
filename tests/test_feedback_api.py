@@ -17,6 +17,27 @@ from pi_cowork.models import add_agent_feedback
 # ---------------------------------------------------------------------------
 
 
+def _create_workflow_with_statuses(client, n_statuses=2):
+    """Helper: create a workflow with n_statuses statuses and return ids."""
+    res = client.post("/api/workflows", json={"name": "Test WF"})
+    wf = json.loads(res.data)
+    wf_id = wf["id"]
+    status_ids = []
+    for i in range(n_statuses):
+        res = client.post(
+            "/api/statuses",
+            json={
+                "name": f"Status {i}",
+                "sort_order": i,
+                "is_default": 1 if i == 0 else 0,
+                "is_terminal": 1 if i == n_statuses - 1 else 0,
+                "workflow_id": wf_id,
+            },
+        )
+        status_ids.append(json.loads(res.data)["id"])
+    return wf_id, status_ids
+
+
 def _create_agent(client, workflow_id, name="TestAgent", description="You are a test agent."):
     res = client.post(
         "/api/agents",
@@ -405,8 +426,100 @@ class TestListFeedback:
         assert "Tests failed" in fb["preview"]
         assert "expected: All green" in fb["preview"]
 
+    def test_filter_by_board_id(self, client, default_workflow, default_board):
+        """board_id filter narrows to feedback on tickets from a specific board."""
+        # Create a second workflow with statuses and a board using it
+        wf2_id, _ = _create_workflow_with_statuses(client)
+        b2 = client.post("/api/boards", json={"name": "B2", "workflow_id": wf2_id}).json
+
+        t1 = _create_ticket(client, default_board["id"], title="T1")
+        t2 = _create_ticket(client, b2["id"], title="T2")
+
+        with client.application.app_context():
+            f1 = add_agent_feedback(t1["id"], "gate_rejected", reason="Board 1")
+            f2 = add_agent_feedback(t2["id"], "cli_failed", reason="Board 2")
+
+        res = client.get(f"/api/feedback?board_id={default_board['id']}")
+        data = json.loads(res.data)
+        ids = [f["id"] for f in data["feedback"]]
+        assert f1 in ids
+        assert f2 not in ids
+
+    def test_filter_by_workflow_id(self, client, default_workflow, default_board):
+        """workflow_id filter narrows to feedback on tickets from boards using a specific workflow."""
+        wf2_id, _ = _create_workflow_with_statuses(client)
+        b2 = client.post("/api/boards", json={"name": "B2", "workflow_id": wf2_id}).json
+
+        t1 = _create_ticket(client, default_board["id"], title="T1")
+        t2 = _create_ticket(client, b2["id"], title="T2")
+
+        with client.application.app_context():
+            f1 = add_agent_feedback(t1["id"], "gate_rejected", reason="Workflow 1")
+            f2 = add_agent_feedback(t2["id"], "cli_failed", reason="Workflow 2")
+
+        res = client.get(f"/api/feedback?workflow_id={default_workflow['id']}")
+        data = json.loads(res.data)
+        ids = [f["id"] for f in data["feedback"]]
+        assert f1 in ids
+        assert f2 not in ids
+
+    def test_enrichment_board_and_workflow(self, client, default_workflow, default_board):
+        """List rows contain board_id, board_name, workflow_id, workflow_name."""
+        ticket = _create_ticket(client, default_board["id"], title="Enrichment Test")
+        with client.application.app_context():
+            add_agent_feedback(ticket["id"], "gate_rejected", reason="Issue")
+
+        res = client.get("/api/feedback")
+        data = json.loads(res.data)
+        assert len(data["feedback"]) == 1
+        fb = data["feedback"][0]
+        assert fb["board_id"] == default_board["id"]
+        assert fb["board_name"] == default_board["name"]
+        assert fb["workflow_id"] == default_workflow["id"]
+        assert fb["workflow_name"] == default_workflow["name"]
+
+    def test_preview_includes_board_and_workflow(self, client, default_workflow, default_board):
+        """Preview payload contains nested board and workflow objects."""
+        ticket = _create_ticket(client, default_board["id"], title="Preview Ticket")
+        with client.application.app_context():
+            fid = add_agent_feedback(ticket["id"], "cli_failed", reason="Tests failed")
+
+        res = client.get(f"/api/feedback/{fid}/preview")
+        data = json.loads(res.data)
+        assert data["board"] == {
+            "id": default_board["id"],
+            "name": default_board["name"],
+        }
+        assert data["workflow"] == {
+            "id": default_workflow["id"],
+            "name": default_workflow["name"],
+        }
+
+    def test_count_respects_board_and_workflow_filters(self, client, default_workflow, default_board):
+        """Total in pagination envelope is correct when filters are applied."""
+        wf2_id, _ = _create_workflow_with_statuses(client)
+        b2 = client.post("/api/boards", json={"name": "B2", "workflow_id": wf2_id}).json
+
+        t1 = _create_ticket(client, default_board["id"], title="T1")
+        t2 = _create_ticket(client, b2["id"], title="T2")
+
+        with client.application.app_context():
+            add_agent_feedback(t1["id"], "gate_rejected", reason="Board 1")
+            add_agent_feedback(t2["id"], "cli_failed", reason="Board 2")
+
+        res_all = client.get("/api/feedback")
+        data_all = json.loads(res_all.data)
+        assert data_all["total"] == 2
+
+        res_board = client.get(f"/api/feedback?board_id={default_board['id']}")
+        data_board = json.loads(res_board.data)
+        assert data_board["total"] == 1
+
+        res_wf = client.get(f"/api/feedback?workflow_id={default_workflow['id']}")
+        data_wf = json.loads(res_wf.data)
+        assert data_wf["total"] == 1
+
     def test_context_json_parsed(self, client, default_board):
-        """Valid context_json is parsed into the context dict."""
         ticket = _create_ticket(client, default_board["id"])
         with client.application.app_context():
             add_agent_feedback(

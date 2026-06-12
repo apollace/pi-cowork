@@ -173,13 +173,14 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/feedback",
         "label": (
             "list feedback rows (query: consumed, limit, feedback_type, ticket_id, "
-            "agent_id, date_from, date_to, search, page, per_page)"
+            "agent_id, board_id, workflow_id, date_from, date_to, search, page, per_page)"
         ),
         "doc_lines": [
             "- GET {base_url}/api/feedback → list feedback rows (query: consumed (tristate — missing = all, "
-            "true = consumed only, false = unconsumed only), feedback_type, ticket_id, agent_id, date_from, "
-            "date_to, search, page, per_page). Returns paginated envelope {feedback, total, page, per_page, "
-            "total_pages} with enriched feedback including preview and runtime context.",
+            "true = consumed only, false = unconsumed only), feedback_type, ticket_id, agent_id, board_id, "
+            "workflow_id, date_from, date_to, search, page, per_page). Returns paginated envelope {feedback, total, "
+            "page, per_page, total_pages} with enriched feedback including preview, runtime context, board_id, "
+            "board_name, workflow_id, and workflow_name.",
         ],
     },
     {
@@ -190,7 +191,8 @@ ENDPOINT_REGISTRY = [
         "label": "get canonical structured JSON preview for a feedback row",
         "doc_lines": [
             "- GET {base_url}/api/feedback/{feedback_id}/preview → get canonical structured JSON preview for a "
-            "feedback row (includes ticket, agent, run, gate review, reason, expected_behavior, context, created_at).",
+            "feedback row (includes ticket, agent, run, gate review, reason, expected_behavior, context, created_at, "
+            "plus nested board and workflow objects).",
         ],
     },
     {

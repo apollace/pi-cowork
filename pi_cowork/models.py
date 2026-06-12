@@ -1541,6 +1541,8 @@ def get_unconsumed_feedback_enriched(
     feedback_type=None,
     ticket_id=None,
     agent_id=None,
+    board_id=None,
+    workflow_id=None,
     date_from=None,
     date_to=None,
     search=None,
@@ -1556,6 +1558,8 @@ def get_unconsumed_feedback_enriched(
         ticket_id (int): Filter by ticket_id.
         agent_id (int): Filter by agent_runs.agent_id (the agent that produced
                         the run the feedback is linked to).
+        board_id (int): Filter by board_id.
+        workflow_id (int): Filter by workflow_id.
         date_from (str): ISO date string; filter af.created_at >= date_from.
         date_to (str): ISO date string; filter af.created_at <= date_to.
         search (str): Text search across af.reason, af.expected_behavior, t.title.
@@ -1581,6 +1585,14 @@ def get_unconsumed_feedback_enriched(
     if agent_id is not None:
         conditions.append("ar.agent_id = ?")
         params.append(agent_id)
+
+    if board_id is not None:
+        conditions.append("b.id = ?")
+        params.append(board_id)
+
+    if workflow_id is not None:
+        conditions.append("w.id = ?")
+        params.append(workflow_id)
 
     if date_from:
         conditions.append("af.created_at >= ?")
@@ -1621,7 +1633,11 @@ def get_unconsumed_feedback_enriched(
             qg.name AS gate_name,
             qg.gate_type AS gate_type,
             fs.name AS from_status,
-            ts.name AS to_status
+            ts.name AS to_status,
+            b.id AS board_id,
+            b.name AS board_name,
+            w.id AS workflow_id,
+            w.name AS workflow_name
         FROM agent_feedback af
         LEFT JOIN tickets t ON t.id = af.ticket_id
         LEFT JOIN agent_runs ar ON ar.id = af.run_id
@@ -1630,6 +1646,8 @@ def get_unconsumed_feedback_enriched(
         LEFT JOIN quality_gates qg ON qg.id = gr.gate_id
         LEFT JOIN statuses fs ON fs.id = gr.from_status_id
         LEFT JOIN statuses ts ON ts.id = gr.to_status_id
+        LEFT JOIN boards b ON b.id = t.board_id
+        LEFT JOIN workflows w ON w.id = b.workflow_id
         """
         + where_clause
         + "\n        ORDER BY af.created_at ASC, af.id ASC\n        LIMIT ? OFFSET ?\n    "
@@ -1646,6 +1664,8 @@ def get_feedback_count(
     feedback_type=None,
     ticket_id=None,
     agent_id=None,
+    board_id=None,
+    workflow_id=None,
     date_from=None,
     date_to=None,
     search=None,
@@ -1670,6 +1690,14 @@ def get_feedback_count(
     if agent_id is not None:
         conditions.append("ar.agent_id = ?")
         params.append(agent_id)
+
+    if board_id is not None:
+        conditions.append("b.id = ?")
+        params.append(board_id)
+
+    if workflow_id is not None:
+        conditions.append("w.id = ?")
+        params.append(workflow_id)
 
     if date_from:
         conditions.append("af.created_at >= ?")
@@ -1699,6 +1727,8 @@ def get_feedback_count(
         LEFT JOIN quality_gates qg ON qg.id = gr.gate_id
         LEFT JOIN statuses fs ON fs.id = gr.from_status_id
         LEFT JOIN statuses ts ON ts.id = gr.to_status_id
+        LEFT JOIN boards b ON b.id = t.board_id
+        LEFT JOIN workflows w ON w.id = b.workflow_id
         """
     ]
     if where_clause:
