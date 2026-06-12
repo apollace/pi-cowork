@@ -166,6 +166,29 @@ ENDPOINT_REGISTRY = [
             "- PUT {base_url}/api/feedback/{feedback_id} → update feedback reason and expected_behavior (human-only)",
         ],
     },
+    {
+        "key": "feedback_list",
+        "category": "Feedback",
+        "method": "GET",
+        "path_template": "/api/feedback",
+        "label": "list feedback rows (query: consumed, limit, feedback_type, ticket_id, agent_id)",
+        "doc_lines": [
+            "- GET {base_url}/api/feedback → list feedback rows (query: consumed, limit, feedback_type, ticket_id, "
+            "agent_id). Default returns unconsumed feedback oldest first. Returns enriched feedback with preview and "
+            "runtime context.",
+        ],
+    },
+    {
+        "key": "feedback_consume",
+        "category": "Feedback",
+        "method": "POST",
+        "path_template": "/api/feedback/{feedback_id}/consume",
+        "label": "mark feedback as consumed (optional body: consumed_by_run_id)",
+        "doc_lines": [
+            "- POST {base_url}/api/feedback/{feedback_id}/consume → mark feedback as consumed. Optional JSON body: "
+            "consumed_by_run_id. Returns 404 if not found, 409 if already consumed.",
+        ],
+    },
     # ── Tickets (global list/create) ──
     {
         "key": "tickets_list",
