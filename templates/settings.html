@@ -111,6 +111,28 @@
     </div>
   </div>
 
+  <!-- Self-Improvement Category (collapsed by default) -->
+  <div class="settings-category collapsed" id="category-feedback">
+    <div class="settings-category-header" onclick="toggleCategory('feedback')">
+      <div class="settings-category-header-left">
+        <span class="settings-chevron">▶</span>
+        <span class="settings-category-title">🧠 Self-Improvement</span>
+      </div>
+    </div>
+    <div class="settings-category-detail collapsed" id="detail-feedback">
+      <div class="form-card">
+        <label class="form-row">
+          <span>Capture feedback automatically</span>
+          <input type="checkbox" id="cfg-feedback-capture-enabled" checked />
+        </label>
+        <label class="form-row">
+          <span>Feedback retention (days)</span>
+          <input type="number" id="cfg-feedback-retention-days" min="1" max="3650" />
+        </label>
+      </div>
+    </div>
+  </div>
+
   <!-- Logs & Storage Category (collapsed by default) -->
   <div class="settings-category collapsed" id="category-logs">
     <div class="settings-category-header" onclick="toggleCategory('logs')">
@@ -328,7 +350,23 @@
         document.getElementById('cfg-notification-dismissal-retention').value = 7;
       }
 
-      // Load db_backup_max_count setting
+      // Load feedback capture setting
+      const fbCaptureRes = await fetch('/api/settings/feedback_capture_enabled');
+      if (fbCaptureRes.ok) {
+        const fbCaptureData = await fbCaptureRes.json();
+        document.getElementById('cfg-feedback-capture-enabled').checked = fbCaptureData.value !== '0';
+      } else {
+        document.getElementById('cfg-feedback-capture-enabled').checked = true;
+      }
+
+      // Load feedback retention setting
+      const fbRetRes = await fetch('/api/settings/feedback_retention_days');
+      if (fbRetRes.ok) {
+        const fbRetData = await fbRetRes.json();
+        document.getElementById('cfg-feedback-retention-days').value = parseInt(fbRetData.value, 10) || 30;
+      } else {
+        document.getElementById('cfg-feedback-retention-days').value = 30;
+      }
       const dbBackupRes = await fetch('/api/settings/db_backup_max_count');
       if (dbBackupRes.ok) {
         const dbBackupData = await dbBackupRes.json();
@@ -428,6 +466,12 @@
       return;
     }
 
+    const feedbackRetention = parseInt(document.getElementById('cfg-feedback-retention-days').value, 10);
+    if (isNaN(feedbackRetention) || feedbackRetention < 1) {
+      showFeedback('Feedback retention days must be at least 1', 'error');
+      return;
+    }
+
     const dbBackupMaxCount = parseInt(document.getElementById('cfg-db-backup-max-count').value, 10);
     if (isNaN(dbBackupMaxCount) || dbBackupMaxCount < 1) {
       showFeedback('Max DB backups retained must be at least 1', 'error');
@@ -519,6 +563,30 @@
       const evLogData = await evLogRes.json();
       if (!evLogData.success) {
         showFeedback('Failed to save event log retention: ' + (evLogData.error || 'unknown error'), 'error');
+        return;
+      }
+
+      // Save feedback capture enabled
+      const fbCaptureRes = await fetch('/api/settings/feedback_capture_enabled', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: document.getElementById('cfg-feedback-capture-enabled').checked ? '1' : '0' }),
+      });
+      const fbCaptureData = await fbCaptureRes.json();
+      if (!fbCaptureData.success) {
+        showFeedback('Failed to save feedback capture setting: ' + (fbCaptureData.error || 'unknown error'), 'error');
+        return;
+      }
+
+      // Save feedback retention days
+      const fbRetRes = await fetch('/api/settings/feedback_retention_days', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: String(feedbackRetention) }),
+      });
+      const fbRetData = await fbRetRes.json();
+      if (!fbRetData.success) {
+        showFeedback('Failed to save feedback retention: ' + (fbRetData.error || 'unknown error'), 'error');
         return;
       }
 

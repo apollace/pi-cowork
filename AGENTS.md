@@ -96,6 +96,8 @@ All dynamic configuration is resolved via `pi_cowork.config.get_config(key)` wit
 | Event Log Retention Days | `event_log_retention_days` | `PI_EVENT_LOG_RETENTION_DAYS` | `30` | int | 📜 Logs & Storage |
 | Max DB Backups Retained | `db_backup_max_count` | _(none)_ | `10` | int | 📜 Logs & Storage |
 | Notification Dismissal Retention Days | `notification_dismissal_retention_days` | `PI_NOTIFICATION_DISMISSAL_RETENTION_DAYS` | `7` | int | 📜 Logs & Storage |
+| **Feedback Capture Enabled** | `feedback_capture_enabled` | `PI_FEEDBACK_CAPTURE_ENABLED` | `1` | int | 🧠 Self-Improvement |
+| Feedback Retention Days | `feedback_retention_days` | `PI_FEEDBACK_RETENTION_DAYS` | `30` | int | 🧠 Self-Improvement |
 
 **Kept as env-only** (security/runtime concerns):
 - `FLASK_SECRET_KEY` — security concern, must not be in DB
@@ -107,7 +109,8 @@ All dynamic configuration is resolved via `pi_cowork.config.get_config(key)` wit
 **Settings UI** has three collapsible categories:
 1. 🤖 **Assistant** — enabled, auto-context, model, thinking, working-dir, system-prompt, api-endpoints, saved-prompts
 2. ⚙️ **General** — pi_cowork_url, **port**, skills_folder_path, max_parallel, max_per_hour, warm_spawn_threshold, run_max_age
-3. 📜 **Logs & Storage** — log_retention_days, event_log_retention_days, db_backup_max_count, notification_dismissal_retention_days, purge terminal logs
+3. 🧠 **Self-Improvement** — feedback_capture_enabled, feedback_retention_days
+4. 📜 **Logs & Storage** — log_retention_days, event_log_retention_days, db_backup_max_count, notification_dismissal_retention_days, purge terminal logs
 
 ## Data Model
 
@@ -509,6 +512,7 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 - `sort_order` (integer, default 0) — evaluation order
 - `enabled` (boolean, default true)
 - `notify_on_failure` (boolean, default true) — whether a failure/rejection of this gate should create a self-improvement observation ticket on the System board. Defaults to `true` for `manual` gates and `false` for `cli` gates on creation. Existing gates migrated to `1` (true).
+- `include_in_feedback` (boolean, default true) — whether gate rejections and CLI failures on this transition should be captured in the `agent_feedback` table. When `false`, this gate never generates auto-feedback even if the global `feedback_capture_enabled` setting is on.
 - `workflow_id` (integer) — required
 
 **Gate Review fields:**
@@ -567,10 +571,10 @@ Quality gates are checks that must pass when a ticket transitions from one statu
 
 ### Auto-Capture Feedback
 The system automatically creates `agent_feedback` rows for:
-- **Gate rejection** (`feedback_type='gate_rejected'`) — captured when a manual gate is rejected, including the rejection comment as `reason`.
-- **CLI failure** (`feedback_type='cli_failed'`) — captured when a CLI gate fails **and** the gate's `notify_on_failure` is enabled. The `reason` contains the gate's stdout/stderr output.
-- **Agent kill** (`feedback_type='agent_killed'`) — captured when a user kills a running agent via the kill endpoint. The kill endpoint returns the new `feedback_id` so the UI can optionally prompt for additional context.
-- **Re-run** (`feedback_type='agent_rerun'`) — captured when an agent is manually re-spawned via `/api/tickets/{id}/spawn`. An optional `reason` field in the spawn request body records why the re-run was triggered.
+- **Gate rejection** (`feedback_type='gate_rejected'`) — captured when a manual gate is rejected, including the rejection comment as `reason`. Only captured if the global `feedback_capture_enabled` setting is on **and** the gate's `include_in_feedback` flag is `true`.
+- **CLI failure** (`feedback_type='cli_failed'`) — captured when a CLI gate fails **and** the gate's `notify_on_failure` is enabled. Also gated by the global `feedback_capture_enabled` setting and the gate's `include_in_feedback` flag. The `reason` contains the gate's stdout/stderr output.
+- **Agent kill** (`feedback_type='agent_killed'`) — captured when a user kills a running agent via the kill endpoint. Gated by the global `feedback_capture_enabled` setting only (no per-gate). The kill endpoint returns the new `feedback_id` so the UI can optionally prompt for additional context.
+- **Re-run** (`feedback_type='agent_rerun'`) — captured when an agent is manually re-spawned via `/api/tickets/{id}/spawn`. Gated by the global `feedback_capture_enabled` setting only (no per-gate). An optional `reason` field in the spawn request body records why the re-run was triggered.
 
 Feedback rows are stored in the `agent_feedback` table and linked to tickets (and optionally to `agent_runs` or `gate_reviews`). The `PUT /api/feedback/{id}` endpoint allows humans to update the `reason` and `expected_behavior` fields after the fact.
 
@@ -926,7 +930,8 @@ Key principles: clarity over cleverness, consistency (reuse design tokens), prog
 - **`get_model_ids` and `get_thinking_levels` monkeypatching in tests** — the `mock_model_ids` autouse fixture in `conftest.py` patches `get_model_ids` and `get_thinking_levels` in `pi_cowork.api.pi_models` and every API module that imports them at module level. When adding a new API blueprint that imports either function, you **must** also add a `monkeypatch.setattr(your_module, 'get_model_ids', fake)` line to the `mock_model_ids` fixture in `conftest.py`, otherwise model/thinking validation in the new module will use the real (cached or empty) CLI output instead of the test mock list, causing spurious 400 errors in tests.
 - **Knowledge management** — A per-board and global knowledge base for storing Markdown reference entries. Entries with `auto_context=1` are automatically injected into agent prompts and assistant context; all entries are searchable via API endpoints. Agents have read AND write access (via `created_by`/`updated_by` tracking as `'human'` or `'agent'`). Full version history is maintained in the `knowledge_versions` table every time an entry is created or updated. The `knowledge_entries` table uses `board_id=NULL` for global entries (visible across all boards) and `board_id=<id>` for board-scoped entries. When listing entries with `board_id` specified, both global and board-specific entries are returned. The `update_knowledge_entry()` model function uses `clear_board_id=True` to set an entry to global (board_id=NULL), and `board_id=<int>` to assign to a specific board. Omitting both `board_id` and `clear_board_id` leaves the board unchanged. The API validates that `board_id` and `clear_board_id` cannot both be provided. Tag management uses normalized `knowledge_tags` with a many-to-many `knowledge_entry_tags` junction table.
 - **schema.sql must stay in sync with migrations** — `tests/test_schema_sync.py` verifies that a DB built from `schema.sql` alone matches a DB built from `schema.sql` + `_migrate()`. When adding a migration that creates a table, adds a column, or creates an index, you **must** also update `schema.sql` accordingly. The test compares tables, columns (via `PRAGMA table_info`), and indexes, ignoring the `_migrations` table. Run `pytest tests/test_schema_sync.py` after any schema change.
-- **Periodic cleanup in the drain loop** — The background drain loop (`_drain_loop` in `agents.py`) runs two daily (86400s) cleanup tasks: `cleanup_old_logs()` (system_logs table, `log_retention_days` setting) and `cleanup_old_event_logs()` (event_log table, `event_log_retention_days` setting). Both follow the same config precedence pattern: explicit arg → DB setting → env var → default 30. Both work inside and outside Flask app context. When adding a new table that needs periodic rotation, add a `_last_*_cleanup` tracker and a daily call in `_drain_loop`, create the cleanup function in a dedicated module (mirroring `system_logs.py` / `event_log.py`), add a seed migration for the retention-days setting, and add a `created_at` index for efficient deletion.
+- **Feedback capture** — Auto-captured feedback (`agent_feedback` table) for gate rejections, CLI failures, agent kills, and reruns is gated by a global master switch (`feedback_capture_enabled` setting, default `1`) AND a per-gate `include_in_feedback` flag (default `1`). Both must be enabled for feedback to be recorded.
+- **Feedback retention** — `cleanup_old_feedback()` runs daily in the drain loop, deleting `agent_feedback` rows older than `feedback_retention_days` (default 30). The function works inside and outside a Flask app context, mirroring the `cleanup_old_logs()` pattern.
 - **Jinja script block ordering** — `base.html` defines shared globals like `window.renderMarkdown` and `window.showToast` in a `<script>` block that appears after `{% block content %}` in the rendered DOM. Any child template script that depends on these globals must be placed in `{% block scripts %}` (rendered after the base `<script>` block), not inline inside `{% block content %}`. Scripts inside `{% block content %}` execute before the base globals exist, causing race conditions where markdown rendering silently falls back to plain text.
 - **EventBus handlers need an active Flask app context for DB access** — `pi_cowork/db.get_db()` requires `current_app` / `flask.g`. When calling `bus.publish()` from outside a request (e.g., in tests or background threads), wrap it in `with app.app_context():` so that subscribers that query the database (audit log, system logs) can open a connection. The `_audit_subscriber` handler calls `get_db()` and will raise `RuntimeError` without an app context.
 - **Observations endpoint replaces self-improvement loop** — The Hermes self-improvement loop that created observation tickets on the System board has been removed. A read-only `GET /api/observations` endpoint dynamically aggregates data from `event_log`, `system_logs`, `agent_runs`, and `gate_reviews`. The System Improvement workflow, System board, and Synthesizer agent are no longer seeded for new databases (existing data is untouched).

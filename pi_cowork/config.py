@@ -27,6 +27,8 @@ DEFAULTS = {
     "event_log_retention_days": "30",
     "db_backup_max_count": "10",
     "notification_dismissal_retention_days": "7",
+    "feedback_capture_enabled": "1",
+    "feedback_retention_days": "30",
     "skills_folder_path": "workspace/skills",
 }
 
@@ -39,6 +41,8 @@ ENV_MAP = {
     "log_retention_days": "PI_LOG_RETENTION_DAYS",
     "event_log_retention_days": "PI_EVENT_LOG_RETENTION_DAYS",
     "notification_dismissal_retention_days": "PI_NOTIFICATION_DISMISSAL_RETENTION_DAYS",
+    "feedback_capture_enabled": "PI_FEEDBACK_CAPTURE_ENABLED",
+    "feedback_retention_days": "PI_FEEDBACK_RETENTION_DAYS",
     "skills_folder_path": "PI_SKILLS_FOLDER",
 }
 
@@ -53,6 +57,8 @@ _INT_KEYS = {
     "event_log_retention_days",
     "db_backup_max_count",
     "notification_dismissal_retention_days",
+    "feedback_capture_enabled",
+    "feedback_retention_days",
 }
 
 

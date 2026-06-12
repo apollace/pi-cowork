@@ -71,12 +71,13 @@ def api_create_quality_gate():
         notify_on_failure = 1 if data["notify_on_failure"] else 0
     else:
         notify_on_failure = 1 if gate_type == "manual" else 0
+    include_in_feedback = 1 if data.get("include_in_feedback", True) else 0
 
     try:
         cur = run_db(
             "INSERT INTO quality_gates (from_status_id, to_status_id, gate_type, name, "
-            "config, sort_order, enabled, notify_on_failure, workflow_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "config, sort_order, enabled, notify_on_failure, include_in_feedback, workflow_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 from_status_id,
                 to_status_id,
@@ -86,6 +87,7 @@ def api_create_quality_gate():
                 int(sort_order),
                 enabled,
                 notify_on_failure,
+                include_in_feedback,
                 workflow_id,
             ),
         )
@@ -147,6 +149,9 @@ def api_update_quality_gate(gate_id):
     if "notify_on_failure" in data:
         updates.append("notify_on_failure = ?")
         args.append(1 if data["notify_on_failure"] else 0)
+    if "include_in_feedback" in data:
+        updates.append("include_in_feedback = ?")
+        args.append(1 if data["include_in_feedback"] else 0)
     wf_id = gate["workflow_id"]
     if "from_status_id" in data:
         from_status_id = int(data["from_status_id"])

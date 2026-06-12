@@ -126,6 +126,7 @@ CREATE TABLE IF NOT EXISTS quality_gates (
     sort_order INTEGER NOT NULL DEFAULT 0,
     enabled BOOLEAN NOT NULL DEFAULT 1,
     notify_on_failure BOOLEAN NOT NULL DEFAULT 1,
+    include_in_feedback BOOLEAN NOT NULL DEFAULT 1,
     workflow_id INTEGER NOT NULL REFERENCES workflows(id),
     UNIQUE(from_status_id, to_status_id, name, workflow_id)
 );
@@ -309,6 +310,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_feedback_ticket_id ON agent_feedback(ticket
 CREATE INDEX IF NOT EXISTS idx_agent_feedback_run_id ON agent_feedback(run_id);
 CREATE INDEX IF NOT EXISTS idx_agent_feedback_type ON agent_feedback(feedback_type);
 CREATE INDEX IF NOT EXISTS idx_agent_feedback_consumed_at ON agent_feedback(consumed_at);
+CREATE INDEX IF NOT EXISTS idx_agent_feedback_created_at ON agent_feedback(created_at);
 CREATE INDEX IF NOT EXISTS idx_system_logs_timestamp ON system_logs(timestamp);
 CREATE INDEX IF NOT EXISTS idx_system_logs_level ON system_logs(level);
 CREATE INDEX IF NOT EXISTS idx_system_logs_action_type ON system_logs(action_type);
@@ -402,6 +404,10 @@ CREATE TABLE IF NOT EXISTS knowledge_versions (
 CREATE INDEX IF NOT EXISTS idx_knowledge_entries_board_id ON knowledge_entries(board_id);
 CREATE INDEX IF NOT EXISTS idx_knowledge_entries_category ON knowledge_entries(category);
 CREATE INDEX IF NOT EXISTS idx_knowledge_versions_entry_id ON knowledge_versions(entry_id);
+
+-- Seed feedback settings
+INSERT OR IGNORE INTO settings (key, value) VALUES ('feedback_capture_enabled', '1');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('feedback_retention_days', '30');
 
 -- Seed transitions (when to move — the "how" is in the API docs)
 -- Instructions describe *when* to transition, not the API call (that's redundant with the API docs in the prompt).

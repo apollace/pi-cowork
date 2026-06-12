@@ -872,6 +872,96 @@ def _parse_dt(val):
 
 
 # ---------------------------------------------------------------------------
+# Agent Feedback Cleanup
+# ---------------------------------------------------------------------------
+
+
+def cleanup_old_feedback(max_age_days=None):
+    """Delete agent_feedback rows older than *max_age_days*.
+
+    Called periodically from the drain loop. Works inside and outside a
+    Flask application context.
+
+    Retention priority:
+    1. Explicit max_age_days argument
+    2. DB settings table (feedback_retention_days key)
+    3. PI_FEEDBACK_RETENTION_DAYS environment variable
+    4. Default of 30 days
+
+    Returns the number of rows deleted.
+    """
+    from datetime import datetime, timedelta
+
+    from pi_cowork.config import get_config
+
+    if max_age_days is None:
+        max_age_days = get_config("feedback_retention_days")
+        if max_age_days is None:
+            max_age_days = 30
+
+    cutoff = (datetime.now(UTC) - timedelta(days=max_age_days)).isoformat()
+
+    try:
+        from flask import has_app_context
+
+        if has_app_context():
+            from pi_cowork.db import get_db
+
+            db = get_db()
+            cur = db.execute("DELETE FROM agent_feedback WHERE created_at < ?", (cutoff,))
+            db.commit()
+            deleted = cur.rowcount
+        else:
+            raise RuntimeError("No app context")
+    except (ImportError, RuntimeError):
+        import os
+
+        from pi_cowork import config as _config
+
+        path = os.environ.get("DATABASE", _config.DATABASE)
+        conn = sqlite3.connect(path)
+        try:
+            cur = conn.execute("DELETE FROM agent_feedback WHERE created_at < ?", (cutoff,))
+            conn.commit()
+            deleted = cur.rowcount
+        finally:
+            conn.close()
+
+    if deleted:
+        logger.info("Agent feedback cleanup: deleted %d rows older than %d days", deleted, max_age_days)
+    return deleted
+
+
+# ---------------------------------------------------------------------------
+# Agent Feedback Capture Guard
+# ---------------------------------------------------------------------------
+
+
+def is_feedback_capture_enabled(gate_id=None):
+    """Check whether auto-feedback capture is enabled.
+
+    Respects both the global master switch (feedback_capture_enabled setting)
+    and, when gate_id is provided, the per-gate include_in_feedback flag.
+
+    Returns True only if both the global switch and the per-gate flag are on.
+    """
+    from pi_cowork.config import get_config
+
+    global_enabled = get_config("feedback_capture_enabled")
+    if global_enabled is None:
+        global_enabled = 1
+    if not int(global_enabled):
+        return False
+
+    if gate_id is not None:
+        row = query_db("SELECT include_in_feedback FROM quality_gates WHERE id = ?", (gate_id,), one=True)
+        if row and not row["include_in_feedback"]:
+            return False
+
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Notification Dismissals
 # ---------------------------------------------------------------------------
 

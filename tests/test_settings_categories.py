@@ -115,6 +115,7 @@ class TestSettingsCategoryStructure:
         """Category titles should use the emoji + name format from the plan."""
         html = _get_html(client)
         assert "🤖 Assistant" in html
+        assert "🧠 Self-Improvement" in html
         assert "📜" in html
         assert "Logs" in html
 
@@ -177,7 +178,7 @@ class TestCategoryDefaultsCollapsed:
         """Chevrons should show ▶ (collapsed) by default, not ▼ (expanded)."""
         html = _get_html(client)
         # Count ▶ in chevron spans
-        assert html.count('<span class="settings-chevron">▶</span>') >= 2
+        assert html.count('<span class="settings-chevron">▶</span>') >= 3
 
 
 class TestCategoryToggleJavascript:
@@ -227,6 +228,12 @@ class TestAllFieldsStillPresent:
             "cfg-system-prompt",
         ]:
             assert field_id in html, f"Missing field: {field_id}"
+
+    def test_feedback_fields_present(self, client):
+        """All self-improvement fields should be present in the page."""
+        html = _get_html(client)
+        assert "cfg-feedback-capture-enabled" in html
+        assert "cfg-feedback-retention-days" in html
 
     def test_logs_fields_present(self, client):
         """All logs/storage fields should be present in the page."""

@@ -10,7 +10,7 @@ from flask import Blueprint, jsonify, request, stream_with_context
 
 from pi_cowork import agents as _agents_mod
 from pi_cowork.db import query_db, row_to_dict, run_db
-from pi_cowork.models import add_agent_feedback, add_comment
+from pi_cowork.models import add_agent_feedback, add_comment, is_feedback_capture_enabled
 from pi_cowork.system_logs import add_log
 
 agent_runs_bp = Blueprint("agent_runs", __name__)
@@ -92,14 +92,16 @@ def api_kill_agent_run(run_id):
         )
         comment = "🛑 Agent killed by user (process already terminated)"
         add_comment(ticket_id, comment)
-        feedback_id = add_agent_feedback(
-            ticket_id=ticket_id,
-            feedback_type="agent_killed",
-            run_id=run_id,
-            reason=comment,
-            source_event="AGENT_RUN_KILLED",
-            created_by="human",
-        )
+        feedback_id = None
+        if is_feedback_capture_enabled():
+            feedback_id = add_agent_feedback(
+                ticket_id=ticket_id,
+                feedback_type="agent_killed",
+                run_id=run_id,
+                reason=comment,
+                source_event="AGENT_RUN_KILLED",
+                created_by="human",
+            )
         add_log(
             "WARNING",
             "agent_event",
@@ -119,14 +121,16 @@ def api_kill_agent_run(run_id):
         )
         comment = "🛑 Agent killed by user (process already terminated)"
         add_comment(ticket_id, comment)
-        feedback_id = add_agent_feedback(
-            ticket_id=ticket_id,
-            feedback_type="agent_killed",
-            run_id=run_id,
-            reason=comment,
-            source_event="AGENT_RUN_KILLED",
-            created_by="human",
-        )
+        feedback_id = None
+        if is_feedback_capture_enabled():
+            feedback_id = add_agent_feedback(
+                ticket_id=ticket_id,
+                feedback_type="agent_killed",
+                run_id=run_id,
+                reason=comment,
+                source_event="AGENT_RUN_KILLED",
+                created_by="human",
+            )
         add_log(
             "WARNING",
             "agent_event",
@@ -155,14 +159,16 @@ def api_kill_agent_run(run_id):
     if escalated:
         comment += " (escalated to SIGKILL after SIGTERM timeout)"
     add_comment(ticket_id, comment)
-    feedback_id = add_agent_feedback(
-        ticket_id=ticket_id,
-        feedback_type="agent_killed",
-        run_id=run_id,
-        reason=comment,
-        source_event="AGENT_RUN_KILLED",
-        created_by="human",
-    )
+    feedback_id = None
+    if is_feedback_capture_enabled():
+        feedback_id = add_agent_feedback(
+            ticket_id=ticket_id,
+            feedback_type="agent_killed",
+            run_id=run_id,
+            reason=comment,
+            source_event="AGENT_RUN_KILLED",
+            created_by="human",
+        )
     add_log(
         "WARNING",
         "agent_event",
