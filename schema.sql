@@ -234,6 +234,18 @@ CREATE TABLE IF NOT EXISTS assistant_saved_prompts (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Assistant runs: track in-progress assistant generation for reconnect across refresh
+CREATE TABLE IF NOT EXISTS assistant_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    board_id INTEGER REFERENCES boards(id) ON DELETE CASCADE,
+    status TEXT CHECK(status IN ('running','completed','failed','stopped')) DEFAULT 'running',
+    log_path TEXT NOT NULL,
+    pid INTEGER,
+    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME,
+    full_text TEXT
+);
+
 -- Event log: persistent audit trail for system events
 CREATE TABLE IF NOT EXISTS event_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -283,6 +295,8 @@ CREATE INDEX IF NOT EXISTS idx_system_logs_ticket_id ON system_logs(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_notification_dismissals_dismissed_at ON notification_dismissals(dismissed_at);
 CREATE INDEX IF NOT EXISTS idx_gate_reviews_ticket_id_status_created_at ON gate_reviews(ticket_id, status, created_at);
 CREATE INDEX IF NOT EXISTS idx_questions_ticket_id_created_at ON questions(ticket_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_assistant_runs_board_id_status ON assistant_runs(board_id, status);
+CREATE INDEX IF NOT EXISTS idx_assistant_runs_started_at ON assistant_runs(started_at);
 
 -- =============================================================================
 -- SEED DATA

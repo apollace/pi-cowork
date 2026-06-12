@@ -4,7 +4,14 @@ import os
 import signal
 from unittest.mock import MagicMock, patch
 
+from pi_cowork.assistant import (
+    _ASSISTANT_RUNS,
+    _assistant_runs_lock,
+    _assistant_stream_generator_reconnect,
+    _AssistantRun,
+)
 from pi_cowork.config import ASSISTANT_SESSION_DIR
+from pi_cowork.db import query_db, run_db
 
 
 def _make_mock_popen(ndjson="", stderr="", returncode=0):
@@ -17,6 +24,7 @@ def _make_mock_popen(ndjson="", stderr="", returncode=0):
         proc.pid = 12345
         proc.poll.return_value = None
         proc.wait.return_value = returncode
+        proc.returncode = returncode
         return proc
 
     return _fake
@@ -508,7 +516,7 @@ def test_stop_endpoint_kills_active_run(client):
     fake_proc = MagicMock()
     fake_proc.poll.return_value = None
     fake_proc.pid = 99999
-    run = _AssistantRun(fake_proc, None)
+    run = _AssistantRun(fake_proc, None, 1, os.devnull)
     with _assistant_runs_lock:
         _ASSISTANT_RUNS[None] = run
 
@@ -529,6 +537,100 @@ def test_stop_endpoint_returns_false_when_no_run(client):
     assert res.status_code == 200
     data = json.loads(res.data)
     assert data["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# Active Run
+# ---------------------------------------------------------------------------
+
+
+def test_active_run_returns_running_after_chat(client):
+    ndjson = '{"type":"text_delta","chunk":"Hello"}\n{"type":"done"}\n'
+    with patch("pi_cowork.assistant.subprocess.Popen", side_effect=_make_mock_popen(ndjson=ndjson)):
+        client.post("/api/assistant/chat", json={"message": "Hi"})
+
+    # In TESTING mode the generator finalizes inline, so active-run sees completed status
+    res = client.get("/api/assistant/active-run")
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    assert data is None
+
+    # But the run row should exist in the DB with completed status
+    with client.application.app_context():
+        row = query_db(
+            "SELECT status, full_text FROM assistant_runs WHERE board_id IS NULL ORDER BY id DESC LIMIT 1",
+            one=True,
+        )
+    assert row is not None
+    assert row["status"] == "completed"
+    assert row["full_text"] == "Hello"
+
+
+def test_active_run_returns_null_when_no_run(client):
+    res = client.get("/api/assistant/active-run")
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    assert data is None
+
+
+# ---------------------------------------------------------------------------
+# Reconnect stream
+# ---------------------------------------------------------------------------
+
+
+def test_reconnect_finalized_completed_run(client):
+    # Seed a completed run row and log file
+    log_dir = os.path.join(ASSISTANT_SESSION_DIR, "runs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "run-reconnect-test.log")
+    with open(log_path, "w") as f:
+        f.write('{"type":"text_delta","chunk":"Replay "}\n')
+        f.write('{"type":"text_delta","chunk":"text"}\n')
+        f.write('{"type":"_stdout_closed"}\n')
+
+    with client.application.app_context():
+        run_db(
+            "INSERT INTO assistant_runs (board_id, status, log_path, pid, full_text) VALUES (?, 'completed', ?, ?, ?)",
+            (None, log_path, 12345, "Replay text"),
+        )
+        run_id = query_db("SELECT last_insert_rowid() as id", one=True)["id"]
+
+    res = client.get(f"/api/assistant/stream?run_id={run_id}")
+    assert res.status_code == 200
+    assert res.mimetype == "text/event-stream"
+    body = res.data.decode("utf-8")
+    assert "Replay text" in body
+    assert "event: done" in body
+
+
+def test_reconnect_finalized_stopped_run(client):
+    log_dir = os.path.join(ASSISTANT_SESSION_DIR, "runs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "run-reconnect-stopped.log")
+    with open(log_path, "w") as f:
+        f.write('{"type":"text_delta","chunk":"Partial"}\n')
+        f.write('{"type":"_stdout_closed"}\n')
+
+    with client.application.app_context():
+        run_db(
+            "INSERT INTO assistant_runs (board_id, status, log_path, pid, full_text) VALUES (?, 'stopped', ?, ?, ?)",
+            (None, log_path, 12345, "Partial"),
+        )
+        run_id = query_db("SELECT last_insert_rowid() as id", one=True)["id"]
+
+    res = client.get(f"/api/assistant/stream?run_id={run_id}")
+    assert res.status_code == 200
+    body = res.data.decode("utf-8")
+    assert "event: stopped" in body
+    assert "Partial" in body
+
+
+def test_reconnect_not_found_run(client):
+    res = client.get("/api/assistant/stream?run_id=99999")
+    assert res.status_code == 200
+    body = res.data.decode("utf-8")
+    assert "event: error" in body
+    assert "Run not found" in body
 
 
 # ---------------------------------------------------------------------------
@@ -634,6 +736,26 @@ def test_compact_uses_config_model_and_thinking(client):
         assert "--thinking" in cmd
         assert cmd[cmd.index("--thinking") + 1] == "high"
         assert mock_run.call_args.kwargs.get("input") == '{"type":"compact"}'
+
+
+def test_compact_deletes_assistant_runs(client):
+    with patch(
+        "pi_cowork.assistant.subprocess.Popen",
+        side_effect=_make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n'),
+    ):
+        client.post("/api/assistant/chat", json={"message": "M1"})
+
+    with client.application.app_context():
+        before = query_db("SELECT COUNT(*) as c FROM assistant_runs", one=True)["c"]
+    assert before >= 1
+
+    with patch("app.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(stdout='{"type":"compaction_start"}', stderr="", returncode=0)
+        client.post("/api/assistant/compact")
+
+    with client.application.app_context():
+        after = query_db("SELECT COUNT(*) as c FROM assistant_runs", one=True)["c"]
+    assert after == 0
 
 
 # ---------------------------------------------------------------------------
@@ -802,6 +924,26 @@ def test_board_compact_affects_only_targeted_board(client, default_board, new_wo
     h2 = json.loads(client.get(f"/api/assistant/history?board_id={board2['id']}").data)
     assert len(h1) == 0
     assert len(h2) == 2
+
+
+def test_reset_deletes_assistant_runs(client):
+    with patch(
+        "pi_cowork.assistant.subprocess.Popen",
+        side_effect=_make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n'),
+    ):
+        client.post("/api/assistant/chat", json={"message": "Hi"})
+
+    with client.application.app_context():
+        before = query_db("SELECT COUNT(*) as c FROM assistant_runs", one=True)["c"]
+    assert before >= 1
+
+    with patch("app.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(stdout="{}", stderr="", returncode=0)
+        client.post("/api/assistant/reset")
+
+    with client.application.app_context():
+        after = query_db("SELECT COUNT(*) as c FROM assistant_runs", one=True)["c"]
+    assert after == 0
 
 
 def test_board_reset_affects_only_targeted_board(client, default_board, new_workflow):
@@ -1256,3 +1398,174 @@ def test_assistant_chat_excludes_skills_when_configured(client, temp_skills_fold
     skill_args = [cmd[i + 1] for i in range(len(cmd) - 1) if cmd[i] == "--skill"]
     assert any("allowed-skill" in s for s in skill_args)
     assert not any("blocked-skill" in s for s in skill_args)
+
+
+# ---------------------------------------------------------------------------
+# Reconnect bug fixes (Ticket #173)
+# ---------------------------------------------------------------------------
+
+
+def test_reconnect_active_run_does_not_duplicate_text(client):
+    """Replayed events in reconnect must not mutate run.accumulated_text."""
+    from pi_cowork.assistant import (
+        _ASSISTANT_RUNS,
+        _assistant_runs_lock,
+        _assistant_stream_generator_reconnect,
+        _AssistantRun,
+    )
+
+    log_dir = os.path.join(ASSISTANT_SESSION_DIR, "runs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "run-dup-test.log")
+    with open(log_path, "w") as f:
+        f.write('{"type":"text_delta","chunk":"Hello "}\n')
+        f.write('{"type":"text_delta","chunk":"World"}\n')
+        f.write('{"type":"_stdout_closed"}\n')
+
+    fake_proc = MagicMock()
+    fake_proc.poll.return_value = None
+    fake_proc.pid = 99999
+    run = _AssistantRun(fake_proc, None, 1, log_path)
+    run.accumulated_text = ["Hello ", "World"]  # Already accumulated by original generator
+
+    with _assistant_runs_lock:
+        _ASSISTANT_RUNS[None] = run
+
+    try:
+        call_count = [0]
+
+        def _sleep_and_remove(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] >= 1:
+                with _assistant_runs_lock:
+                    _ASSISTANT_RUNS.pop(None, None)
+            return None
+
+        with patch("pi_cowork.assistant.time.sleep", side_effect=_sleep_and_remove):
+            gen = _assistant_stream_generator_reconnect(run, None, client.application)
+            chunks = list(gen)
+
+        body = "".join(chunks)
+        assert "Hello " in body
+        assert "World" in body
+        # The bug would double accumulated_text; fixed behavior preserves it
+        assert run.accumulated_text == ["Hello ", "World"]
+    finally:
+        with _assistant_runs_lock:
+            _ASSISTANT_RUNS.pop(None, None)
+
+
+def test_reconnect_active_run_tails_new_log_events(client):
+    """New log events written after reconnect starts must be streamed."""
+
+    log_dir = os.path.join(ASSISTANT_SESSION_DIR, "runs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "run-tail-test.log")
+
+    with open(log_path, "w") as f:
+        f.write('{"type":"text_delta","chunk":"Hello "}\n')
+
+    fake_proc = MagicMock()
+    fake_proc.poll.return_value = None
+    fake_proc.pid = 99999
+    run = _AssistantRun(fake_proc, None, 1, log_path)
+
+    with _assistant_runs_lock:
+        _ASSISTANT_RUNS[None] = run
+
+    try:
+        call_count = [0]
+
+        def _sleep_and_append(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                with open(log_path, "a") as f:
+                    f.write('{"type":"text_delta","chunk":"World"}\n')
+            elif call_count[0] == 2:
+                with open(log_path, "a") as f:
+                    f.write('{"type":"_stdout_closed"}\n')
+            elif call_count[0] >= 3:
+                with _assistant_runs_lock:
+                    _ASSISTANT_RUNS.pop(None, None)
+            return None
+
+        with patch("pi_cowork.assistant.time.sleep", side_effect=_sleep_and_append):
+            gen = _assistant_stream_generator_reconnect(run, None, client.application)
+            chunks = list(gen)
+
+        body = "".join(chunks)
+        assert "Hello " in body
+        assert "World" in body
+    finally:
+        with _assistant_runs_lock:
+            _ASSISTANT_RUNS.pop(None, None)
+
+
+def test_reconnect_finalized_empty_log_yields_full_text(client):
+    """A finalized run with no text events in the log must still yield full_text
+    in the synthetic done event so the frontend can display the complete message."""
+    log_dir = os.path.join(ASSISTANT_SESSION_DIR, "runs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "run-empty-log.log")
+    with open(log_path, "w") as f:
+        f.write('{"type":"_stdout_closed"}\n')
+
+    with client.application.app_context():
+        run_db(
+            "INSERT INTO assistant_runs (board_id, status, log_path, pid, full_text) VALUES (?, 'completed', ?, ?, ?)",
+            (None, log_path, 12345, "Full text from DB"),
+        )
+        run_id = query_db("SELECT last_insert_rowid() as id", one=True)["id"]
+
+    res = client.get(f"/api/assistant/stream?run_id={run_id}")
+    assert res.status_code == 200
+    assert res.mimetype == "text/event-stream"
+    body = res.data.decode("utf-8")
+    assert "event: done" in body
+    assert "Full text from DB" in body
+
+
+def test_active_run_filters_by_board_id(client, default_board):
+    with client.application.app_context():
+        run_db(
+            "INSERT INTO assistant_runs (board_id, status, log_path, pid) VALUES (?, 'running', ?, ?)",
+            (None, os.devnull, 111),
+        )
+        global_id = query_db("SELECT last_insert_rowid() as id", one=True)["id"]
+        run_db(
+            "INSERT INTO assistant_runs (board_id, status, log_path, pid) VALUES (?, 'running', ?, ?)",
+            (default_board["id"], os.devnull, 222),
+        )
+        board_id = query_db("SELECT last_insert_rowid() as id", one=True)["id"]
+
+    res = client.get("/api/assistant/active-run")
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    assert data is not None
+    assert data["id"] == global_id
+
+    res = client.get(f"/api/assistant/active-run?board_id={default_board['id']}")
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    assert data is not None
+    assert data["id"] == board_id
+
+
+def test_reconnect_stream_scope_mismatch_returns_403(client, default_board):
+    log_dir = os.path.join(ASSISTANT_SESSION_DIR, "runs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "run-scope-test.log")
+    with open(log_path, "w") as f:
+        f.write('{"type":"text_delta","chunk":"X"}\n')
+
+    with client.application.app_context():
+        run_db(
+            "INSERT INTO assistant_runs (board_id, status, log_path, pid, full_text) VALUES (?, 'completed', ?, ?, ?)",
+            (default_board["id"], log_path, 12345, "X"),
+        )
+        run_id = query_db("SELECT last_insert_rowid() as id", one=True)["id"]
+
+    res = client.get(f"/api/assistant/stream?run_id={run_id}&board_id=99999")
+    assert res.status_code == 403
+    data = json.loads(res.data)
+    assert "scope mismatch" in data["error"]

@@ -32,10 +32,14 @@ _assistant_runs_lock = threading.Lock()
 
 
 class _AssistantRun:
-    def __init__(self, proc, scope):
+    def __init__(self, proc, scope, run_id, log_path):
         self.proc = proc
         self.scope = scope
+        self.run_id = run_id
+        self.log_path = log_path
         self.cancelled = False
+        self.finalized = False
+        self.generator_done = threading.Event()
         self.accumulated_text = []
         self.accumulated_thinking = []
         self.start_time = time.monotonic()
@@ -103,21 +107,34 @@ def _normalize_ndjson_event(event):
     return event
 
 
-def _reader_thread(proc, q):
-    """Read NDJSON lines from proc.stdout and push parsed events to queue."""
+def _reader_thread(proc, q, log_path):
+    """Read NDJSON lines from proc.stdout and push parsed events to queue.
+
+    Also writes every raw NDJSON line to *log_path* so reconnect can replay.
+    """
     try:
-        for line in proc.stdout:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                logger.warning("Assistant NDJSON parse error: %s", line)
-                continue
-            q.put(event)
+        with open(log_path, "w", encoding="utf-8") as log_f:
+            for line in proc.stdout:
+                line = line.strip()
+                if not line:
+                    continue
+                log_f.write(line + "\n")
+                log_f.flush()
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    logger.warning("Assistant NDJSON parse error: %s", line)
+                    continue
+                q.put(event)
     finally:
-        q.put({"type": "_stdout_closed"})
+        sentinel = {"type": "_stdout_closed"}
+        try:
+            with open(log_path, "a", encoding="utf-8") as log_f:
+                log_f.write(json.dumps(sentinel) + "\n")
+                log_f.flush()
+        except OSError:
+            pass
+        q.put(sentinel)
 
 
 def _get_lock(board_id):
@@ -382,14 +399,29 @@ def _yield_for_event(event, run):
     return None, False
 
 
-def _cleanup_assistant_run(proc, run, scope, _app):
-    """Terminate the process and persist the assistant response."""
-    if proc.poll() is None:
-        with contextlib.suppress(ProcessLookupError, OSError):
-            os.kill(proc.pid, signal.SIGTERM)
+def _finalize_and_save(run, scope, _app):
+    """Persist the assistant response and clean up _ASSISTANT_RUNS.
+
+    Idempotent: guarded by ``run.finalized``.
+    """
+    if run.finalized:
+        return
+    run.finalized = True
+
     full_text = "".join(run.accumulated_text)
-    if full_text:
-        with _app.app_context():
+    if run.cancelled:
+        status = "stopped"
+    elif run.proc.returncode != 0:
+        status = "failed"
+    else:
+        status = "completed"
+
+    with _app.app_context():
+        run_db(
+            "UPDATE assistant_runs SET status = ?, completed_at = CURRENT_TIMESTAMP, full_text = ? WHERE id = ?",
+            (status, full_text, run.run_id),
+        )
+        if full_text:
             if scope is not None:
                 run_db(
                     "INSERT INTO assistant_messages (board_id, role, content) VALUES (?, ?, ?)",
@@ -400,9 +432,17 @@ def _cleanup_assistant_run(proc, run, scope, _app):
                     "INSERT INTO assistant_messages (role, content) VALUES (?, ?)",
                     ("assistant", full_text),
                 )
+
     with _assistant_runs_lock:
         if _ASSISTANT_RUNS.get(scope) is run:
             del _ASSISTANT_RUNS[scope]
+
+
+def _watcher_thread(proc, run, scope, _app):
+    """Wait for the assistant process to exit, then finalize after the generator disconnects."""
+    proc.wait()
+    run.generator_done.wait()
+    _finalize_and_save(run, scope, _app)
 
 
 def _assistant_stream_generator(proc, q, run, scope, _app):
@@ -426,7 +466,125 @@ def _assistant_stream_generator(proc, q, run, scope, _app):
             if should_break:
                 break
     finally:
-        _cleanup_assistant_run(proc, run, scope, _app)
+        run.generator_done.set()
+        # In TESTING mode the generator is consumed synchronously; finalize inline
+        # so assertions that follow the POST see the persisted message immediately.
+        if proc.poll() is not None or _app.config.get("TESTING"):
+            _finalize_and_save(run, scope, _app)
+
+
+def _event_to_sse(event):
+    """Convert a single NDJSON event dict to an SSE frame string, or None."""
+    etype = event.get("type")
+    if etype == "text_delta":
+        return f"data: {json.dumps(event)}\n\n"
+    if etype == "thinking_delta":
+        return f"event: thinking\ndata: {json.dumps(event)}\n\n"
+    if etype == "toolcall_start":
+        payload = json.dumps({"type": "tool_start", "name": event.get("name", "")})
+        return f"event: status\ndata: {payload}\n\n"
+    if etype == "toolcall_end":
+        payload = json.dumps({"type": "tool_end", "name": event.get("name", "")})
+        return f"event: status\ndata: {payload}\n\n"
+    return None
+
+
+def _read_log_frames(f, skip=0):
+    """Parse NDJSON lines from an open file handle.
+
+    Skips the first *skip* lines, then parses each non-empty line as JSON,
+    normalizes it, and converts it to an SSE frame.  Stops when an event
+    with ``type == "_stdout_closed"`` is encountered.
+
+    Returns a tuple ``(lines_consumed, stdout_closed, frames)`` where
+    *frames* is a list of SSE frame strings.
+    """
+    lines_consumed = 0
+    stdout_closed = False
+    frames = []
+    for i, line in enumerate(f):
+        if i < skip:
+            lines_consumed += 1
+            continue
+        lines_consumed += 1
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        event = _normalize_ndjson_event(event)
+        if event.get("type") == "_stdout_closed":
+            stdout_closed = True
+            break
+        frame = _event_to_sse(event)
+        if frame:
+            frames.append(frame)
+    return lines_consumed, stdout_closed, frames
+
+
+def _assistant_stream_generator_reconnect(run, scope, _app):
+    """SSE generator for reconnecting to an active or recently finished run.
+
+    Replays existing log events, then tails the log file.  Once the run
+    disappears from ``_ASSISTANT_RUNS``, queries the DB for final status
+    and yields a synthetic terminal event.
+    """
+    log_path = run.log_path
+    last_keepalive = time.monotonic()
+    lines_seen = 0
+    stdout_closed = False
+
+    # Replay existing log lines
+    with open(log_path, encoding="utf-8") as f:
+        lines_seen, stdout_closed, frames = _read_log_frames(f)
+    for frame in frames:
+        yield frame
+
+    # Tail the log while the run is active
+    while True:
+        with _assistant_runs_lock:
+            still_active = _ASSISTANT_RUNS.get(scope) is run
+        if not still_active:
+            break
+
+        if not stdout_closed:
+            with open(log_path, encoding="utf-8") as f:
+                lines_seen, stdout_closed, frames = _read_log_frames(f, skip=lines_seen)
+            if frames or stdout_closed:
+                for frame in frames:
+                    yield frame
+                continue
+
+        now = time.monotonic()
+        if now - last_keepalive >= 25:
+            yield ": keepalive\n\n"
+            last_keepalive = now
+        time.sleep(0.5)
+
+    # Run is finalized — query DB for terminal status
+    with _app.app_context():
+        row = query_db(
+            "SELECT status, full_text FROM assistant_runs WHERE id = ?",
+            (run.run_id,),
+            one=True,
+        )
+    if row:
+        status = row["status"]
+        full_text = row["full_text"] or ""
+        if status == "completed":
+            event = {"type": "done", "full_text": full_text}
+            yield f"event: done\ndata: {json.dumps(event)}\n\n"
+        elif status == "stopped":
+            event = {"type": "stopped", "partial": full_text}
+            yield f"event: stopped\ndata: {json.dumps(event)}\n\n"
+        else:
+            event = {"type": "error", "error": "Assistant process failed"}
+            yield f"event: error\ndata: {json.dumps(event)}\n\n"
+    else:
+        event = {"type": "error", "error": "Run not found"}
+        yield f"event: error\ndata: {json.dumps(event)}\n\n"
 
 
 # ---------------------------------------------------------------------------
@@ -463,6 +621,10 @@ def api_assistant_chat():
 
         skill_args = _prepare_assistant_skills(session_dir)
 
+        # Create log directory and DB row for this run
+        log_dir = os.path.join(session_dir, "runs")
+        os.makedirs(log_dir, exist_ok=True)
+
         cmd = [
             "pi",
             "--system-prompt",
@@ -488,14 +650,25 @@ def api_assistant_chat():
             text=True,
         )
 
+        run_db(
+            "INSERT INTO assistant_runs (board_id, status, log_path, pid) VALUES (?, 'running', ?, ?)",
+            (scope, "", proc.pid),
+        )
+        run_id = query_db("SELECT last_insert_rowid() as id", one=True)["id"]
+        log_path = os.path.join(log_dir, f"run-{run_id}.log")
+        run_db(
+            "UPDATE assistant_runs SET log_path = ? WHERE id = ?",
+            (log_path, run_id),
+        )
+
         q = queue.Queue()
-        run = _AssistantRun(proc, scope)
-        threading.Thread(target=_reader_thread, args=(proc, q), daemon=True).start()
+        run = _AssistantRun(proc, scope, run_id, log_path)
+        threading.Thread(target=_reader_thread, args=(proc, q, log_path), daemon=True).start()
+        _app = current_app._get_current_object()
+        threading.Thread(target=_watcher_thread, args=(proc, run, scope, _app), daemon=True).start()
 
         with _assistant_runs_lock:
             _ASSISTANT_RUNS[scope] = run
-
-    _app = current_app._get_current_object()
 
     gen = _assistant_stream_generator(proc, q, run, scope, _app)
     if request.environ.get("SERVER_NAME") == "localhost" or current_app.config.get("TESTING"):
@@ -516,6 +689,94 @@ def api_assistant_stop():
     scope = board_id
     stopped = _stop_assistant_run(scope)
     return jsonify({"success": stopped})
+
+
+@assistant_bp.route("/api/assistant/active-run", methods=["GET"])
+def api_assistant_active_run():
+    board_id = request.args.get("board_id")
+    if board_id is not None:
+        try:
+            board_id = int(board_id)
+        except (ValueError, TypeError):
+            return jsonify({"error": "board_id must be an integer"}), 400
+    scope = board_id
+    row = query_db(
+        "SELECT id, status, started_at"
+        " FROM assistant_runs WHERE board_id IS ? AND status = 'running'"
+        " ORDER BY started_at DESC LIMIT 1",
+        (scope,),
+        one=True,
+    )
+    if not row:
+        return jsonify(None)
+    return jsonify(row_to_dict(row))
+
+
+@assistant_bp.route("/api/assistant/stream", methods=["GET"])
+def api_assistant_stream():
+    board_id = request.args.get("board_id")
+    if board_id is not None:
+        try:
+            board_id = int(board_id)
+        except (ValueError, TypeError):
+            return jsonify({"error": "board_id must be an integer"}), 400
+    scope = board_id
+
+    run_id = request.args.get("run_id")
+    if run_id is None:
+        return jsonify({"error": "run_id is required"}), 400
+    try:
+        run_id = int(run_id)
+    except (ValueError, TypeError):
+        return jsonify({"error": "run_id must be an integer"}), 400
+
+    # Look up the run row
+    row = query_db(
+        "SELECT id, board_id, status, log_path, pid, started_at, full_text FROM assistant_runs WHERE id = ?",
+        (run_id,),
+        one=True,
+    )
+    if not row:
+        # Run not found — yield synthetic error immediately
+        def _not_found_gen():
+            event = {"type": "error", "error": "Run not found"}
+            yield f"event: error\ndata: {json.dumps(event)}\n\n"
+
+        return Response(_not_found_gen(), mimetype="text/event-stream")
+
+    # Validate scope matches
+    if row["board_id"] != scope:
+        return jsonify({"error": "scope mismatch"}), 403
+
+    # Check if there's an active in-memory run object
+    with _assistant_runs_lock:
+        active_run = _ASSISTANT_RUNS.get(scope)
+
+    _app = current_app._get_current_object()
+
+    if active_run and active_run.run_id == run_id:
+        gen = _assistant_stream_generator_reconnect(active_run, scope, _app)
+    else:
+        # Already finalized — yield synthetic terminal event based on DB status
+        def _finalized_gen():
+            status = row["status"]
+            full_text = row["full_text"] or ""
+            if status == "completed":
+                event = {"type": "done", "full_text": full_text}
+                yield f"event: done\ndata: {json.dumps(event)}\n\n"
+            elif status == "stopped":
+                event = {"type": "stopped", "partial": full_text}
+                yield f"event: stopped\ndata: {json.dumps(event)}\n\n"
+            else:
+                event = {"type": "error", "error": "Assistant process failed"}
+                yield f"event: error\ndata: {json.dumps(event)}\n\n"
+
+        return Response(_finalized_gen(), mimetype="text/event-stream")
+
+    if request.environ.get("SERVER_NAME") == "localhost" or current_app.config.get("TESTING"):
+        body = b"".join(chunk.encode("utf-8") for chunk in gen)
+        return Response(body, mimetype="text/event-stream")
+    return Response(gen, mimetype="text/event-stream")
 
 
 @assistant_bp.route("/api/assistant/history", methods=["GET"])
@@ -599,10 +860,22 @@ def api_assistant_compact():
         except Exception as e:
             return jsonify({"error": f"Compact failed to run: {e}"}), 500
 
+        # Clean up assistant_runs and their log files for this scope
+        run_rows = query_db(
+            "SELECT log_path FROM assistant_runs WHERE board_id IS ?",
+            (board_id,),
+        )
+        for r in run_rows:
+            lp = r["log_path"]
+            if lp and os.path.exists(lp):
+                with contextlib.suppress(OSError):
+                    os.unlink(lp)
         if board_id is not None:
             run_db("DELETE FROM assistant_messages WHERE board_id = ?", (board_id,))
+            run_db("DELETE FROM assistant_runs WHERE board_id = ?", (board_id,))
         else:
             run_db("DELETE FROM assistant_messages WHERE board_id IS NULL")
+            run_db("DELETE FROM assistant_runs WHERE board_id IS NULL")
         run_db("DELETE FROM settings WHERE key = ?", ("assistant_summary",))
 
     return jsonify({"summary": "Conversation compacted by pi.", "message_count": message_count})
@@ -652,10 +925,22 @@ def api_assistant_reset():
         except Exception as e:
             return jsonify({"error": f"Reset failed to run: {e}"}), 500
 
+        # Clean up assistant_runs and their log files for this scope
+        run_rows = query_db(
+            "SELECT log_path FROM assistant_runs WHERE board_id IS ?",
+            (board_id,),
+        )
+        for r in run_rows:
+            lp = r["log_path"]
+            if lp and os.path.exists(lp):
+                with contextlib.suppress(OSError):
+                    os.unlink(lp)
         if board_id is not None:
             run_db("DELETE FROM assistant_messages WHERE board_id = ?", (board_id,))
+            run_db("DELETE FROM assistant_runs WHERE board_id = ?", (board_id,))
         else:
             run_db("DELETE FROM assistant_messages WHERE board_id IS NULL")
+            run_db("DELETE FROM assistant_runs WHERE board_id IS NULL")
         run_db("DELETE FROM settings WHERE key = ?", ("assistant_summary",))
 
     return jsonify({"success": True})
