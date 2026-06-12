@@ -2154,6 +2154,7 @@ textarea.edit-input { resize: vertical; min-height: 2.5rem; }
   box-shadow: var(--shadow-lg);
   max-width: 540px;
   width: 100%;
+  min-width: 0;
   max-height: calc(100vh - 2rem);
   overflow-y: auto;
   position: relative;
@@ -2175,6 +2176,10 @@ textarea.edit-input { resize: vertical; min-height: 2.5rem; }
   max-width: none;
   padding: 1.25rem;
   margin: 0;
+}
+
+.modal-content textarea {
+  width: 100%;
 }
 
 @keyframes modal-in {
