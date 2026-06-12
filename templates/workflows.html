@@ -201,6 +201,7 @@
       <label>Sort Order<input type="number" name="sort_order" value="0"></label>
       <label><input type="checkbox" name="enabled" checked> Enabled</label>
       <label><input type="checkbox" name="notify_on_failure" id="gate-notify-on-failure" checked> Create self-improvement observation on failure</label>
+      <label><input type="checkbox" name="include_in_feedback" id="gate-include-in-feedback" checked> Include in feedback capture</label>
       <div class="form-actions">
         <button type="submit" class="btn primary">Save</button>
         <button type="button" class="btn" onclick="hideGateModal()">Cancel</button>
@@ -500,7 +501,7 @@ async function loadWorkflowDetail(id) {
       ${gates.length === 0 ? '<p class="empty-sm">No quality gates configured.</p>' : `
       <div class="table-wrapper" style="margin-top:0.5rem;">
         <table class="data-table">
-          <thead><tr><th>From → To</th><th>Name</th><th>Type</th><th>Sort</th><th>Enabled</th><th>Notify on Failure</th><th></th></tr></thead>
+          <thead><tr><th>From → To</th><th>Name</th><th>Type</th><th>Sort</th><th>Enabled</th><th>Notify on Failure</th><th>Include in Feedback</th><th></th></tr></thead>
           <tbody>
             ${gates.map(g => {
               const fromName = g.from_status_name || statuses.find(s => s.id === g.from_status_id)?.name || '?';
@@ -513,6 +514,7 @@ async function loadWorkflowDetail(id) {
                 <td>${g.sort_order}</td>
                 <td>${g.enabled ? '✅' : '—'}</td>
                 <td>${g.notify_on_failure ? '✅' : '—'}</td>
+                <td>${g.include_in_feedback ? '✅' : '—'}</td>
                 <td class="row-actions">
                   <button class="btn small ghost" onclick="showGateEdit(${g.id}, ${id})">✏️</button>
                   <button class="btn small ghost danger-text" onclick="deleteGate(${g.id}, ${id})">🗑️</button>
@@ -1166,6 +1168,7 @@ function toggleGateConfig() {
   const form = document.getElementById('gate-form');
   if (!form.elements.id.value) {
     document.getElementById('gate-notify-on-failure').checked = type === 'manual';
+    document.getElementById('gate-include-in-feedback').checked = true;
   }
 }
 
@@ -1203,6 +1206,7 @@ async function showGateEdit(gateId, workflowId) {
   form.elements.sort_order.value = gate.sort_order;
   form.elements.enabled.checked = !!gate.enabled;
   document.getElementById('gate-notify-on-failure').checked = !!gate.notify_on_failure;
+  document.getElementById('gate-include-in-feedback').checked = !!gate.include_in_feedback;
   document.getElementById('gate-modal-title').textContent = 'Edit Quality Gate';
   // Populate from/to status dropdowns with current selection
   const wf = workflowsData[workflowId];
@@ -1252,6 +1256,7 @@ document.getElementById('gate-form').addEventListener('submit', async (e) => {
     sort_order: parseInt(fd.get('sort_order') || '0'),
     enabled: fd.has('enabled'),
     notify_on_failure: fd.has('notify_on_failure'),
+    include_in_feedback: fd.has('include_in_feedback'),
     workflow_id: workflowId,
   };
   if (gateType === 'cli') {
@@ -1260,7 +1265,7 @@ document.getElementById('gate-form').addEventListener('submit', async (e) => {
   const url = id ? `/api/quality_gates/${id}` : '/api/quality_gates';
   const method = id ? 'PUT' : 'POST';
   if (id) {
-    const updateBody = { name: body.name, gate_type: body.gate_type, sort_order: body.sort_order, enabled: body.enabled, notify_on_failure: body.notify_on_failure, from_status_id: body.from_status_id, to_status_id: body.to_status_id };
+    const updateBody = { name: body.name, gate_type: body.gate_type, sort_order: body.sort_order, enabled: body.enabled, notify_on_failure: body.notify_on_failure, include_in_feedback: body.include_in_feedback, from_status_id: body.from_status_id, to_status_id: body.to_status_id };
     if (gateType === 'cli') updateBody.config = body.config;
     const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(updateBody) });
     if (res.ok) { hideGateModal(); loadWorkflowDetail(workflowId); }

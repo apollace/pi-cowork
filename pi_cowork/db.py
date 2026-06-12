@@ -482,6 +482,23 @@ def _migrate(db):
             "idx_agent_feedback_consumed_at",
             "CREATE INDEX IF NOT EXISTS idx_agent_feedback_consumed_at ON agent_feedback(consumed_at)",
         ),
+        # Ticket #181 — Feedback capture settings and per-gate toggle
+        (
+            "add_quality_gates_include_in_feedback",
+            "ALTER TABLE quality_gates ADD COLUMN include_in_feedback BOOLEAN NOT NULL DEFAULT 1",
+        ),
+        (
+            "idx_agent_feedback_created_at",
+            "CREATE INDEX IF NOT EXISTS idx_agent_feedback_created_at ON agent_feedback(created_at)",
+        ),
+        (
+            "seed_feedback_capture_enabled",
+            "INSERT OR IGNORE INTO settings (key, value) VALUES ('feedback_capture_enabled', '1')",
+        ),
+        (
+            "seed_feedback_retention_days",
+            "INSERT OR IGNORE INTO settings (key, value) VALUES ('feedback_retention_days', '30')",
+        ),
     ]
     for item in migrations:
         name = item[0]

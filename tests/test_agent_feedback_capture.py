@@ -401,3 +401,76 @@ def test_export_import_preserves_notify_on_failure(client):
     new_gates = json.loads(client.get(f"/api/quality_gates?workflow_id={new_wf_id}").data)
     assert len(new_gates) == 1
     assert new_gates[0]["notify_on_failure"] == 0 or new_gates[0]["notify_on_failure"] is False
+
+
+# ── 8. Per-gate include_in_feedback is exposed in CRUD ──
+
+
+def test_quality_gate_crud_exposes_include_in_feedback(client):
+    wf_id, status_ids = _create_workflow_with_statuses(client)
+
+    res = client.post(
+        "/api/quality_gates",
+        json={
+            "from_status_id": status_ids[0],
+            "to_status_id": status_ids[1],
+            "gate_type": "manual",
+            "name": "Approval",
+            "workflow_id": wf_id,
+            "include_in_feedback": False,
+        },
+    )
+    assert res.status_code == 201
+    gate_id = json.loads(res.data)["id"]
+
+    res = client.get(f"/api/quality_gates/{gate_id}")
+    assert res.status_code == 200
+    gate = json.loads(res.data)
+    assert gate["include_in_feedback"] == 0 or gate["include_in_feedback"] is False
+
+    res = client.put(
+        f"/api/quality_gates/{gate_id}",
+        json={"include_in_feedback": True},
+    )
+    assert res.status_code == 200
+
+    res = client.get(f"/api/quality_gates/{gate_id}")
+    gate = json.loads(res.data)
+    assert gate["include_in_feedback"] == 1 or gate["include_in_feedback"] is True
+
+
+# ── 9. Export/import preserves include_in_feedback ──
+
+
+def test_export_import_preserves_include_in_feedback(client):
+    wf_id, status_ids = _create_workflow_with_statuses(client)
+
+    client.post(
+        "/api/quality_gates",
+        json={
+            "from_status_id": status_ids[0],
+            "to_status_id": status_ids[1],
+            "gate_type": "cli",
+            "name": "Lint",
+            "config": json.dumps({"command": "flake8"}),
+            "workflow_id": wf_id,
+            "sort_order": 0,
+            "include_in_feedback": False,
+        },
+    )
+
+    res = client.get(f"/api/workflows/{wf_id}/export")
+    export_data = json.loads(res.data)
+    assert "quality_gates" in export_data
+    assert len(export_data["quality_gates"]) == 1
+    gate = export_data["quality_gates"][0]
+    assert gate["include_in_feedback"] == 0 or gate["include_in_feedback"] is False
+
+    res = client.post("/api/workflows/import", json=export_data)
+    assert res.status_code == 200
+    import_data = json.loads(res.data)
+    new_wf_id = import_data["workflow_id"]
+
+    new_gates = json.loads(client.get(f"/api/quality_gates?workflow_id={new_wf_id}").data)
+    assert len(new_gates) == 1
+    assert new_gates[0]["include_in_feedback"] == 0 or new_gates[0]["include_in_feedback"] is False

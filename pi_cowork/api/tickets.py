@@ -35,6 +35,7 @@ from pi_cowork.models import (
     get_ticket_labels_batch,
     get_ticket_status_overrides,
     has_pending_gate_reviews,
+    is_feedback_capture_enabled,
     run_cli_gate,
     set_ticket_labels,
 )
@@ -389,7 +390,7 @@ def api_update_ticket(ticket_id):  # noqa: C901
                             add_comment(ticket_id, f"✅ Gate '{gate['name']}' (CLI) passed.\n{output}")
                         else:
                             add_comment(ticket_id, f"❌ Gate '{gate['name']}' (CLI) failed.\n{output}")
-                            if gate.get("notify_on_failure"):
+                            if gate.get("notify_on_failure") and is_feedback_capture_enabled(gate_id=gate["id"]):
                                 add_agent_feedback(
                                     ticket_id=ticket_id,
                                     feedback_type="cli_failed",
@@ -606,13 +607,14 @@ def api_spawn_agent(ticket_id):
 
     data = request.get_json(silent=True) or {}
     reason = (data.get("reason") or "").strip()
-    add_agent_feedback(
-        ticket_id=ticket_id,
-        feedback_type="agent_rerun",
-        reason=reason or None,
-        source_event="AGENT_RERUN",
-        created_by="human",
-    )
+    if is_feedback_capture_enabled():
+        add_agent_feedback(
+            ticket_id=ticket_id,
+            feedback_type="agent_rerun",
+            reason=reason or None,
+            source_event="AGENT_RERUN",
+            created_by="human",
+        )
 
     try_spawn_or_queue(row_to_dict(ticket), status, agent)
 

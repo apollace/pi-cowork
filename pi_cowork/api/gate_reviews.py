@@ -16,7 +16,14 @@ from flask import Blueprint, current_app, jsonify, request
 from pi_cowork.agents import try_spawn_or_queue
 from pi_cowork.db import query_db, row_to_dict, run_db
 from pi_cowork.events import GATE_PASSED, GATE_REVIEW_REJECTED, TICKET_STATUS_CHANGED, bus
-from pi_cowork.models import add_agent_feedback, add_comment, get_agent, get_board, get_status
+from pi_cowork.models import (
+    add_agent_feedback,
+    add_comment,
+    get_agent,
+    get_board,
+    get_status,
+    is_feedback_capture_enabled,
+)
 from pi_cowork.system_logs import add_log
 
 gate_reviews_bp = Blueprint("gate_reviews", __name__)
@@ -198,15 +205,17 @@ def api_update_gate_review(review_id):  # noqa: C901
 
     elif new_status == "rejected":
         add_comment(ticket_id, f"❌ Gate '{review['gate_name']}' rejected: {comment}")
-        # Capture structured feedback for self-improvement
-        feedback_id = add_agent_feedback(
-            ticket_id=ticket_id,
-            feedback_type="gate_rejected",
-            gate_review_id=review_id,
-            reason=comment,
-            source_event="GATE_REVIEW_REJECTED",
-            created_by="human",
-        )
+        # Capture structured feedback for self-improvement only if enabled
+        feedback_id = None
+        if is_feedback_capture_enabled(gate_id=review["gate_id"]):
+            feedback_id = add_agent_feedback(
+                ticket_id=ticket_id,
+                feedback_type="gate_rejected",
+                gate_review_id=review_id,
+                reason=comment,
+                source_event="GATE_REVIEW_REJECTED",
+                created_by="human",
+            )
         # Transition is fully rejected — delete all reviews for this flow
         run_db(
             "DELETE FROM gate_reviews WHERE ticket_id = ? AND from_status_id = ? AND to_status_id = ?",

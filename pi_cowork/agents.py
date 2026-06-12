@@ -684,6 +684,7 @@ def _drain_loop(app):
     _last_log_cleanup = time.time()
     _last_event_log_cleanup = time.time()
     _last_dismissal_cleanup = time.time()
+    _last_feedback_cleanup = time.time()
     _last_recurring_check = 0  # track 60s interval for recurring tasks
     while True:
         try:
@@ -714,6 +715,12 @@ def _drain_loop(app):
 
                     cleanup_old_notification_dismissals()
                     _last_dismissal_cleanup = time.time()
+                # Agent feedback cleanup: run once per day (86400 seconds)
+                if time.time() - _last_feedback_cleanup >= 86400:
+                    from pi_cowork.models import cleanup_old_feedback
+
+                    cleanup_old_feedback()
+                    _last_feedback_cleanup = time.time()
         except Exception:
             logger.exception("Error in drain loop, will retry")
         time.sleep(10)
