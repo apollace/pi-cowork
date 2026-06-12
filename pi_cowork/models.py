@@ -1451,7 +1451,11 @@ def get_unconsumed_feedback_enriched(
     feedback_type=None,
     ticket_id=None,
     agent_id=None,
+    date_from=None,
+    date_to=None,
+    search=None,
     limit=50,
+    offset=0,
 ):
     """List feedback rows with enriched joins, oldest first.
 
@@ -1462,7 +1466,11 @@ def get_unconsumed_feedback_enriched(
         ticket_id (int): Filter by ticket_id.
         agent_id (int): Filter by agent_runs.agent_id (the agent that produced
                         the run the feedback is linked to).
+        date_from (str): ISO date string; filter af.created_at >= date_from.
+        date_to (str): ISO date string; filter af.created_at <= date_to.
+        search (str): Text search across af.reason, af.expected_behavior, t.title.
         limit (int): Max rows to return (default 50).
+        offset (int): Rows to skip (default 0).
     """
     conditions = []
     params = []
@@ -1483,6 +1491,19 @@ def get_unconsumed_feedback_enriched(
     if agent_id is not None:
         conditions.append("ar.agent_id = ?")
         params.append(agent_id)
+
+    if date_from:
+        conditions.append("af.created_at >= ?")
+        params.append(date_from)
+
+    if date_to:
+        conditions.append("af.created_at <= ?")
+        params.append(date_to)
+
+    if search:
+        conditions.append("(af.reason LIKE ? OR af.expected_behavior LIKE ? OR t.title LIKE ?)")
+        like = f"%{search}%"
+        params.extend([like, like, like])
 
     where_clause = ""
     if conditions:
@@ -1521,12 +1542,80 @@ def get_unconsumed_feedback_enriched(
         LEFT JOIN statuses ts ON ts.id = gr.to_status_id
         """
         + where_clause
-        + "\n        ORDER BY af.created_at ASC, af.id ASC\n        LIMIT ?\n    "
+        + "\n        ORDER BY af.created_at ASC, af.id ASC\n        LIMIT ? OFFSET ?\n    "
     )
     params.append(limit)
+    params.append(offset)
 
-    rows = query_db(sql, tuple(params))
+    rows = query_db(sql, tuple(params))  # noqa: S608
     return [_enrich_feedback_row(r) for r in rows]
+
+
+def get_feedback_count(
+    consumed=None,
+    feedback_type=None,
+    ticket_id=None,
+    agent_id=None,
+    date_from=None,
+    date_to=None,
+    search=None,
+):
+    """Return total row count for feedback with the same filter logic."""
+    conditions = []
+    params = []
+
+    if consumed is True:
+        conditions.append("af.consumed_at IS NOT NULL")
+    elif consumed is False:
+        conditions.append("af.consumed_at IS NULL")
+
+    if feedback_type is not None:
+        conditions.append("af.feedback_type = ?")
+        params.append(feedback_type)
+
+    if ticket_id is not None:
+        conditions.append("af.ticket_id = ?")
+        params.append(ticket_id)
+
+    if agent_id is not None:
+        conditions.append("ar.agent_id = ?")
+        params.append(agent_id)
+
+    if date_from:
+        conditions.append("af.created_at >= ?")
+        params.append(date_from)
+
+    if date_to:
+        conditions.append("af.created_at <= ?")
+        params.append(date_to)
+
+    if search:
+        conditions.append("(af.reason LIKE ? OR af.expected_behavior LIKE ? OR t.title LIKE ?)")
+        like = f"%{search}%"
+        params.extend([like, like, like])
+
+    where_clause = ""
+    if conditions:
+        where_clause = "WHERE " + " AND ".join(conditions)
+
+    parts = [
+        """
+        SELECT COUNT(*) AS c
+        FROM agent_feedback af
+        LEFT JOIN tickets t ON t.id = af.ticket_id
+        LEFT JOIN agent_runs ar ON ar.id = af.run_id
+        LEFT JOIN agents a ON a.id = ar.agent_id
+        LEFT JOIN gate_reviews gr ON gr.id = af.gate_review_id
+        LEFT JOIN quality_gates qg ON qg.id = gr.gate_id
+        LEFT JOIN statuses fs ON fs.id = gr.from_status_id
+        LEFT JOIN statuses ts ON ts.id = gr.to_status_id
+        """
+    ]
+    if where_clause:
+        parts.append(where_clause)
+    sql = "".join(parts)
+    row = query_db(sql, tuple(params), one=True)
+    return row["c"] if row else 0
 
 
 def mark_feedback_consumed(feedback_id, consumed_by_run_id):

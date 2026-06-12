@@ -279,7 +279,9 @@ class TestSystemImprovementNotSeeded:
     def test_observations_page_renders(self, client):
         res = client.get("/observations")
         assert res.status_code == 200
-        assert b"Observations" in res.data
+        assert b"Feedback" in res.data
+        assert b"Feedback Dataset" in res.data
+        assert b"Raw Logs" in res.data
 
     def test_observations_api_renders(self, client):
         res = client.get("/api/observations")

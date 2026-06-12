@@ -171,11 +171,26 @@ ENDPOINT_REGISTRY = [
         "category": "Feedback",
         "method": "GET",
         "path_template": "/api/feedback",
-        "label": "list feedback rows (query: consumed, limit, feedback_type, ticket_id, agent_id)",
+        "label": (
+            "list feedback rows (query: consumed, limit, feedback_type, ticket_id, "
+            "agent_id, date_from, date_to, search, page, per_page)"
+        ),
         "doc_lines": [
-            "- GET {base_url}/api/feedback → list feedback rows (query: consumed, limit, feedback_type, ticket_id, "
-            "agent_id). Default returns unconsumed feedback oldest first. Returns enriched feedback with preview and "
-            "runtime context.",
+            "- GET {base_url}/api/feedback → list feedback rows (query: consumed (tristate — missing = all, "
+            "true = consumed only, false = unconsumed only), feedback_type, ticket_id, agent_id, date_from, "
+            "date_to, search, page, per_page). Returns paginated envelope {feedback, total, page, per_page, "
+            "total_pages} with enriched feedback including preview and runtime context.",
+        ],
+    },
+    {
+        "key": "feedback_preview",
+        "category": "Feedback",
+        "method": "GET",
+        "path_template": "/api/feedback/{feedback_id}/preview",
+        "label": "get canonical structured JSON preview for a feedback row",
+        "doc_lines": [
+            "- GET {base_url}/api/feedback/{feedback_id}/preview → get canonical structured JSON preview for a "
+            "feedback row (includes ticket, agent, run, gate review, reason, expected_behavior, context, created_at).",
         ],
     },
     {
@@ -189,7 +204,6 @@ ENDPOINT_REGISTRY = [
             "consumed_by_run_id. Returns 404 if not found, 409 if already consumed.",
         ],
     },
-    # ── Tickets (global list/create) ──
     {
         "key": "tickets_list",
         "category": "Tickets",
