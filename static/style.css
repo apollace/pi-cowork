@@ -289,6 +289,25 @@ body {
 
 .btn.small { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
 
+.btn.give-feedback {
+  background: var(--primary-soft);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.btn.give-feedback:hover {
+  background: #dbeafe;
+  border-color: var(--primary-hover);
+}
+
+.btn.feedback-submitted {
+  background: var(--bg);
+  color: var(--text-muted);
+  border-color: var(--border);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 /* Compact header buttons (board page) */
 #new-ticket-btn.btn-compact-primary {
   background: #2563EB;

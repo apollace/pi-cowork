@@ -147,6 +147,21 @@
     </div>
   </div>
 </div>
+
+<!-- Give Feedback Modal -->
+<div id="feedback-modal" class="modal" style="display:none;">
+  <div class="modal-content" style="max-width:480px;">
+    <h2>Give Feedback</h2>
+    <p class="muted" style="margin-bottom:0.5rem;">What went wrong?</p>
+    <textarea id="feedback-reason" rows="3" placeholder="Describe the issue..." required></textarea>
+    <p class="muted" style="margin-bottom:0.5rem;margin-top:0.5rem;">What should the agent have done? (optional)</p>
+    <textarea id="feedback-expected" rows="2" placeholder="Expected behavior..."></textarea>
+    <div class="form-actions" style="margin-top:0.75rem;">
+      <button class="btn primary" id="feedback-submit-btn">Submit</button>
+      <button class="btn" id="feedback-cancel-btn">Cancel</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -706,7 +721,18 @@
           <button class="btn small kill-btn" onclick="killAgentRun(${run.id})">🛑 Kill</button>
         `;
       } else {
-        actionsHtml = `
+        if (run.status === 'completed' || run.status === 'failed') {
+          if (run.has_feedback) {
+            actionsHtml += `
+              <button class="btn small feedback-submitted" disabled>✅ Feedback Submitted</button>
+            `;
+          } else {
+            actionsHtml += `
+              <button class="btn small give-feedback" onclick="openFeedbackModal(${run.id})">💬 Give Feedback</button>
+            `;
+          }
+        }
+        actionsHtml += `
           <button class="btn small" onclick="toggleRunLog(${run.id})">📋 Log</button>
         `;
       }
@@ -830,6 +856,64 @@
     if (actions) actions.innerHTML = '';
   }
 
+  // ── Give Feedback Modal ──
+  const feedbackModal = document.getElementById('feedback-modal');
+  const feedbackReasonInput = document.getElementById('feedback-reason');
+  const feedbackExpectedInput = document.getElementById('feedback-expected');
+  let _feedbackRunId = null;
+
+  function openFeedbackModal(runId) {
+    _feedbackRunId = runId;
+    feedbackReasonInput.value = '';
+    feedbackExpectedInput.value = '';
+    feedbackModal.style.display = 'flex';
+    feedbackReasonInput.focus();
+  }
+
+  function closeFeedbackModal() {
+    feedbackModal.style.display = 'none';
+    _feedbackRunId = null;
+  }
+
+  document.getElementById('feedback-submit-btn').addEventListener('click', async function() {
+    const reason = feedbackReasonInput.value.trim();
+    if (!reason) {
+      showToast('"What went wrong?" is required.', 'warning');
+      feedbackReasonInput.focus();
+      return;
+    }
+    const expectedBehavior = feedbackExpectedInput.value.trim() || null;
+    try {
+      const res = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          run_id: _feedbackRunId,
+          ticket_id: {{ ticket.id }},
+          reason: reason,
+          expected_behavior: expectedBehavior,
+        }),
+      });
+      if (res.ok) {
+        showToast('Feedback submitted', 'success');
+        closeFeedbackModal();
+        loadAgentRuns();
+      } else {
+        const data = await res.json();
+        showToast(data.error || 'Failed to submit feedback', 'error');
+      }
+    } catch(e) {
+      showToast('Network error: ' + e.message, 'error');
+    }
+  });
+
+  document.getElementById('feedback-cancel-btn').addEventListener('click', function() {
+    closeFeedbackModal();
+  });
+
+  feedbackModal.addEventListener('click', function(e) {
+    if (e.target === feedbackModal) closeFeedbackModal();
+  });
 
   // ── Re-run Agent Modal ──
   const rerunModal = document.getElementById('rerun-modal');
