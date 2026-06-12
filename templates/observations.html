@@ -1,77 +1,315 @@
 {% extends "base.html" %}
 
-{% block title %}Observations — pi-CoWork{% endblock %}
+{% block title %}Feedback — pi-CoWork{% endblock %}
 
 {% block content %}
 <div class="system-logs-page">
-  <h2>🔍 Observations</h2>
+  <h2>📝 Feedback</h2>
 
-  <div class="logs-filters">
-    <div class="filter-row">
-      <label>
-        Ticket ID
-        <input type="number" id="filter-ticket-id" placeholder="e.g. 37" min="1">
-      </label>
-
-      <label>
-        Type
-        <input type="text" id="filter-type" placeholder="e.g. agent.failed">
-      </label>
-
-      <label>
-        From
-        <input type="datetime-local" id="filter-date-from">
-      </label>
-
-      <label>
-        To
-        <input type="datetime-local" id="filter-date-to">
-      </label>
-
-      <label>
-        Search
-        <input type="text" id="filter-search" placeholder="Search title or body...">
-      </label>
-    </div>
-
-    <div class="filter-actions">
-      <button class="btn" onclick="loadObservations()">Apply Filters</button>
-      <button class="btn ghost" onclick="clearFilters()">Clear</button>
-    </div>
+  <div class="board-tabs" id="feedback-tabs">
+    <button class="tab-btn active" data-tab="feedback" onclick="switchTab('feedback')">Feedback Dataset</button>
+    <button class="tab-btn" data-tab="rawlogs" onclick="switchTab('rawlogs')">Raw Logs</button>
   </div>
 
-  <div class="logs-table-container">
-    <table class="logs-table">
-      <thead>
-        <tr>
-          <th>Timestamp</th>
-          <th>Source</th>
-          <th>Type</th>
-          <th>Title</th>
-          <th>Body</th>
-          <th>Ticket</th>
-          <th>Run</th>
-        </tr>
-      </thead>
-      <tbody id="obs-tbody">
-        <tr><td colspan="7" class="logs-empty">Loading...</td></tr>
-      </tbody>
-    </table>
+  {# ── Feedback Dataset Tab ── #}
+  <div id="tab-feedback" class="tab-panel">
+    <div class="logs-filters">
+      <div class="filter-row">
+        <label>
+          Type
+          <select id="fb-filter-type">
+            <option value="">All</option>
+            <option value="gate_rejected">Gate Rejected</option>
+            <option value="cli_failed">CLI Failed</option>
+            <option value="agent_killed">Agent Killed</option>
+            <option value="agent_rerun">Agent Re-run</option>
+            <option value="run_feedback">Run Feedback</option>
+          </select>
+        </label>
+
+        <label>
+          Consumed
+          <select id="fb-filter-consumed">
+            <option value="">All</option>
+            <option value="false">Unconsumed</option>
+            <option value="true">Consumed</option>
+          </select>
+        </label>
+
+        <label>
+          Ticket ID
+          <input type="number" id="fb-filter-ticket-id" placeholder="e.g. 37" min="1">
+        </label>
+
+        <label>
+          From
+          <input type="date" id="fb-filter-date-from">
+        </label>
+
+        <label>
+          To
+          <input type="date" id="fb-filter-date-to">
+        </label>
+
+        <label>
+          Search
+          <input type="text" id="fb-filter-search" placeholder="Search reason, expected, ticket title…">
+        </label>
+      </div>
+      <div class="filter-actions">
+        <button class="btn" onclick="loadFeedback(1)">Apply Filters</button>
+        <button class="btn ghost" onclick="clearFeedbackFilters()">Clear</button>
+      </div>
+    </div>
+
+    <div class="logs-table-container">
+      <table class="logs-table">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Ticket #</th>
+            <th>Agent</th>
+            <th>Reason</th>
+            <th>Created</th>
+            <th>Consumed</th>
+          </tr>
+        </thead>
+        <tbody id="fb-tbody">
+          <tr><td colspan="6" class="logs-empty">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="logs-pagination" id="fb-pagination"></div>
   </div>
 
-  <div class="logs-pagination" id="obs-pagination"></div>
+  {# ── Raw Logs Tab ── #}
+  <div id="tab-rawlogs" class="tab-panel hidden">
+    <div class="logs-filters">
+      <div class="filter-row">
+        <label>
+          Ticket ID
+          <input type="number" id="filter-ticket-id" placeholder="e.g. 37" min="1">
+        </label>
+
+        <label>
+          Type
+          <input type="text" id="filter-type" placeholder="e.g. agent.failed">
+        </label>
+
+        <label>
+          From
+          <input type="datetime-local" id="filter-date-from">
+        </label>
+
+        <label>
+          To
+          <input type="datetime-local" id="filter-date-to">
+        </label>
+
+        <label>
+          Search
+          <input type="text" id="filter-search" placeholder="Search title or body…">
+        </label>
+      </div>
+      <div class="filter-actions">
+        <button class="btn" onclick="loadObservations(1)">Apply Filters</button>
+        <button class="btn ghost" onclick="clearObsFilters()">Clear</button>
+      </div>
+    </div>
+
+    <div class="logs-table-container">
+      <table class="logs-table">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Source</th>
+            <th>Type</th>
+            <th>Title</th>
+            <th>Body</th>
+            <th>Ticket</th>
+            <th>Run</th>
+          </tr>
+        </thead>
+        <tbody id="obs-tbody">
+          <tr><td colspan="7" class="logs-empty">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="logs-pagination" id="obs-pagination"></div>
+  </div>
 </div>
 
+{# Preview Modal #}
+<div class="modal-overlay" id="fb-preview-modal" style="display:none;" onclick="closePreviewModal(event)">
+  <div class="modal-content modal-large" onclick="event.stopPropagation()">
+    <h2>Preview for Agent</h2>
+    <div style="padding: 1.25rem;">
+      <pre id="fb-preview-pre" style="background:#0f172a;color:#e2e8f0;padding:1rem;border-radius:var(--radius);overflow-x:auto;font-size:0.8rem;white-space:pre-wrap;word-break:break-word;max-height:60vh;overflow-y:auto;"></pre>
+      <div class="justify-end flex" style="margin-top:0.75rem;">
+        <button class="btn" onclick="document.getElementById('fb-preview-modal').style.display='none'">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
 (function() {
-  let currentPage = 1;
-  let totalPages = 1;
-  const perPage = 50;
+  // ── Tab switching ──
+  window.switchTab = function(name) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+    document.querySelectorAll('.tab-panel').forEach(p => {
+      p.classList.toggle('hidden', p.id !== 'tab-' + name);
+    });
+    if (name === 'feedback') {
+      loadFeedback(1);
+    } else if (name === 'rawlogs') {
+      loadObservations(1);
+    }
+  };
 
-  function getFilters() {
+  // ═════════════════════════════════════════════════════════════════
+  //  Feedback Dataset
+  // ═════════════════════════════════════════════════════════════════
+  let fbPage = 1;
+  let fbPerPage = 50;
+
+  function getFbFilters() {
+    const params = new URLSearchParams();
+    const type = document.getElementById('fb-filter-type').value;
+    const consumed = document.getElementById('fb-filter-consumed').value;
+    const ticketId = document.getElementById('fb-filter-ticket-id').value;
+    const dateFrom = document.getElementById('fb-filter-date-from').value;
+    const dateTo = document.getElementById('fb-filter-date-to').value;
+    const search = document.getElementById('fb-filter-search').value;
+
+    if (type) params.set('feedback_type', type);
+    if (consumed !== '') params.set('consumed', consumed);
+    if (ticketId) params.set('ticket_id', ticketId);
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo + 'T23:59:59');
+    if (search) params.set('search', search);
+    return params;
+  }
+
+  window.loadFeedback = function(page) {
+    if (page) fbPage = page;
+    const params = getFbFilters();
+    params.set('page', fbPage);
+    params.set('per_page', fbPerPage);
+
+    fetch('/api/feedback?' + params.toString())
+      .then(res => res.json())
+      .then(data => {
+        const tbody = document.getElementById('fb-tbody');
+        if (!data.feedback || data.feedback.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="logs-empty">No feedback found</td></tr>';
+          document.getElementById('fb-pagination').innerHTML = '';
+          return;
+        }
+
+        fbPage = data.page;
+        const totalPages = data.total_pages;
+
+        tbody.innerHTML = data.feedback.map(fb => {
+          const typeColors = {
+            'gate_rejected': '#dc2626',
+            'cli_failed': '#d97706',
+            'agent_killed': '#991b1b',
+            'agent_rerun': '#2563eb',
+            'run_feedback': '#6b7280'
+          };
+          const color = typeColors[fb.type] || '#6b7280';
+          const ticketLink = fb.ticket_id ? `<a href="/ticket/${fb.ticket_id}">#${fb.ticket_id}</a>` : '';
+          const reasonSnippet = fb.reason ? escapeHtml(fb.reason.substring(0, 120)) + (fb.reason.length > 120 ? '…' : '') : '';
+          const consumedPill = fb.consumed_at
+            ? '<span class="fb-consumed">✓</span>'
+            : '<span class="fb-consumed fb-unconsumed">—</span>';
+          return `<tr class="fb-row" data-id="${fb.id}">
+            <td><span class="fb-type-badge" style="background:${color}22;color:${color};border:1px solid ${color}44;">${escapeHtml(fb.type)}</span></td>
+            <td>${ticketLink}</td>
+            <td>${escapeHtml(fb.agent || '')}</td>
+            <td>${reasonSnippet}</td>
+            <td>${escapeHtml(fb.created_at || '')}</td>
+            <td>${consumedPill}</td>
+          </tr>
+          <tr class="fb-detail hidden" id="fb-detail-${fb.id}">
+            <td colspan="6">
+              <div class="fb-detail-inner">
+                <div class="fb-detail-grid">
+                  <div><strong>Reason</strong><div class="markdown-content">${renderMarkdown(fb.reason || '')}</div></div>
+                  <div><strong>Expected Behavior</strong><div class="markdown-content">${renderMarkdown(fb.expected_behavior || '')}</div></div>
+                </div>
+                <div class="fb-detail-meta mt-05">
+                  ${fb.run_id ? `<a class="btn small" href="/api/agent_runs/${fb.run_id}/log" target="_blank">📋 Log (run #${fb.run_id})</a>` : ''}
+                  <button class="btn small" onclick="openPreview(${fb.id})">Preview for Agent</button>
+                </div>
+              </div>
+            </td>
+          </tr>`;
+        }).join('');
+
+        // Attach expand handlers
+        tbody.querySelectorAll('.fb-row').forEach(row => {
+          row.addEventListener('click', function() {
+            const id = this.dataset.id;
+            const detail = document.getElementById('fb-detail-' + id);
+            if (detail) detail.classList.toggle('hidden');
+          });
+        });
+
+        renderPagination(data.total, data.page, totalPages, 'fb-pagination', 'loadFeedback');
+      })
+      .catch(err => {
+        console.error('Failed to load feedback:', err);
+        document.getElementById('fb-tbody').innerHTML = '<tr><td colspan="6" class="logs-empty">Error loading feedback</td></tr>';
+      });
+  };
+
+  window.openPreview = function(feedbackId) {
+    fetch('/api/feedback/' + feedbackId + '/preview')
+      .then(res => {
+        if (!res.ok) throw new Error('Preview failed');
+        return res.json();
+      })
+      .then(data => {
+        const pre = document.getElementById('fb-preview-pre');
+        pre.textContent = JSON.stringify(data, null, 2);
+        document.getElementById('fb-preview-modal').style.display = 'flex';
+      })
+      .catch(err => {
+        showToast('Failed to load preview', 'error');
+        console.error(err);
+      });
+  };
+
+  window.closePreviewModal = function(e) {
+    if (e.target === document.getElementById('fb-preview-modal')) {
+      document.getElementById('fb-preview-modal').style.display = 'none';
+    }
+  };
+
+  window.clearFeedbackFilters = function() {
+    document.getElementById('fb-filter-type').value = '';
+    document.getElementById('fb-filter-consumed').value = '';
+    document.getElementById('fb-filter-ticket-id').value = '';
+    document.getElementById('fb-filter-date-from').value = '';
+    document.getElementById('fb-filter-date-to').value = '';
+    document.getElementById('fb-filter-search').value = '';
+    fbPage = 1;
+    loadFeedback(1);
+  };
+
+  // ═════════════════════════════════════════════════════════════════
+  //  Raw Logs (Observations)
+  // ═════════════════════════════════════════════════════════════════
+  let obsPage = 1;
+  const obsPerPage = 50;
+
+  function getObsFilters() {
     const params = new URLSearchParams();
     const ticketId = document.getElementById('filter-ticket-id').value;
     const type = document.getElementById('filter-type').value;
@@ -88,10 +326,10 @@
   }
 
   window.loadObservations = function(page) {
-    if (page) currentPage = page;
-    const params = getFilters();
-    params.set('page', currentPage);
-    params.set('per_page', perPage);
+    if (page) obsPage = page;
+    const params = getObsFilters();
+    params.set('page', obsPage);
+    params.set('per_page', obsPerPage);
 
     fetch('/api/observations?' + params.toString())
       .then(res => res.json())
@@ -103,14 +341,14 @@
           return;
         }
 
-        currentPage = data.page;
-        totalPages = data.total_pages;
+        obsPage = data.page;
+        const totalPages = data.total_pages;
 
         tbody.innerHTML = data.observations.map(obs => {
           const ticketLink = obs.ticket_id ? `<a href="/ticket/${obs.ticket_id}">#${obs.ticket_id}</a>` : '';
           const runLink = obs.agent_run_id ? `<a href="/api/agent_runs/${obs.agent_run_id}/log">Run #${obs.agent_run_id}</a>` : '';
           const sourceBadge = `<span class="type-badge">${escapeHtml(obs.source_table)}</span>`;
-          const bodyPreview = obs.body ? escapeHtml(obs.body.substring(0, 200)) + (obs.body.length > 200 ? '...' : '') : '';
+          const bodyPreview = obs.body ? escapeHtml(obs.body.substring(0, 200)) + (obs.body.length > 200 ? '…' : '') : '';
           return `<tr>
             <td>${escapeHtml(obs.created_at || '')}</td>
             <td>${sourceBadge}</td>
@@ -122,7 +360,7 @@
           </tr>`;
         }).join('');
 
-        renderPagination(data.total, data.page, data.total_pages);
+        renderPagination(data.total, data.page, totalPages, 'obs-pagination', 'loadObservations');
       })
       .catch(err => {
         console.error('Failed to load observations:', err);
@@ -130,14 +368,27 @@
       });
   };
 
-  function renderPagination(total, page, total_pages) {
-    const container = document.getElementById('obs-pagination');
+  window.clearObsFilters = function() {
+    document.getElementById('filter-ticket-id').value = '';
+    document.getElementById('filter-type').value = '';
+    document.getElementById('filter-date-from').value = '';
+    document.getElementById('filter-date-to').value = '';
+    document.getElementById('filter-search').value = '';
+    obsPage = 1;
+    loadObservations(1);
+  };
+
+  // ═════════════════════════════════════════════════════════════════
+  //  Shared pagination renderer
+  // ═════════════════════════════════════════════════════════════════
+  function renderPagination(total, page, total_pages, containerId, callbackName) {
+    const container = document.getElementById(containerId);
     if (total_pages <= 1) {
-      container.innerHTML = `<span class="page-info">${total} observation entries</span>`;
+      container.innerHTML = `<span class="page-info">${total} entries</span>`;
       return;
     }
     let html = '';
-    html += `<button class="btn small" ${page <= 1 ? 'disabled' : ''} onclick="loadObservations(${page - 1})">← Prev</button>`;
+    html += `<button class="btn small" ${page <= 1 ? 'disabled' : ''} onclick="${callbackName}(${page - 1})">← Prev</button>`;
 
     const maxButtons = 7;
     let startPage = Math.max(1, page - Math.floor(maxButtons / 2));
@@ -147,34 +398,24 @@
     }
 
     if (startPage > 1) {
-      html += `<button class="btn small" onclick="loadObservations(1)">1</button>`;
-      if (startPage > 2) html += `<span class="page-info">...</span>`;
+      html += `<button class="btn small" onclick="${callbackName}(1)">1</button>`;
+      if (startPage > 2) html += `<span class="page-info">…</span>`;
     }
     for (let i = startPage; i <= endPage; i++) {
-      html += `<button class="btn small ${i === page ? 'primary' : ''}" onclick="loadObservations(${i})">${i}</button>`;
+      html += `<button class="btn small ${i === page ? 'primary' : ''}" onclick="${callbackName}(${i})">${i}</button>`;
     }
     if (endPage < total_pages) {
-      if (endPage < total_pages - 1) html += `<span class="page-info">...</span>`;
-      html += `<button class="btn small" onclick="loadObservations(${total_pages})">${total_pages}</button>`;
+      if (endPage < total_pages - 1) html += `<span class="page-info">…</span>`;
+      html += `<button class="btn small" onclick="${callbackName}(${total_pages})">${total_pages}</button>`;
     }
 
-    html += `<button class="btn small" ${page >= total_pages ? 'disabled' : ''} onclick="loadObservations(${page + 1})">Next →</button>`;
+    html += `<button class="btn small" ${page >= total_pages ? 'disabled' : ''} onclick="${callbackName}(${page + 1})">Next →</button>`;
     html += `<span class="page-info">${total} entries · Page ${page} of ${total_pages}</span>`;
     container.innerHTML = html;
   }
 
-  window.clearFilters = function() {
-    document.getElementById('filter-ticket-id').value = '';
-    document.getElementById('filter-type').value = '';
-    document.getElementById('filter-date-from').value = '';
-    document.getElementById('filter-date-to').value = '';
-    document.getElementById('filter-search').value = '';
-    currentPage = 1;
-    loadObservations(1);
-  };
-
-  // Load initial data
-  loadObservations(1);
+  // Load feedback by default
+  loadFeedback(1);
 })();
 </script>
 {% endblock %}

@@ -3,28 +3,73 @@
 from flask import Blueprint, jsonify, request
 
 from pi_cowork.db import query_db, run_db
-from pi_cowork.models import add_agent_feedback, get_unconsumed_feedback_enriched, mark_feedback_consumed
+from pi_cowork.models import (
+    add_agent_feedback,
+    get_feedback_count,
+    get_unconsumed_feedback_enriched,
+    mark_feedback_consumed,
+)
 
 feedback_bp = Blueprint("feedback", __name__)
 
 
+def _parse_consumed(value):
+    """Parse consumed query param into tristate bool.
+
+    Returns True/False for explicit values, None when absent or empty.
+    """
+    if value is None or value == "":
+        return None
+    v = value.lower()
+    if v in ("1", "true", "yes"):
+        return True
+    if v in ("0", "false", "no"):
+        return False
+    return None
+
+
 @feedback_bp.route("/api/feedback", methods=["GET"])
 def api_list_feedback():
-    """List feedback rows with optional filtering and enrichment."""
-    consumed_raw = request.args.get("consumed")
-    consumed = False if consumed_raw is None else consumed_raw.lower() in ("1", "true", "yes")
-
+    """List feedback rows with optional filtering, enrichment, and pagination."""
+    consumed = _parse_consumed(request.args.get("consumed"))
     feedback_type = request.args.get("feedback_type")
     ticket_id = request.args.get("ticket_id", type=int)
     agent_id = request.args.get("agent_id", type=int)
-    limit = request.args.get("limit", 50, type=int)
+    date_from = request.args.get("date_from")
+    date_to = request.args.get("date_to")
+    search = request.args.get("search")
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 50, type=int)
+    limit = request.args.get("limit", type=int)
+
+    # Backward compat: limit overrides per_page when explicit
+    if limit is not None:
+        per_page = limit
+        page = 1
+
+    limit = max(1, min(per_page, 200))
+    offset = max(0, (page - 1) * limit)
+
+    total = get_feedback_count(
+        consumed=consumed,
+        feedback_type=feedback_type,
+        ticket_id=ticket_id,
+        agent_id=agent_id,
+        date_from=date_from,
+        date_to=date_to,
+        search=search,
+    )
 
     rows = get_unconsumed_feedback_enriched(
         consumed=consumed,
         feedback_type=feedback_type,
         ticket_id=ticket_id,
         agent_id=agent_id,
+        date_from=date_from,
+        date_to=date_to,
+        search=search,
         limit=limit,
+        offset=offset,
     )
 
     # Map DB rows to the public shape expected by consumers
@@ -47,7 +92,112 @@ def api_list_feedback():
             }
         )
 
-    return jsonify({"feedback": feedback})
+    total_pages = (total + limit - 1) // limit if total > 0 else 1
+    return jsonify(
+        {
+            "feedback": feedback,
+            "total": total,
+            "page": page,
+            "per_page": limit,
+            "total_pages": total_pages,
+        }
+    )
+
+
+@feedback_bp.route("/api/feedback/<int:feedback_id>/preview", methods=["GET"])
+def api_feedback_preview(feedback_id):
+    """Return canonical structured JSON payload for a self-improvement agent."""
+    row = query_db(
+        """
+        SELECT
+            af.id,
+            af.ticket_id,
+            af.run_id,
+            af.gate_review_id,
+            af.feedback_type,
+            af.reason,
+            af.expected_behavior,
+            af.context_json,
+            af.created_at,
+            af.consumed_at,
+            af.consumed_by_run_id,
+            af.source_event,
+            af.created_by,
+            t.title AS ticket_title,
+            a.name AS agent_name,
+            ar.status AS run_status,
+            ar.log_path AS run_log_path,
+            qg.name AS gate_name,
+            qg.gate_type AS gate_type,
+            fs.name AS from_status,
+            ts.name AS to_status
+        FROM agent_feedback af
+        LEFT JOIN tickets t ON t.id = af.ticket_id
+        LEFT JOIN agent_runs ar ON ar.id = af.run_id
+        LEFT JOIN agents a ON a.id = ar.agent_id
+        LEFT JOIN gate_reviews gr ON gr.id = af.gate_review_id
+        LEFT JOIN quality_gates qg ON qg.id = gr.gate_id
+        LEFT JOIN statuses fs ON fs.id = gr.from_status_id
+        LEFT JOIN statuses ts ON ts.id = gr.to_status_id
+        WHERE af.id = ?
+    """,
+        (feedback_id,),
+        one=True,
+    )
+    if not row:
+        return jsonify({"error": "Feedback not found"}), 404
+
+    import json
+
+    context = {}
+    if row["context_json"]:
+        try:
+            context = json.loads(row["context_json"])
+        except json.JSONDecodeError:
+            context = {"_invalid_context_json": row["context_json"]}
+
+    runtime = {}
+    for key in ("run_status", "gate_name", "gate_type", "from_status", "to_status"):
+        if row[key]:
+            runtime[key] = row[key]
+    if runtime:
+        context.update(runtime)
+
+    payload = {
+        "id": row["id"],
+        "ticket": {
+            "id": row["ticket_id"],
+            "title": row["ticket_title"],
+        },
+        "agent": row["agent_name"],
+        "run": {
+            "id": row["run_id"],
+            "status": row["run_status"],
+            "log_path": row["run_log_path"],
+        }
+        if row["run_id"]
+        else None,
+        "gate_review": {
+            "id": row["gate_review_id"],
+            "gate_name": row["gate_name"],
+            "gate_type": row["gate_type"],
+            "from_status": row["from_status"],
+            "to_status": row["to_status"],
+        }
+        if row["gate_review_id"]
+        else None,
+        "feedback_type": row["feedback_type"],
+        "reason": row["reason"],
+        "expected_behavior": row["expected_behavior"],
+        "context": context,
+        "created_at": row["created_at"],
+        "consumed_at": row["consumed_at"],
+        "consumed_by_run_id": row["consumed_by_run_id"],
+        "source_event": row["source_event"],
+        "created_by": row["created_by"],
+    }
+
+    return jsonify(payload)
 
 
 @feedback_bp.route("/api/feedback/<int:feedback_id>/consume", methods=["POST"])

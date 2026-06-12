@@ -3288,6 +3288,9 @@ textarea.edit-input { resize: vertical; min-height: 2.5rem; }
     position: static;
     order: -1;
   }
+  .fb-detail-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Label popover — board card overlay */
@@ -3781,3 +3784,68 @@ textarea.edit-input { resize: vertical; min-height: 2.5rem; }
   word-break: break-word;
   line-height: 1.5;
 }
+
+/* ── Feedback Dataset Viewer ── */
+.fb-type-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.fb-consumed {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  background: var(--success-soft);
+  color: var(--success);
+  border: 1px solid #6ee7b7;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.fb-consumed.fb-unconsumed {
+  background: var(--bg);
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+.fb-row {
+  cursor: pointer;
+}
+
+.fb-row:hover {
+  background: var(--bg);
+}
+
+.fb-detail {
+  background: var(--bg);
+}
+
+.fb-detail.hidden {
+  display: none !important;
+}
+
+.fb-detail-inner {
+  padding: 0.75rem;
+}
+
+.fb-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.fb-detail-meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+

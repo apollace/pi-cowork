@@ -128,7 +128,7 @@ Workflow (agents + statuses + transitions + quality_gates)
 - **`assistant_saved_prompts`** — global reusable prompt snippets for both global and board assistants (columns: `id`, `name` UNIQUE, `prompt_text`, `sort_order`, `created_at`)
 - **`ticket_status_overrides`** — per-ticket model/thinking overrides per status (compound PK: `ticket_id, status_id`, both with `ON DELETE CASCADE`; nullable `model`, `thinking` columns)
 - **`assistant_runs`** — tracks in-progress assistant generations so the UI can reconnect across page refreshes (columns: `id`, `board_id` (nullable, FK → boards ON DELETE CASCADE), `status` (`running`/`completed`/`failed`/`stopped`), `log_path`, `pid`, `started_at`, `completed_at`, `full_text`). Inserted on chat start, updated by the watcher/finalizer thread when the `pi` process exits, and deleted on compact/reset.
-- **`agent_feedback`** — structured feedback for agent self-improvement, linked to tickets and optionally to specific agent runs or gate reviews (columns: `id`, `ticket_id` FK → tickets ON DELETE CASCADE, `run_id` FK → agent_runs ON DELETE SET NULL, `gate_review_id` FK → gate_reviews ON DELETE SET NULL, `feedback_type` CHECK IN (`'gate_rejected'`, `'cli_failed'`, `'agent_killed'`, `'agent_rerun'`, `'run_feedback'`), `reason`, `expected_behavior`, `context_json`, `created_at`, `consumed_at`, `consumed_by_run_id`, `source_event`, `created_by`). Model helpers: `add_agent_feedback()`, `get_feedback_for_ticket()`, `get_unconsumed_feedback()`, `get_unconsumed_feedback_enriched()`, `mark_feedback_consumed()`.
+- **`agent_feedback`** — structured feedback for agent self-improvement, linked to tickets and optionally to specific agent runs or gate reviews (columns: `id`, `ticket_id` FK → tickets ON DELETE CASCADE, `run_id` FK → agent_runs ON DELETE SET NULL, `gate_review_id` FK → gate_reviews ON DELETE SET NULL, `feedback_type` CHECK IN (`'gate_rejected'`, `'cli_failed'`, `'agent_killed'`, `'agent_rerun'`, `'run_feedback'`), `reason`, `expected_behavior`, `context_json`, `created_at`, `consumed_at`, `consumed_by_run_id`, `source_event`, `created_by`). Model helpers: `add_agent_feedback()`, `get_feedback_for_ticket()`, `get_unconsumed_feedback()`, `get_unconsumed_feedback_enriched()` (accepts `consumed`, `feedback_type`, `ticket_id`, `agent_id`, `date_from`, `date_to`, `search`, `limit`, `offset`), `get_feedback_count()` (same filters, returns total row count), `mark_feedback_consumed()`.
 
 ## Skills Architecture (pure filesystem)
 
@@ -396,7 +396,8 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 ### Agent Feedback
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/api/feedback` | GET | List feedback rows (query: `consumed`, `limit`, `feedback_type`, `ticket_id`, `agent_id`) |
+| `/api/feedback` | GET | List feedback rows (query: `consumed` tristate — missing = all, `true` = consumed only, `false` = unconsumed only; `feedback_type`, `ticket_id`, `agent_id`, `date_from`, `date_to`, `search`, `page`, `per_page`, `limit`). Returns paginated envelope `{feedback, total, page, per_page, total_pages}`. |
+| `/api/feedback/<id>/preview` | GET | Return canonical structured JSON payload for a self-improvement agent (includes ticket, agent, run, gate review, reason, expected_behavior, context, created_at). |
 | `/api/feedback/<id>` | PUT | Update feedback `reason` and optional `expected_behavior` (human-only) |
 | `/api/feedback/<id>/consume` | POST | Mark feedback as consumed (returns 409 if already consumed, 404 if not found) |
 
