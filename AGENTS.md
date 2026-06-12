@@ -393,11 +393,17 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 | `/api/gate_reviews?ticket_id=<id>` | GET | List reviews for a ticket |
 | `/api/gate_reviews/<id>` | PUT | Approve/reject manual review |
 
+### Agent Feedback
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/api/feedback/<id>` | PUT | Update feedback `reason` and optional `expected_behavior` (human-only) |
+
 ### Agent Runs
 | Route | Method | Description |
 |-------|--------|-------------|
 | `/api/tickets/<id>/agent_runs` | GET | List agent runs for a ticket |
 | `/api/agent_runs/<id>/log` | GET | Fetch raw log file |
+| `/api/tickets/<id>/spawn` | POST | Manually re-trigger agent (optional field: `reason`) |
 
 ### Observations
 | Route | Method | Description |
@@ -555,6 +561,15 @@ Quality gates are checks that must pass when a ticket transitions from one statu
 - Human rejects a manual gate → comment required → added to ticket → agent re-triggered in current status
 - CLI gate fails → stdout/stderr added as comment → transition rejected, pending reviews cleared → **agent re-triggered in current status** with the failure comment as warm-spawn context
 - Agents are informed about quality gates in their context message, so they know not to retry blocked transitions. The failure comment tells the re-triggered agent what went wrong so it can fix the root cause before retrying the same transition.
+
+### Auto-Capture Feedback
+The system automatically creates `agent_feedback` rows for:
+- **Gate rejection** (`feedback_type='gate_rejected'`) — captured when a manual gate is rejected, including the rejection comment as `reason`.
+- **CLI failure** (`feedback_type='cli_failed'`) — captured when a CLI gate fails **and** the gate's `notify_on_failure` is enabled. The `reason` contains the gate's stdout/stderr output.
+- **Agent kill** (`feedback_type='agent_killed'`) — captured when a user kills a running agent via the kill endpoint. The kill endpoint returns the new `feedback_id` so the UI can optionally prompt for additional context.
+- **Re-run** (`feedback_type='agent_rerun'`) — captured when an agent is manually re-spawned via `/api/tickets/{id}/spawn`. An optional `reason` field in the spawn request body records why the re-run was triggered.
+
+Feedback rows are stored in the `agent_feedback` table and linked to tickets (and optionally to `agent_runs` or `gate_reviews`). The `PUT /api/feedback/{id}` endpoint allows humans to update the `reason` and `expected_behavior` fields after the fact.
 
 ### API Endpoints
 | Route | Method | Description |

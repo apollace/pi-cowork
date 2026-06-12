@@ -134,6 +134,19 @@
     </section>
   </div>
 </div>
+
+<!-- Re-run Agent Modal -->
+<div id="rerun-modal" class="modal" style="display:none;">
+  <div class="modal-content" style="max-width:480px;">
+    <h2>Re-run Agent</h2>
+    <p class="muted" style="margin-bottom:0.5rem;">Why are you re-running this agent?</p>
+    <textarea id="rerun-reason" rows="3" placeholder="Optional reason..."></textarea>
+    <div class="form-actions" style="margin-top:0.75rem;">
+      <button class="btn primary" id="rerun-submit-btn">Submit</button>
+      <button class="btn" id="rerun-cancel-btn">Cancel</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -755,53 +768,136 @@
     try {
       const res = await fetch('/api/agent_runs/' + runId + '/kill', { method: 'POST' });
       if (res.ok) {
+        const data = await res.json();
         showToast('Agent run killed', 'success');
         loadAgentRuns();
         initRunAgentButton();
         loadComments();
+        // Show inline kill reason prompt if feedback was created
+        if (data.feedback_id) {
+          showKillReasonPrompt(data.feedback_id);
+        }
       } else {
         const data = await res.json();
         showToast(data.error || 'Failed to kill agent', 'error');
-
       }
     } catch(e) {
       showToast('Network error: ' + e.message, 'error');
-
     }
   }
 
+  function showKillReasonPrompt(feedbackId) {
+    const actions = document.getElementById('agent-runs-actions');
+    if (!actions) return;
+    actions.innerHTML = `
+      <div class="kill-reason-prompt" style="padding:0.75rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);">
+        <div style="font-size:0.85rem;margin-bottom:0.4rem;">💬 Why did you kill this agent? (optional)</div>
+        <textarea id="kill-reason-input" rows="2" placeholder="Add context to help the agent improve..."></textarea>
+        <div style="display:flex;gap:0.4rem;margin-top:0.4rem;">
+          <button class="btn small primary" onclick="submitKillReason(${feedbackId})">Submit reason</button>
+          <button class="btn small ghost" onclick="dismissKillReason()">Skip</button>
+        </div>
+      </div>
+    `;
+  }
 
-  // ── Shared spawn handler (used by both Run Agent and Re-run Agent buttons) ──
-  async function handleSpawnClick(btn, loadingText, restoreText) {
-    if (btn.disabled) return;
+  async function submitKillReason(feedbackId) {
+    const input = document.getElementById('kill-reason-input');
+    const reason = (input ? input.value : '').trim();
+    if (!reason) {
+      dismissKillReason();
+      return;
+    }
+    try {
+      const res = await fetch('/api/feedback/' + feedbackId, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({reason: reason}),
+      });
+      if (res.ok) {
+        showToast('Kill reason recorded', 'success');
+      } else {
+        showToast('Failed to record reason', 'error');
+      }
+    } catch(e) {
+      showToast('Network error: ' + e.message, 'error');
+    }
+    dismissKillReason();
+  }
+
+  function dismissKillReason() {
+    const actions = document.getElementById('agent-runs-actions');
+    if (actions) actions.innerHTML = '';
+  }
+
+
+  // ── Re-run Agent Modal ──
+  const rerunModal = document.getElementById('rerun-modal');
+  const rerunReasonInput = document.getElementById('rerun-reason');
+  let _rerunBtnRef = null;
+
+  function openRerunModal(btn) {
+    _rerunBtnRef = btn;
+    rerunReasonInput.value = '';
+    rerunModal.style.display = 'flex';
+    rerunReasonInput.focus();
+  }
+
+  function closeRerunModal() {
+    rerunModal.style.display = 'none';
+    if (_rerunBtnRef) {
+      _rerunBtnRef.disabled = false;
+      _rerunBtnRef.textContent = '🔄 Re-run Agent';
+      _rerunBtnRef = null;
+    }
+  }
+
+  document.getElementById('rerun-submit-btn').addEventListener('click', async function() {
+    const reason = rerunReasonInput.value.trim();
+    await doSpawn(_rerunBtnRef, reason);
+    closeRerunModal();
+  });
+
+  document.getElementById('rerun-cancel-btn').addEventListener('click', function() {
+    closeRerunModal();
+  });
+
+  rerunModal.addEventListener('click', function(e) {
+    if (e.target === rerunModal) closeRerunModal();
+  });
+
+  async function doSpawn(btn, reason, loadingText = '⏳ Re-spawning...', errorText = '🔄 Re-run Agent') {
+    if (!btn) return;
     btn.disabled = true;
     btn.textContent = loadingText;
     try {
-      const res = await fetch('/api/tickets/{{ ticket.id }}/spawn', { method: 'POST' });
+      const res = await fetch('/api/tickets/{{ ticket.id }}/spawn', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({reason: reason || undefined}),
+      });
       const data = await res.json();
       if (res.ok) {
         showToast('Agent spawned', 'success');
         await Promise.all([loadAgentRuns(), initRunAgentButton(), loadComments()]);
       } else {
         showToast(data.error || 'Failed to spawn agent', 'error');
-
         btn.disabled = false;
-        btn.textContent = restoreText;
+        btn.textContent = errorText;
       }
     } catch(e) {
       showToast('Network error: ' + e.message, 'error');
-
       btn.disabled = false;
-      btn.textContent = restoreText;
+      btn.textContent = errorText;
     }
   }
 
   document.getElementById('run-agent-btn').addEventListener('click', function() {
-    handleSpawnClick(this, '⏳ Spawning...', '🤖 Run Agent');
+    doSpawn(this, '', '⏳ Spawning...', '🤖 Run Agent');
   });
 
   document.getElementById('rerun-agent-btn').addEventListener('click', function() {
-    handleSpawnClick(this, '⏳ Re-spawning...', '🔄 Re-run Agent');
+    openRerunModal(this);
   });
 
   loadGateReviews();
