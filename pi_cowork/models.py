@@ -1349,3 +1349,72 @@ def get_all_tags():
     """Get all knowledge tags."""
     rows = query_db("SELECT * FROM knowledge_tags ORDER BY name")
     return [row_to_dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Agent Feedback
+# ---------------------------------------------------------------------------
+
+
+def add_agent_feedback(
+    ticket_id,
+    feedback_type,
+    run_id=None,
+    gate_review_id=None,
+    reason=None,
+    expected_behavior=None,
+    context_json=None,
+    source_event=None,
+    created_by=None,
+):
+    """Insert an agent_feedback row. Returns lastrowid."""
+    cur = run_db(
+        """INSERT INTO agent_feedback
+           (ticket_id, run_id, gate_review_id, feedback_type, reason,
+            expected_behavior, context_json, source_event, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            ticket_id,
+            run_id,
+            gate_review_id,
+            feedback_type,
+            reason,
+            expected_behavior,
+            context_json,
+            source_event,
+            created_by,
+        ),
+    )
+    return cur.lastrowid
+
+
+def get_feedback_for_ticket(ticket_id):
+    """List feedback rows for a ticket, newest first."""
+    rows = query_db(
+        """SELECT * FROM agent_feedback
+           WHERE ticket_id = ?
+           ORDER BY created_at DESC, id DESC""",
+        (ticket_id,),
+    )
+    return [row_to_dict(r) for r in rows]
+
+
+def get_unconsumed_feedback():
+    """List feedback rows where consumed_at IS NULL, oldest first."""
+    rows = query_db(
+        """SELECT * FROM agent_feedback
+           WHERE consumed_at IS NULL
+           ORDER BY created_at ASC, id ASC"""
+    )
+    return [row_to_dict(r) for r in rows]
+
+
+def mark_feedback_consumed(feedback_id, consumed_by_run_id):
+    """Mark a feedback row as consumed."""
+    run_db(
+        """UPDATE agent_feedback
+           SET consumed_at = CURRENT_TIMESTAMP,
+               consumed_by_run_id = ?
+           WHERE id = ?""",
+        (consumed_by_run_id, feedback_id),
+    )

@@ -254,6 +254,23 @@ CREATE TABLE IF NOT EXISTS event_log (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Agent feedback: structured feedback for agent self-improvement
+CREATE TABLE IF NOT EXISTS agent_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    run_id INTEGER REFERENCES agent_runs(id) ON DELETE SET NULL,
+    gate_review_id INTEGER REFERENCES gate_reviews(id) ON DELETE SET NULL,
+    feedback_type TEXT NOT NULL CHECK(feedback_type IN ('gate_rejected', 'cli_failed', 'agent_killed', 'agent_rerun', 'run_feedback')),
+    reason TEXT,
+    expected_behavior TEXT,
+    context_json TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    consumed_at DATETIME,
+    consumed_by_run_id INTEGER,
+    source_event TEXT,
+    created_by TEXT
+);
+
 -- System logs: centralised application-level logging
 CREATE TABLE IF NOT EXISTS system_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -288,6 +305,10 @@ CREATE INDEX IF NOT EXISTS idx_ticket_labels_ticket_id ON ticket_labels(ticket_i
 CREATE INDEX IF NOT EXISTS idx_recurring_instances_ticket_id ON recurring_instances(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_labels_workflow_id ON labels(workflow_id);
 CREATE INDEX IF NOT EXISTS idx_event_log_created_at ON event_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_agent_feedback_ticket_id ON agent_feedback(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_agent_feedback_run_id ON agent_feedback(run_id);
+CREATE INDEX IF NOT EXISTS idx_agent_feedback_type ON agent_feedback(feedback_type);
+CREATE INDEX IF NOT EXISTS idx_agent_feedback_consumed_at ON agent_feedback(consumed_at);
 CREATE INDEX IF NOT EXISTS idx_system_logs_timestamp ON system_logs(timestamp);
 CREATE INDEX IF NOT EXISTS idx_system_logs_level ON system_logs(level);
 CREATE INDEX IF NOT EXISTS idx_system_logs_action_type ON system_logs(action_type);
