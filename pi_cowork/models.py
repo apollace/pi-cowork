@@ -1409,6 +1409,126 @@ def get_unconsumed_feedback():
     return [row_to_dict(r) for r in rows]
 
 
+def _build_feedback_preview(row_dict):
+    """Build a human-readable preview string for a feedback row."""
+    parts = []
+    if row_dict.get("feedback_type"):
+        parts.append(row_dict["feedback_type"])
+    if row_dict.get("gate_name"):
+        parts.append(f"gate: {row_dict['gate_name']}")
+    if row_dict.get("reason"):
+        parts.append(row_dict["reason"])
+    if row_dict.get("expected_behavior"):
+        parts.append(f"expected: {row_dict['expected_behavior']}")
+    return " | ".join(parts)
+
+
+def _enrich_feedback_row(row):
+    """Convert a raw feedback query row into an enriched dict."""
+    d = row_to_dict(row)
+
+    context = {}
+    if d.get("context_json"):
+        try:
+            context = json.loads(d["context_json"])
+        except json.JSONDecodeError:
+            context = {"_invalid_context_json": d["context_json"]}
+
+    runtime = {}
+    for key in ("run_status", "gate_name", "gate_type", "from_status", "to_status"):
+        if d.get(key):
+            runtime[key] = d[key]
+    if runtime:
+        context.update(runtime)
+
+    d["context"] = context
+    d["preview"] = _build_feedback_preview(d)
+    return d
+
+
+def get_unconsumed_feedback_enriched(
+    consumed=None,
+    feedback_type=None,
+    ticket_id=None,
+    agent_id=None,
+    limit=50,
+):
+    """List feedback rows with enriched joins, oldest first.
+
+    Parameters:
+        consumed (bool): If True, only consumed; if False, only unconsumed;
+                         if None, return all.
+        feedback_type (str): Filter by feedback_type value.
+        ticket_id (int): Filter by ticket_id.
+        agent_id (int): Filter by agent_runs.agent_id (the agent that produced
+                        the run the feedback is linked to).
+        limit (int): Max rows to return (default 50).
+    """
+    conditions = []
+    params = []
+
+    if consumed is True:
+        conditions.append("af.consumed_at IS NOT NULL")
+    elif consumed is False:
+        conditions.append("af.consumed_at IS NULL")
+
+    if feedback_type is not None:
+        conditions.append("af.feedback_type = ?")
+        params.append(feedback_type)
+
+    if ticket_id is not None:
+        conditions.append("af.ticket_id = ?")
+        params.append(ticket_id)
+
+    if agent_id is not None:
+        conditions.append("ar.agent_id = ?")
+        params.append(agent_id)
+
+    where_clause = ""
+    if conditions:
+        where_clause = "WHERE " + " AND ".join(conditions)
+
+    sql = (
+        """
+        SELECT
+            af.id,
+            af.ticket_id,
+            af.run_id,
+            af.gate_review_id,
+            af.feedback_type,
+            af.reason,
+            af.expected_behavior,
+            af.context_json,
+            af.created_at,
+            af.consumed_at,
+            af.consumed_by_run_id,
+            af.source_event,
+            af.created_by,
+            t.title AS ticket_title,
+            a.name AS agent_name,
+            ar.status AS run_status,
+            qg.name AS gate_name,
+            qg.gate_type AS gate_type,
+            fs.name AS from_status,
+            ts.name AS to_status
+        FROM agent_feedback af
+        LEFT JOIN tickets t ON t.id = af.ticket_id
+        LEFT JOIN agent_runs ar ON ar.id = af.run_id
+        LEFT JOIN agents a ON a.id = ar.agent_id
+        LEFT JOIN gate_reviews gr ON gr.id = af.gate_review_id
+        LEFT JOIN quality_gates qg ON qg.id = gr.gate_id
+        LEFT JOIN statuses fs ON fs.id = gr.from_status_id
+        LEFT JOIN statuses ts ON ts.id = gr.to_status_id
+        """
+        + where_clause
+        + "\n        ORDER BY af.created_at ASC, af.id ASC\n        LIMIT ?\n    "
+    )
+    params.append(limit)
+
+    rows = query_db(sql, tuple(params))
+    return [_enrich_feedback_row(r) for r in rows]
+
+
 def mark_feedback_consumed(feedback_id, consumed_by_run_id):
     """Mark a feedback row as consumed."""
     run_db(

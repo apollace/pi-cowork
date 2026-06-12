@@ -1,11 +1,74 @@
-"""API: Agent Feedback — create and update feedback rows."""
+"""API: Agent Feedback — create, update, list, and consume feedback rows."""
 
 from flask import Blueprint, jsonify, request
 
 from pi_cowork.db import query_db, run_db
-from pi_cowork.models import add_agent_feedback
+from pi_cowork.models import add_agent_feedback, get_unconsumed_feedback_enriched, mark_feedback_consumed
 
 feedback_bp = Blueprint("feedback", __name__)
+
+
+@feedback_bp.route("/api/feedback", methods=["GET"])
+def api_list_feedback():
+    """List feedback rows with optional filtering and enrichment."""
+    consumed_raw = request.args.get("consumed")
+    consumed = False if consumed_raw is None else consumed_raw.lower() in ("1", "true", "yes")
+
+    feedback_type = request.args.get("feedback_type")
+    ticket_id = request.args.get("ticket_id", type=int)
+    agent_id = request.args.get("agent_id", type=int)
+    limit = request.args.get("limit", 50, type=int)
+
+    rows = get_unconsumed_feedback_enriched(
+        consumed=consumed,
+        feedback_type=feedback_type,
+        ticket_id=ticket_id,
+        agent_id=agent_id,
+        limit=limit,
+    )
+
+    # Map DB rows to the public shape expected by consumers
+    feedback = []
+    for row in rows:
+        feedback.append(
+            {
+                "id": row["id"],
+                "type": row["feedback_type"],
+                "ticket_id": row["ticket_id"],
+                "run_id": row["run_id"],
+                "agent": row.get("agent_name"),
+                "reason": row.get("reason"),
+                "expected_behavior": row.get("expected_behavior"),
+                "context": row.get("context", {}),
+                "preview": row.get("preview", ""),
+                "created_at": row["created_at"],
+                "consumed_at": row.get("consumed_at"),
+                "consumed_by_run_id": row.get("consumed_by_run_id"),
+            }
+        )
+
+    return jsonify({"feedback": feedback})
+
+
+@feedback_bp.route("/api/feedback/<int:feedback_id>/consume", methods=["POST"])
+def api_consume_feedback(feedback_id):
+    """Mark a feedback row as consumed."""
+    row = query_db(
+        "SELECT consumed_at FROM agent_feedback WHERE id = ?",
+        (feedback_id,),
+        one=True,
+    )
+    if not row:
+        return jsonify({"error": "Feedback not found"}), 404
+
+    if row["consumed_at"] is not None:
+        return jsonify({"error": "Feedback already consumed"}), 409
+
+    data = request.get_json(silent=True) or {}
+    consumed_by_run_id = data.get("consumed_by_run_id")
+
+    mark_feedback_consumed(feedback_id, consumed_by_run_id)
+    return jsonify({"success": True})
 
 
 @feedback_bp.route("/api/feedback", methods=["POST"])
