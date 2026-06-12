@@ -212,13 +212,14 @@ def get_assistant_excluded_skill_names():
 def get_assistant_effective_skill_names():
     """Compute the effective skill names for the assistant.
 
-    Effective skills = built_in_skills - excluded_skill_names
+    Effective skills = (built_in_skills ∪ global_skills) - excluded_skill_names
     """
-    from pi_cowork.skill_packages import get_built_in_skill_names
+    from pi_cowork.skill_packages import get_built_in_skill_names, get_global_skill_names
 
     built_in = set(get_built_in_skill_names())
+    global_skills = set(get_global_skill_names())
     excluded = set(get_assistant_excluded_skill_names())
-    return sorted(built_in - excluded)
+    return sorted((built_in | global_skills) - excluded)
 
 
 # ---------------------------------------------------------------------------

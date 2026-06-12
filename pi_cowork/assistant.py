@@ -285,7 +285,12 @@ def _save_user_message_and_get_history(scope, message):
 
 def _build_context_text(rows, cfg, data, board_id, board):
     """Assemble the context text sent to the ``pi`` CLI."""
-    from pi_cowork.skill_packages import get_built_in_skill_names, get_built_in_skills_folder, read_skill_package
+    from pi_cowork.skill_packages import (
+        get_built_in_skill_names,
+        get_global_skill_names,
+        read_skill_package,
+        resolve_global_or_built_in_skill_dir,
+    )
 
     history_parts = [f"{r['role'].upper()}: {r['content']}" for r in rows]
     context_text = "\n\n".join(history_parts)
@@ -299,11 +304,13 @@ def _build_context_text(rows, cfg, data, board_id, board):
     # Skills block
     excluded = set(cfg.get("excluded_skill_names") or [])
     built_in = get_built_in_skill_names()
+    global_skills = get_global_skill_names()
+    all_skill_names = sorted(set(built_in) | set(global_skills))
     skill_meta_lines = []
-    for name in built_in:
+    for name in all_skill_names:
         if name in excluded:
             continue
-        pkg = read_skill_package(os.path.join(get_built_in_skills_folder(), name))
+        pkg = read_skill_package(resolve_global_or_built_in_skill_dir(name))
         if pkg:
             skill_meta_lines.append(f"- {pkg['name']}: {pkg.get('description') or 'No description'}")
     if skill_meta_lines:
@@ -315,22 +322,29 @@ def _build_context_text(rows, cfg, data, board_id, board):
 
 
 def _prepare_assistant_skills(session_dir):
-    """Copy built-in skills to the assistant session directory.
+    """Copy built-in and global skills to the assistant session directory.
 
     Returns a list of --skill arguments (pairs of flag + dir) to append to the pi CLI.
     """
-    from pi_cowork.skill_packages import copy_skill_to_session, get_built_in_skill_names, get_built_in_skills_folder
+    from pi_cowork.skill_packages import (
+        copy_skill_to_session,
+        get_built_in_skill_names,
+        get_global_skill_names,
+        resolve_global_or_built_in_skill_dir,
+    )
 
     built_in = get_built_in_skill_names()
+    global_skills = get_global_skill_names()
     cfg = _get_assistant_config()
     excluded = set(cfg.get("excluded_skill_names") or [])
+    all_skill_names = sorted(set(built_in) | set(global_skills))
     skill_args = []
-    for name in built_in:
+    for name in all_skill_names:
         if name in excluded:
             continue
-        src = os.path.join(get_built_in_skills_folder(), name)
-        dst = os.path.join(session_dir, "skills", name)
-        if os.path.isdir(src):
+        src = resolve_global_or_built_in_skill_dir(name)
+        if src and os.path.isdir(src):
+            dst = os.path.join(session_dir, "skills", name)
             copy_skill_to_session(src, dst)
             skill_args += ["--skill", dst]
     return skill_args

@@ -27,7 +27,8 @@ skills_bp = Blueprint("skills", __name__)
 @skills_bp.route("/api/skills", methods=["GET"])
 def api_skills():
     workflow_id = request.args.get("workflow_id", type=int)
-    skills = list_skills(workflow_id)
+    include_system = request.args.get("include_system", "false").lower() in ("1", "true", "yes")
+    skills = list_skills(workflow_id, include_system=include_system)
     # Enrich with used_by agents
     # In the default-enable model, an agent uses a skill if it is available
     # and NOT in the agent's excluded_skill_names.
