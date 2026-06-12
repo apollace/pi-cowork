@@ -379,10 +379,11 @@ ENDPOINT_REGISTRY = [
         "category": "Skills",
         "method": "GET",
         "path_template": "/api/skills",
-        "label": "list skills (query: workflow_id optional; omit for global-only)",
+        "label": "list skills (query: workflow_id optional, include_system optional; omit workflow_id for global-only)",
         "doc_lines": [
             "- GET {base_url}/api/skills?workflow_id={workflow_id} → list skills for workflow (workflow + global + "
-            "system). Omit workflow_id to list only global skills.",
+            "system). Omit workflow_id to list only global skills. Add include_system=true to include system skills "
+            "when listing without workflow_id.",
         ],
     },
     {

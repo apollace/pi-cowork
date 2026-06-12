@@ -331,6 +331,29 @@ def test_list_skills_global_only_excludes_system(client, temp_skills_folder):
     assert "bi-skill" not in names
 
 
+def test_list_skills_include_system_global_only(client, temp_skills_folder):
+    import pi_cowork.skill_packages as _sp
+
+    global_dir = os.path.join(temp_skills_folder, "global", "global-skill")
+    os.makedirs(global_dir, exist_ok=True)
+    with open(os.path.join(global_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: global-skill\ndescription: Global\n---\n\nContent.")
+    built_in_dir = os.path.join(_sp.get_built_in_skills_folder(), "bi-skill")
+    os.makedirs(built_in_dir, exist_ok=True)
+    with open(os.path.join(built_in_dir, "SKILL.md"), "w") as f:
+        f.write("---\nname: bi-skill\ndescription: Built-in\n---\n\nContent.")
+    res = client.get("/api/skills?include_system=true")
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    names = [sk["name"] for sk in data]
+    assert "global-skill" in names
+    assert "bi-skill" in names
+    global_skill = next(sk for sk in data if sk["name"] == "global-skill")
+    assert global_skill["scope"] == "global"
+    bi_skill = next(sk for sk in data if sk["name"] == "bi-skill")
+    assert bi_skill["scope"] == "system"
+
+
 def test_list_skills_global_only_used_by_all_workflows(client, new_workflow, temp_skills_folder):
     global_dir = os.path.join(temp_skills_folder, "global", "shared-skill")
     os.makedirs(global_dir, exist_ok=True)

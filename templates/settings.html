@@ -52,7 +52,7 @@
       </div>
       <div class="form-card" style="margin-top: 1rem;">
         <fieldset class="api-endpoints-fieldset" id="assistant-excluded-skills-fieldset">
-          <legend>Excluded Skills (built-in)</legend>
+          <legend>Excluded Skills</legend>
           <div id="assistant-excluded-skills-checkboxes">Loading…</div>
         </fieldset>
       </div>
@@ -809,7 +809,7 @@
 
   async function loadBuiltInSkills() {
     if (assistantBuiltInSkillsCache) return assistantBuiltInSkillsCache;
-    const res = await fetch('/api/skills');
+    const res = await fetch('/api/skills?include_system=true');
     const data = await res.json();
     assistantBuiltInSkillsCache = data;
     return data;
@@ -822,7 +822,7 @@
       container.textContent = 'Loading…';
       return;
     }
-    const skills = assistantBuiltInSkillsCache.filter(sk => sk.scope === 'system');
+    const skills = assistantBuiltInSkillsCache.filter(sk => sk.scope === 'system' || sk.scope === 'global');
     if (skills.length === 0) {
       fieldset.style.display = 'none';
       container.innerHTML = '';
@@ -833,7 +833,8 @@
     let html = '';
     for (const sk of skills) {
       const checked = excludedSet.has(sk.name) ? 'checked' : '';
-      html += `<label class="ep-checkbox-label"><input type="checkbox" class="excluded-skill-checkbox" value="${escapeHtml(sk.name)}" ${checked}> ${escapeHtml(sk.name)}</label>`;
+      const scopeLabel = sk.scope === 'system' ? '(built-in)' : '(global)';
+      html += `<label class="ep-checkbox-label"><input type="checkbox" class="excluded-skill-checkbox" value="${escapeHtml(sk.name)}" ${checked}> ${escapeHtml(sk.name)} <span class="muted">${scopeLabel}</span></label>`;
     }
     container.innerHTML = html;
   }

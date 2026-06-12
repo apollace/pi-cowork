@@ -166,12 +166,44 @@ def get_built_in_skill_names():
     return sorted(names)
 
 
+def get_global_skill_names():
+    """Return a sorted list of global skill names from the filesystem.
+
+    Returns an empty list if the global directory does not exist or is empty.
+    """
+    folder = os.path.join(get_skills_folder(), "global")
+    if not os.path.isdir(folder):
+        return []
+    names = []
+    for entry in sorted(os.listdir(folder)):
+        entry_path = os.path.join(folder, entry)
+        if os.path.isdir(entry_path) and not entry.startswith("."):
+            pkg = read_skill_package(entry_path)
+            if pkg is not None:
+                names.append(pkg.get("name") or entry)
+    return sorted(names)
+
+
 def get_global_skill_dir(name):
     """Return the filesystem path for a global skill package."""
     return os.path.join(get_skills_folder(), "global", name)
 
 
-def list_skills(workflow_id=None):
+def resolve_global_or_built_in_skill_dir(name):
+    """Resolve a skill name to its filesystem directory, preferring global over built-in.
+
+    Returns the directory path or None if not found.
+    """
+    global_dir = get_global_skill_dir(name)
+    if os.path.isdir(global_dir):
+        return global_dir
+    built_in_dir = os.path.join(get_built_in_skills_folder(), name)
+    if os.path.isdir(built_in_dir):
+        return built_in_dir
+    return None
+
+
+def list_skills(workflow_id=None, include_system=False):
     """Scan filesystem for skill packages.
 
     Returns list of dicts: name, scope, description, subdirs.
@@ -179,7 +211,8 @@ def list_skills(workflow_id=None):
 
     When workflow_id is provided, returns workflow + global + system skills
     with workflow scope taking precedence.
-    When workflow_id is None, returns only global skills.
+    When workflow_id is None and include_system is False, returns only global skills.
+    When workflow_id is None and include_system is True, returns global + system skills.
     """
     result = []
     seen = set()
@@ -188,7 +221,7 @@ def list_skills(workflow_id=None):
     if workflow_id is not None:
         scopes.append(("workflow", os.path.join(folder, str(workflow_id))))
     scopes.append(("global", os.path.join(folder, "global")))
-    if workflow_id is not None:
+    if workflow_id is not None or include_system:
         scopes.append(("system", get_built_in_skills_folder()))
     for scope, path in scopes:
         if not os.path.isdir(path):

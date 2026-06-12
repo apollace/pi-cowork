@@ -1400,6 +1400,72 @@ def test_assistant_chat_excludes_skills_when_configured(client, temp_skills_fold
     assert not any("blocked-skill" in s for s in skill_args)
 
 
+def test_assistant_chat_includes_global_skills(client, temp_skills_folder):
+    from pi_cowork.skill_packages import get_built_in_skills_folder
+
+    # Create a built-in skill
+    bi_folder = get_built_in_skills_folder()
+    os.makedirs(os.path.join(bi_folder, "bi-skill"), exist_ok=True)
+    with open(os.path.join(bi_folder, "bi-skill", "SKILL.md"), "w") as f:
+        f.write("---\nname: bi-skill\ndescription: Built-in skill\n---\n\nContent.")
+
+    # Create a global skill
+    global_folder = os.path.join(temp_skills_folder, "global")
+    os.makedirs(os.path.join(global_folder, "global-skill"), exist_ok=True)
+    with open(os.path.join(global_folder, "global-skill", "SKILL.md"), "w") as f:
+        f.write("---\nname: global-skill\ndescription: Global skill\n---\n\nContent.")
+
+    ndjson = '{"type":"text_delta","chunk":"Hello"}\n{"type":"done"}\n'
+    with patch("pi_cowork.assistant.subprocess.Popen", side_effect=_make_mock_popen(ndjson=ndjson)) as mock_popen:
+        res = client.post("/api/assistant/chat", json={"message": "Hi"})
+
+    assert res.status_code == 200
+    cmd = mock_popen.call_args[0][0]
+    context_msg = cmd[-1]
+    assert "Skills available to you:" in context_msg
+    assert "bi-skill" in context_msg
+    assert "global-skill" in context_msg
+    skill_args = [cmd[i + 1] for i in range(len(cmd) - 1) if cmd[i] == "--skill"]
+    assert any("bi-skill" in s for s in skill_args)
+    assert any("global-skill" in s for s in skill_args)
+
+
+def test_assistant_chat_excludes_global_skills_when_configured(client, temp_skills_folder):
+    from pi_cowork.skill_packages import get_built_in_skills_folder
+
+    # Create a built-in skill
+    bi_folder = get_built_in_skills_folder()
+    os.makedirs(os.path.join(bi_folder, "allowed-bi"), exist_ok=True)
+    with open(os.path.join(bi_folder, "allowed-bi", "SKILL.md"), "w") as f:
+        f.write("---\nname: allowed-bi\ndescription: Allowed built-in\n---\n\nContent.")
+
+    # Create global skills: one excluded, one allowed
+    global_folder = os.path.join(temp_skills_folder, "global")
+    os.makedirs(os.path.join(global_folder, "blocked-global"), exist_ok=True)
+    with open(os.path.join(global_folder, "blocked-global", "SKILL.md"), "w") as f:
+        f.write("---\nname: blocked-global\ndescription: Blocked global\n---\n\nContent.")
+    os.makedirs(os.path.join(global_folder, "allowed-global"), exist_ok=True)
+    with open(os.path.join(global_folder, "allowed-global", "SKILL.md"), "w") as f:
+        f.write("---\nname: allowed-global\ndescription: Allowed global\n---\n\nContent.")
+
+    client.put("/api/assistant/config", json={"excluded_skill_names": ["blocked-global"]})
+
+    ndjson = '{"type":"text_delta","chunk":"Hello"}\n{"type":"done"}\n'
+    with patch("pi_cowork.assistant.subprocess.Popen", side_effect=_make_mock_popen(ndjson=ndjson)) as mock_popen:
+        res = client.post("/api/assistant/chat", json={"message": "Hi"})
+
+    assert res.status_code == 200
+    cmd = mock_popen.call_args[0][0]
+    context_msg = cmd[-1]
+    assert "allowed-bi" in context_msg
+    assert "allowed-global" in context_msg
+    assert "blocked-global" not in context_msg
+    skill_args = [cmd[i + 1] for i in range(len(cmd) - 1) if cmd[i] == "--skill"]
+    assert any("allowed-bi" in s for s in skill_args)
+    assert any("allowed-global" in s for s in skill_args)
+    assert not any("blocked-global" in s for s in skill_args)
+
+
 # ---------------------------------------------------------------------------
 # Reconnect bug fixes (Ticket #173)
 # ---------------------------------------------------------------------------
