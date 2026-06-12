@@ -146,6 +146,17 @@ ENDPOINT_REGISTRY = [
         ],
     },
     {
+        "key": "feedback_post",
+        "category": "Feedback",
+        "method": "POST",
+        "path_template": "/api/feedback",
+        "label": "create manual run feedback (fields: run_id, ticket_id, reason, expected_behavior)",
+        "doc_lines": [
+            "- POST {base_url}/api/feedback → create manual run feedback (fields: run_id, ticket_id, reason, "
+            "expected_behavior). Returns 201 with feedback_id.",
+        ],
+    },
+    {
         "key": "feedback_put",
         "category": "Feedback",
         "method": "PUT",
@@ -678,6 +689,7 @@ AGENT_RESTRICTED_KEYS = {
     "notifications_list",
     "db_backup_restore",
     "feedback_put",
+    "feedback_post",
 }
 
 

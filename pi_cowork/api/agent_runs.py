@@ -20,7 +20,9 @@ agent_runs_bp = Blueprint("agent_runs", __name__)
 def api_ticket_agent_runs(ticket_id):
     rows = query_db(
         """
-        SELECT ar.*, a.name AS agent_name, s.name AS status_name
+        SELECT ar.*, a.name AS agent_name, s.name AS status_name,
+               EXISTS(SELECT 1 FROM agent_feedback af
+                      WHERE af.run_id = ar.id AND af.feedback_type = 'run_feedback') AS has_feedback
         FROM agent_runs ar
         JOIN agents a ON ar.agent_id = a.id
         LEFT JOIN statuses s ON ar.status_id = s.id
