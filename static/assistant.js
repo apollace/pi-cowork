@@ -180,11 +180,15 @@
     }
   }
 
-  function appendMessage(role, content, temporary) {
+  function appendMessage(role, content, temporary, renderMd) {
     const msg = document.createElement("div");
     msg.className = "assistant-message assistant-message-" + role;
     if (temporary) msg.classList.add("assistant-temporary");
-    msg.textContent = content;
+    if (renderMd && window.renderMarkdown) {
+      msg.innerHTML = '<div class="markdown-content">' + window.renderMarkdown(content) + '</div>';
+    } else {
+      msg.textContent = content;
+    }
     messagesEl.appendChild(msg);
     messagesEl.scrollTop = messagesEl.scrollHeight;
     return msg;
@@ -204,7 +208,7 @@
       }
       messagesEl.innerHTML = "";
       rows.forEach(function (r) {
-        appendMessage(r.role, r.content);
+        appendMessage(r.role, r.content, false, r.role === "assistant");
       });
     } catch {
       messagesEl.innerHTML = '<div class="assistant-error">Failed to load history</div>';
