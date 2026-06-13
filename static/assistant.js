@@ -42,6 +42,7 @@
       btn.onclick = function () {
         if (inputEl) {
           inputEl.value = r.prompt_text;
+          autoResize();
           inputEl.focus();
         }
       };
@@ -443,10 +444,18 @@
     }
   }
 
+  function autoResize() {
+    if (!inputEl) return;
+    inputEl.style.height = "auto";
+    const maxHeightPx = parseFloat(getComputedStyle(inputEl).maxHeight) || Infinity;
+    inputEl.style.height = Math.min(inputEl.scrollHeight, maxHeightPx) + "px";
+  }
+
   async function sendMessage() {
     const text = inputEl.value.trim();
     if (!text) return;
     inputEl.value = "";
+    inputEl.style.height = "auto";
     appendMessage("user", text);
 
     const placeholder = createStreamPlaceholder();
@@ -563,6 +572,7 @@
     closePanel();
   });
   sendBtn.addEventListener("click", sendMessage);
+  inputEl.addEventListener("input", autoResize);
   inputEl.addEventListener("keydown", function (e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();

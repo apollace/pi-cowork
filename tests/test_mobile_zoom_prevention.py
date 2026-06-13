@@ -52,6 +52,7 @@ class TestMobileZoomPreventionCSS:
         # Known small-font hotspots from ticket analysis
         assert ".card-status-select" in block
         assert ".assistant-footer input" in block
+        assert ".assistant-footer textarea" in block
         assert ".assistant-setting input" in block
         assert ".system-prompt-textarea" in block
         assert ".inline-select-sm" in block

@@ -2480,7 +2480,8 @@ textarea.edit-input { resize: vertical; min-height: 2.5rem; }
   flex-shrink: 0;
 }
 
-.assistant-footer input {
+.assistant-footer input,
+.assistant-footer textarea {
   flex: 1;
   padding: .5rem .75rem;
   border: 1px solid var(--border);
@@ -2488,6 +2489,13 @@ textarea.edit-input { resize: vertical; min-height: 2.5rem; }
   font-size: .95rem;
   background: var(--surface);
   color: var(--text);
+}
+
+.assistant-footer textarea {
+  resize: none;
+  overflow-y: auto;
+  line-height: 1.4;
+  max-height: 10rem;
 }
 
 .assistant-footer button {
@@ -3672,6 +3680,7 @@ textarea.edit-input { resize: vertical; min-height: 2.5rem; }
   select,
   .card-status-select,
   .assistant-footer input,
+  .assistant-footer textarea,
   .assistant-setting input,
   .assistant-setting select,
   .assistant-setting textarea,
