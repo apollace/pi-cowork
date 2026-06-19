@@ -699,8 +699,7 @@ class TestEndpointRegistryCompleteness:
         registry = self._registry_routes()
         missing = sorted(r for r in api_routes if r not in registry and r not in self.EXCLUDED)
         assert not missing, (
-            "These /api routes have no ENDPOINT_REGISTRY entry (add them or add to "
-            f"EXCLUDED): {missing}"
+            f"These /api routes have no ENDPOINT_REGISTRY entry (add them or add to EXCLUDED): {missing}"
         )
 
     def test_no_orphan_registry_entries(self):
@@ -708,17 +707,13 @@ class TestEndpointRegistryCompleteness:
         api_routes = self._api_routes()
         registry = self._registry_routes()
         orphans = sorted(r for r in registry if r not in api_routes)
-        assert not orphans, (
-            f"These registry entries have no matching Flask route (stale entries): {orphans}"
-        )
+        assert not orphans, f"These registry entries have no matching Flask route (stale entries): {orphans}"
 
     def test_excluded_routes_are_real(self):
         """Every EXCLUDED entry must correspond to a real route (no typo drift)."""
         api_routes = self._api_routes()
         bogus = sorted(r for r in self.EXCLUDED if r not in api_routes)
-        assert not bogus, (
-            f"These EXCLUDED entries do not match any real route (fix the test): {bogus}"
-        )
+        assert not bogus, f"These EXCLUDED entries do not match any real route (fix the test): {bogus}"
 
     def test_restricted_keys_all_exist_in_registry(self):
         """Every AGENT_RESTRICTED_KEY must be a real registry key."""

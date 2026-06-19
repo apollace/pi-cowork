@@ -699,8 +699,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/tickets/{ticket_id}/answers",
         "label": "batch-answer questions (field: answers, array of {question_id, answer})",
         "doc_lines": [
-            ("- POST {base_url}/api/tickets/{ticket_id}/answers → batch-answer questions "
-             "(field: answers, array of {question_id, answer}). Returns 200 with answered count."),
+            (
+                "- POST {base_url}/api/tickets/{ticket_id}/answers → batch-answer questions "
+                "(field: answers, array of {question_id, answer}). Returns 200 with answered count."
+            ),
         ],
     },
     {
@@ -710,8 +712,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/questions/{question_id}/answer",
         "label": "answer a single question (field: answer)",
         "doc_lines": [
-            ("- PUT {base_url}/api/questions/{question_id}/answer → answer a single question "
-             "(field: answer). Posts the answer as a formatted comment on the ticket."),
+            (
+                "- PUT {base_url}/api/questions/{question_id}/answer → answer a single question "
+                "(field: answer). Posts the answer as a formatted comment on the ticket."
+            ),
         ],
     },
     {
@@ -721,8 +725,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/tickets/{ticket_id}/labels",
         "label": "remove a label from ticket (query: label_id)",
         "doc_lines": [
-            ("- DELETE {base_url}/api/tickets/{ticket_id}/labels?label_id={label_id} → remove a "
-             "single label from the ticket (query: label_id required)."),
+            (
+                "- DELETE {base_url}/api/tickets/{ticket_id}/labels?label_id={label_id} → remove a "
+                "single label from the ticket (query: label_id required)."
+            ),
         ],
     },
     {
@@ -732,8 +738,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/boards",
         "label": "create board (fields: name, workflow_id, working_directory, long_term_vision)",
         "doc_lines": [
-            ("- POST {base_url}/api/boards → create board (fields: name, workflow_id, "
-             "working_directory, long_term_vision). Returns 201 with board id."),
+            (
+                "- POST {base_url}/api/boards → create board (fields: name, workflow_id, "
+                "working_directory, long_term_vision). Returns 201 with board id."
+            ),
         ],
     },
     {
@@ -743,8 +751,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/boards/{board_id}",
         "label": "update board (fields: name, workflow_id, working_directory, long_term_vision)",
         "doc_lines": [
-            ("- PUT {base_url}/api/boards/{board_id} → update board (fields: name, workflow_id, "
-             "working_directory, long_term_vision)."),
+            (
+                "- PUT {base_url}/api/boards/{board_id} → update board (fields: name, workflow_id, "
+                "working_directory, long_term_vision)."
+            ),
         ],
     },
     {
@@ -754,9 +764,11 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/boards/{board_id}",
         "label": "delete board (destroys all tickets, comments, runs, queue, recurring)",
         "doc_lines": [
-            ("- DELETE {base_url}/api/boards/{board_id} → delete board. Destructive: permanently "
-             "deletes all tickets, comments, agent runs, queue entries, and recurring tasks for "
-             "the board."),
+            (
+                "- DELETE {base_url}/api/boards/{board_id} → delete board. Destructive: permanently "
+                "deletes all tickets, comments, agent runs, queue entries, and recurring tasks for "
+                "the board."
+            ),
         ],
     },
     {
@@ -766,8 +778,7 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/boards/stats",
         "label": "get ticket counts per board",
         "doc_lines": [
-            ("- GET {base_url}/api/boards/stats → get ticket counts per board "
-             "(returns {board_id: ticket_count})."),
+            ("- GET {base_url}/api/boards/stats → get ticket counts per board (returns {board_id: ticket_count})."),
         ],
     },
     {
@@ -777,8 +788,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/workflows",
         "label": "create workflow (fields: name, description, git_enabled)",
         "doc_lines": [
-            ("- POST {base_url}/api/workflows → create workflow (fields: name, description, "
-             "git_enabled boolean default false). Returns 201 with workflow id."),
+            (
+                "- POST {base_url}/api/workflows → create workflow (fields: name, description, "
+                "git_enabled boolean default false). Returns 201 with workflow id."
+            ),
         ],
     },
     {
@@ -788,8 +801,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/workflows/{workflow_id}",
         "label": "update workflow (fields: name, description, git_enabled)",
         "doc_lines": [
-            ("- PUT {base_url}/api/workflows/{workflow_id} → update workflow (fields: name, "
-             "description, git_enabled)."),
+            (
+                "- PUT {base_url}/api/workflows/{workflow_id} → update workflow (fields: name, "
+                "description, git_enabled)."
+            ),
         ],
     },
     {
@@ -799,9 +814,11 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/workflows/{workflow_id}",
         "label": "delete workflow (blocked if any boards use it)",
         "doc_lines": [
-            ("- DELETE {base_url}/api/workflows/{workflow_id} → delete workflow. Blocked (409) if "
-             "any boards reference it; otherwise cascades agents, statuses, transitions, gates, "
-             "and labels."),
+            (
+                "- DELETE {base_url}/api/workflows/{workflow_id} → delete workflow. Blocked (409) if "
+                "any boards reference it; otherwise cascades agents, statuses, transitions, gates, "
+                "and labels."
+            ),
         ],
     },
     {
@@ -811,8 +828,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/workflows/{workflow_id}/export",
         "label": "export workflow as JSON (agents, statuses, transitions, gates, labels)",
         "doc_lines": [
-            ("- GET {base_url}/api/workflows/{workflow_id}/export → export the workflow as a JSON "
-             "document (agents, statuses, transitions, quality_gates, labels)."),
+            (
+                "- GET {base_url}/api/workflows/{workflow_id}/export → export the workflow as a JSON "
+                "document (agents, statuses, transitions, quality_gates, labels)."
+            ),
         ],
     },
     {
@@ -822,9 +841,11 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/workflows/import",
         "label": "import workflow from JSON (creates a new workflow; appends timestamp on name clash)",
         "doc_lines": [
-            ("- POST {base_url}/api/workflows/import → import a workflow from JSON body (version "
-             "'1.0', agents, statuses, transitions, optional quality_gates/labels). Creates a NEW "
-             "workflow; appends a timestamp if the name collides."),
+            (
+                "- POST {base_url}/api/workflows/import → import a workflow from JSON body (version "
+                "'1.0', agents, statuses, transitions, optional quality_gates/labels). Creates a NEW "
+                "workflow; appends a timestamp if the name collides."
+            ),
         ],
     },
     {
@@ -837,9 +858,11 @@ ENDPOINT_REGISTRY = [
             "api_endpoints, skill_names (deprecated), excluded_skill_names)"
         ),
         "doc_lines": [
-            ("- POST {base_url}/api/agents → create agent (fields: name, description, "
-             "workflow_id, model, thinking, api_endpoints (array of keys or null for defaults), "
-             "skill_names (deprecated), excluded_skill_names). Returns 201 with agent id."),
+            (
+                "- POST {base_url}/api/agents → create agent (fields: name, description, "
+                "workflow_id, model, thinking, api_endpoints (array of keys or null for defaults), "
+                "skill_names (deprecated), excluded_skill_names). Returns 201 with agent id."
+            ),
         ],
     },
     {
@@ -849,8 +872,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/agents/{agent_id}",
         "label": "delete agent (blocked if assigned to a status)",
         "doc_lines": [
-            ("- DELETE {base_url}/api/agents/{agent_id} → delete agent. Blocked (409) if the "
-             "agent is assigned to any status."),
+            (
+                "- DELETE {base_url}/api/agents/{agent_id} → delete agent. Blocked (409) if the "
+                "agent is assigned to any status."
+            ),
         ],
     },
     {
@@ -863,9 +888,11 @@ ENDPOINT_REGISTRY = [
             "agent_id, goal, model, thinking)"
         ),
         "doc_lines": [
-            ("- POST {base_url}/api/statuses → create status (fields: name, sort_order, "
-             "workflow_id, is_default, is_terminal, agent_id, goal, model, thinking). Returns "
-             "201 with status id."),
+            (
+                "- POST {base_url}/api/statuses → create status (fields: name, sort_order, "
+                "workflow_id, is_default, is_terminal, agent_id, goal, model, thinking). Returns "
+                "201 with status id."
+            ),
         ],
     },
     {
@@ -875,8 +902,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/statuses/{status_id}",
         "label": "delete status (blocked if used by tickets or transitions; cascades gates and reviews)",
         "doc_lines": [
-            ("- DELETE {base_url}/api/statuses/{status_id} → delete status. Blocked (409) if "
-             "used by tickets or transitions; otherwise cascades quality gates and gate reviews."),
+            (
+                "- DELETE {base_url}/api/statuses/{status_id} → delete status. Blocked (409) if "
+                "used by tickets or transitions; otherwise cascades quality gates and gate reviews."
+            ),
         ],
     },
     {
@@ -886,8 +915,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/transitions",
         "label": "create transition (fields: from_status_id, to_status_id, instructions, workflow_id)",
         "doc_lines": [
-            ("- POST {base_url}/api/transitions → create transition (fields: from_status_id, "
-             "to_status_id, instructions, workflow_id). Returns 201 with transition id."),
+            (
+                "- POST {base_url}/api/transitions → create transition (fields: from_status_id, "
+                "to_status_id, instructions, workflow_id). Returns 201 with transition id."
+            ),
         ],
     },
     {
@@ -910,10 +941,12 @@ ENDPOINT_REGISTRY = [
             "sort_order, enabled, notify_on_failure, include_in_feedback, workflow_id)"
         ),
         "doc_lines": [
-            ("- POST {base_url}/api/quality_gates → create gate (fields: from_status_id, "
-             "to_status_id, gate_type 'manual'/'cli', name, config (JSON, e.g. "
-             "{\"command\":\"pytest\"} for cli), sort_order, enabled, notify_on_failure, "
-             "include_in_feedback, workflow_id). Returns 201 with gate id."),
+            (
+                "- POST {base_url}/api/quality_gates → create gate (fields: from_status_id, "
+                "to_status_id, gate_type 'manual'/'cli', name, config (JSON, e.g. "
+                '{"command":"pytest"} for cli), sort_order, enabled, notify_on_failure, '
+                "include_in_feedback, workflow_id). Returns 201 with gate id."
+            ),
         ],
     },
     {
@@ -936,9 +969,11 @@ ENDPOINT_REGISTRY = [
             "notify_on_failure, include_in_feedback, from_status_id, to_status_id)"
         ),
         "doc_lines": [
-            ("- PUT {base_url}/api/quality_gates/{gate_id} → update gate (fields: name, "
-             "gate_type, config, sort_order, enabled, notify_on_failure, include_in_feedback, "
-             "from_status_id, to_status_id)."),
+            (
+                "- PUT {base_url}/api/quality_gates/{gate_id} → update gate (fields: name, "
+                "gate_type, config, sort_order, enabled, notify_on_failure, include_in_feedback, "
+                "from_status_id, to_status_id)."
+            ),
         ],
     },
     {
@@ -948,8 +983,7 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/quality_gates/{gate_id}",
         "label": "delete gate (cascades gate reviews)",
         "doc_lines": [
-            ("- DELETE {base_url}/api/quality_gates/{gate_id} → delete gate (cascades its gate "
-             "reviews)."),
+            ("- DELETE {base_url}/api/quality_gates/{gate_id} → delete gate (cascades its gate reviews)."),
         ],
     },
     {
@@ -962,10 +996,12 @@ ENDPOINT_REGISTRY = [
             "requires X-Human-Action header; rejection requires comment) — human-only"
         ),
         "doc_lines": [
-            ("- PUT {base_url}/api/gate_reviews/{review_id} → approve or reject a manual gate "
-             "review (fields: status 'approved'/'rejected', comment). Requires X-Human-Action "
-             "header; rejection requires a non-empty comment. HUMAN-ONLY — agents must never "
-             "call this."),
+            (
+                "- PUT {base_url}/api/gate_reviews/{review_id} → approve or reject a manual gate "
+                "review (fields: status 'approved'/'rejected', comment). Requires X-Human-Action "
+                "header; rejection requires a non-empty comment. HUMAN-ONLY — agents must never "
+                "call this."
+            ),
         ],
     },
     {
@@ -975,8 +1011,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/labels",
         "label": "create label (fields: name, color, workflow_id)",
         "doc_lines": [
-            ("- POST {base_url}/api/labels → create label (fields: name, color hex default "
-             "'#6b7280', workflow_id). Returns 201 with label id."),
+            (
+                "- POST {base_url}/api/labels → create label (fields: name, color hex default "
+                "'#6b7280', workflow_id). Returns 201 with label id."
+            ),
         ],
     },
     {
@@ -1016,9 +1054,11 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/skills/import",
         "label": "import skill from ZIP (multipart field: file; optional form field: workflow_id)",
         "doc_lines": [
-            ("- POST {base_url}/api/skills/import → import a skill from a ZIP archive "
-             "(multipart/form-data field: file; optional form field: workflow_id for workflow "
-             "scope, omit for global scope)."),
+            (
+                "- POST {base_url}/api/skills/import → import a skill from a ZIP archive "
+                "(multipart/form-data field: file; optional form field: workflow_id for workflow "
+                "scope, omit for global scope)."
+            ),
         ],
     },
     {
@@ -1028,9 +1068,11 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/skills/import-github",
         "label": "import skill from a public GitHub repo (JSON: url, optional workflow_id)",
         "doc_lines": [
-            ("- POST {base_url}/api/skills/import-github → import a skill from a public GitHub "
-             "repository (JSON body: url, optional workflow_id for workflow scope, omit for "
-             "global scope). URL may point to a repo root or a tree/branch/subpath."),
+            (
+                "- POST {base_url}/api/skills/import-github → import a skill from a public GitHub "
+                "repository (JSON body: url, optional workflow_id for workflow scope, omit for "
+                "global scope). URL may point to a repo root or a tree/branch/subpath."
+            ),
         ],
     },
     {
@@ -1039,13 +1081,14 @@ ENDPOINT_REGISTRY = [
         "method": "POST",
         "path_template": "/api/recurring",
         "label": (
-            "create recurring task (fields: board_id, title, body, status_id, cron_expression, "
-            "start_at, end_at)"
+            "create recurring task (fields: board_id, title, body, status_id, cron_expression, start_at, end_at)"
         ),
         "doc_lines": [
-            ("- POST {base_url}/api/recurring → create recurring task (fields: board_id, title, "
-             "body, status_id, cron_expression 5-field cron, start_at, end_at). Returns 201 "
-             "with the task."),
+            (
+                "- POST {base_url}/api/recurring → create recurring task (fields: board_id, title, "
+                "body, status_id, cron_expression 5-field cron, start_at, end_at). Returns 201 "
+                "with the task."
+            ),
         ],
     },
     {
@@ -1053,13 +1096,12 @@ ENDPOINT_REGISTRY = [
         "category": "Recurring",
         "method": "PUT",
         "path_template": "/api/recurring/{task_id}",
-        "label": (
-            "update recurring task (fields: title, body, status_id, cron_expression, "
-            "start_at, end_at)"
-        ),
+        "label": ("update recurring task (fields: title, body, status_id, cron_expression, start_at, end_at)"),
         "doc_lines": [
-            ("- PUT {base_url}/api/recurring/{task_id} → update recurring task (fields: title, "
-             "body, status_id, cron_expression, start_at, end_at)."),
+            (
+                "- PUT {base_url}/api/recurring/{task_id} → update recurring task (fields: title, "
+                "body, status_id, cron_expression, start_at, end_at)."
+            ),
         ],
     },
     {
@@ -1069,8 +1111,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/recurring/{task_id}",
         "label": "delete recurring task (soft-disable if instances exist)",
         "doc_lines": [
-            ("- DELETE {base_url}/api/recurring/{task_id} → delete recurring task. Soft-disables "
-             "if instances exist; hard deletes otherwise."),
+            (
+                "- DELETE {base_url}/api/recurring/{task_id} → delete recurring task. Soft-disables "
+                "if instances exist; hard deletes otherwise."
+            ),
         ],
     },
     {
@@ -1080,8 +1124,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/recurring/{task_id}/toggle",
         "label": "toggle recurring task enabled/disabled",
         "doc_lines": [
-            ("- POST {base_url}/api/recurring/{task_id}/toggle → toggle a recurring task "
-             "enabled/disabled. Returns the updated task."),
+            (
+                "- POST {base_url}/api/recurring/{task_id}/toggle → toggle a recurring task "
+                "enabled/disabled. Returns the updated task."
+            ),
         ],
     },
     {
@@ -1091,9 +1137,11 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/recurring/{task_id}/trigger",
         "label": "manually trigger a recurring task now (creates a ticket immediately)",
         "doc_lines": [
-            ("- POST {base_url}/api/recurring/{task_id}/trigger → manually trigger a recurring "
-             "task now; creates a ticket immediately regardless of schedule. Returns "
-             "{success, ticket_id}."),
+            (
+                "- POST {base_url}/api/recurring/{task_id}/trigger → manually trigger a recurring "
+                "task now; creates a ticket immediately regardless of schedule. Returns "
+                "{success, ticket_id}."
+            ),
         ],
     },
     {
@@ -1103,9 +1151,11 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/recurring/preview",
         "label": "preview next 5 trigger times + human-readable (query: cron)",
         "doc_lines": [
-            ("- GET {base_url}/api/recurring/preview?cron={expr} → preview the next 5 trigger "
-             "times and a human-readable description for a cron expression (query: cron "
-             "required)."),
+            (
+                "- GET {base_url}/api/recurring/preview?cron={expr} → preview the next 5 trigger "
+                "times and a human-readable description for a cron expression (query: cron "
+                "required)."
+            ),
         ],
     },
     {
@@ -1115,8 +1165,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/knowledge/categories",
         "label": "list distinct knowledge categories (query: board_id optional)",
         "doc_lines": [
-            ("- GET {base_url}/api/knowledge/categories?board_id={board_id} → list distinct "
-             "knowledge categories (query: board_id optional to scope to a board)."),
+            (
+                "- GET {base_url}/api/knowledge/categories?board_id={board_id} → list distinct "
+                "knowledge categories (query: board_id optional to scope to a board)."
+            ),
         ],
     },
     {
@@ -1136,8 +1188,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/knowledge/{entry_id}/versions/{version_id}",
         "label": "get a specific version of a knowledge entry",
         "doc_lines": [
-            ("- GET {base_url}/api/knowledge/{entry_id}/versions/{version_id} → get a specific "
-             "version of a knowledge entry."),
+            (
+                "- GET {base_url}/api/knowledge/{entry_id}/versions/{version_id} → get a specific "
+                "version of a knowledge entry."
+            ),
         ],
     },
     {
@@ -1147,8 +1201,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/settings/{key}",
         "label": "update a setting (field: value) — human-only",
         "doc_lines": [
-            ("- PUT {base_url}/api/settings/{key} → update a setting (field: value). Changes "
-             "runtime config such as limits; HUMAN-ONLY — agents must never call this."),
+            (
+                "- PUT {base_url}/api/settings/{key} → update a setting (field: value). Changes "
+                "runtime config such as limits; HUMAN-ONLY — agents must never call this."
+            ),
         ],
     },
     {
@@ -1158,8 +1214,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/settings/purge-terminal-logs",
         "label": "purge terminal log entries — human-only",
         "doc_lines": [
-            ("- POST {base_url}/api/settings/purge-terminal-logs → purge terminal log entries. "
-             "Destructive; HUMAN-ONLY — agents must never call this."),
+            (
+                "- POST {base_url}/api/settings/purge-terminal-logs → purge terminal log entries. "
+                "Destructive; HUMAN-ONLY — agents must never call this."
+            ),
         ],
     },
     {
@@ -1168,13 +1226,14 @@ ENDPOINT_REGISTRY = [
         "method": "GET",
         "path_template": "/api/system_logs",
         "label": (
-            "list system logs (query: page, per_page, level, action_type, ticket_id, "
-            "date_from, date_to, search)"
+            "list system logs (query: page, per_page, level, action_type, ticket_id, date_from, date_to, search)"
         ),
         "doc_lines": [
-            ("- GET {base_url}/api/system_logs → list system logs (query: page, per_page, "
-             "level, action_type, ticket_id, date_from, date_to, search). Returns a paginated "
-             "envelope."),
+            (
+                "- GET {base_url}/api/system_logs → list system logs (query: page, per_page, "
+                "level, action_type, ticket_id, date_from, date_to, search). Returns a paginated "
+                "envelope."
+            ),
         ],
     },
     {
@@ -1192,12 +1251,12 @@ ENDPOINT_REGISTRY = [
         "category": "System Logs",
         "method": "GET",
         "path_template": "/api/system_logs/export",
-        "label": (
-            "export system logs (query: level, action_type, ticket_id, date_from, date_to, search)"
-        ),
+        "label": ("export system logs (query: level, action_type, ticket_id, date_from, date_to, search)"),
         "doc_lines": [
-            ("- GET {base_url}/api/system_logs/export → export system logs as a downloadable "
-             "file (query: level, action_type, ticket_id, date_from, date_to, search)."),
+            (
+                "- GET {base_url}/api/system_logs/export → export system logs as a downloadable "
+                "file (query: level, action_type, ticket_id, date_from, date_to, search)."
+            ),
         ],
     },
     {
@@ -1207,9 +1266,11 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/agent_runs/{run_id}/kill",
         "label": "kill a running agent run (returns feedback_id) — human-only",
         "doc_lines": [
-            ("- POST {base_url}/api/agent_runs/{run_id}/kill → kill a running agent run "
-             "(SIGTERM, escalates to SIGKILL). Returns {success, exit_code, escalated, "
-             "feedback_id}. HUMAN-ONLY — agents must never call this."),
+            (
+                "- POST {base_url}/api/agent_runs/{run_id}/kill → kill a running agent run "
+                "(SIGTERM, escalates to SIGKILL). Returns {success, exit_code, escalated, "
+                "feedback_id}. HUMAN-ONLY — agents must never call this."
+            ),
         ],
     },
     {
@@ -1229,9 +1290,11 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/notifications/dismiss",
         "label": "dismiss a notification (fields: ticket_id, type 'gate_review'/'question') — human-only",
         "doc_lines": [
-            ("- PUT {base_url}/api/notifications/dismiss → dismiss a notification (fields: "
-             "ticket_id, type 'gate_review' or 'question'). HUMAN-ONLY — agents must never "
-             "call this."),
+            (
+                "- PUT {base_url}/api/notifications/dismiss → dismiss a notification (fields: "
+                "ticket_id, type 'gate_review' or 'question'). HUMAN-ONLY — agents must never "
+                "call this."
+            ),
         ],
     },
     {
@@ -1241,8 +1304,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/notifications/dismiss-all",
         "label": "dismiss all notifications — human-only",
         "doc_lines": [
-            ("- PUT {base_url}/api/notifications/dismiss-all → dismiss all notifications. "
-             "HUMAN-ONLY — agents must never call this."),
+            (
+                "- PUT {base_url}/api/notifications/dismiss-all → dismiss all notifications. "
+                "HUMAN-ONLY — agents must never call this."
+            ),
         ],
     },
     {
@@ -1252,8 +1317,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/pi-models",
         "label": "list available models and thinking levels from the pi CLI",
         "doc_lines": [
-            ("- GET {base_url}/api/pi-models → list available models and per-model thinking "
-             "levels discovered from the pi CLI."),
+            (
+                "- GET {base_url}/api/pi-models → list available models and per-model thinking "
+                "levels discovered from the pi CLI."
+            ),
         ],
     },
     {
