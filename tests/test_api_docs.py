@@ -1,8 +1,10 @@
 """Tests for the API docs registry, build_api_docs(), and agent API endpoints field."""
 
 import json
+import re
 from unittest.mock import patch
 
+from app import app as flask_app
 from pi_cowork.api_docs import (
     _REGISTRY_MAP,
     AGENT_RESTRICTED_KEYS,
@@ -629,3 +631,114 @@ class TestBuildAssistantApiDocs:
         assert "gate_pending" not in result
         assert "IMPORTANT: You must NOT call any gate review" not in result
         assert "If anything is ambiguous or missing" not in result
+
+
+# ---------------------------------------------------------------------------
+# Registry completeness — every /api REST route must have a registry entry
+# ---------------------------------------------------------------------------
+
+
+class TestEndpointRegistryCompleteness:
+    """Verify that every real Flask /api REST route has a matching registry entry.
+
+    This is the automated verification requested by Ticket #191: it catches
+    future regressions where a new route is added without a corresponding
+    ``ENDPOINT_REGISTRY`` entry (which would make it invisible in the agent /
+    assistant endpoint-selection UI).
+
+    Routes that are NOT REST data operations are explicitly excluded:
+      * ``GET /api/endpoint-registry``  — meta endpoint (lists the registry)
+      * ``GET /api/agent_runs/{run_id}/stream``  — SSE log streaming
+      * ``GET /api/events/stream``  — SSE event stream
+      * ``/api/assistant/*``  — assistant self-referential control endpoints
+    """
+
+    # Routes that are intentionally excluded from the registry.
+    EXCLUDED = {
+        ("GET", "/api/endpoint-registry"),
+        ("GET", "/api/agent_runs/{run_id}/stream"),
+        ("GET", "/api/events/stream"),
+        ("GET", "/api/assistant/active-run"),
+        ("POST", "/api/assistant/chat"),
+        ("POST", "/api/assistant/compact"),
+        ("GET", "/api/assistant/config"),
+        ("PUT", "/api/assistant/config"),
+        ("GET", "/api/assistant/history"),
+        ("POST", "/api/assistant/reset"),
+        ("GET", "/api/assistant/saved-prompts"),
+        ("POST", "/api/assistant/saved-prompts"),
+        ("PUT", "/api/assistant/saved-prompts/{id}"),
+        ("DELETE", "/api/assistant/saved-prompts/{id}"),
+        ("POST", "/api/assistant/stop"),
+        ("GET", "/api/assistant/stream"),
+    }
+
+    @staticmethod
+    def _normalize(rule):
+        """Convert a Flask rule to the registry path_template form.
+
+        ``<int:ticket_id>`` → ``{ticket_id}``, ``<path:x>`` → ``{x}``, etc.
+        """
+        return re.sub(r"<(?:[^:>]+:)?([^>]+)>", r"{\1}", rule)
+
+    def _api_routes(self):
+        routes = set()
+        for rule in flask_app.url_map.iter_rules():
+            methods = rule.methods - {"HEAD", "OPTIONS"}
+            norm = self._normalize(rule.rule)
+            for method in methods:
+                routes.add((method, norm))
+        return {r for r in routes if r[1].startswith("/api")}
+
+    def _registry_routes(self):
+        return {(e["method"], e["path_template"]) for e in ENDPOINT_REGISTRY}
+
+    def test_no_missing_routes(self):
+        """Every /api REST route (minus excluded) must have a registry entry."""
+        api_routes = self._api_routes()
+        registry = self._registry_routes()
+        missing = sorted(r for r in api_routes if r not in registry and r not in self.EXCLUDED)
+        assert not missing, (
+            "These /api routes have no ENDPOINT_REGISTRY entry (add them or add to "
+            f"EXCLUDED): {missing}"
+        )
+
+    def test_no_orphan_registry_entries(self):
+        """Every registry entry must map to a real Flask route."""
+        api_routes = self._api_routes()
+        registry = self._registry_routes()
+        orphans = sorted(r for r in registry if r not in api_routes)
+        assert not orphans, (
+            f"These registry entries have no matching Flask route (stale entries): {orphans}"
+        )
+
+    def test_excluded_routes_are_real(self):
+        """Every EXCLUDED entry must correspond to a real route (no typo drift)."""
+        api_routes = self._api_routes()
+        bogus = sorted(r for r in self.EXCLUDED if r not in api_routes)
+        assert not bogus, (
+            f"These EXCLUDED entries do not match any real route (fix the test): {bogus}"
+        )
+
+    def test_restricted_keys_all_exist_in_registry(self):
+        """Every AGENT_RESTRICTED_KEY must be a real registry key."""
+        for key in AGENT_RESTRICTED_KEYS:
+            assert key in _REGISTRY_MAP, f"Restricted key '{key}' not in ENDPOINT_REGISTRY"
+
+    def test_restricted_keys_cover_human_only_routes(self):
+        """Human-oversight routes must be in AGENT_RESTRICTED_KEYS."""
+        must_be_restricted = {
+            "gate_review_put",
+            "gate_reviews_list",
+            "agent_run_kill",
+            "notifications_dismiss",
+            "notifications_dismiss_all",
+            "notifications_list",
+            "settings_put",
+            "settings_purge_terminal_logs",
+            "db_backup_restore",
+            "feedback_put",
+            "feedback_post",
+        }
+        missing = must_be_restricted - AGENT_RESTRICTED_KEYS
+        assert not missing, f"These human-only keys must be restricted: {missing}"
