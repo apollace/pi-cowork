@@ -693,6 +693,637 @@ ENDPOINT_REGISTRY = [
         ],
     },
     {
+        "key": "ticket_answers_post",
+        "category": "Comments",
+        "method": "POST",
+        "path_template": "/api/tickets/{ticket_id}/answers",
+        "label": "batch-answer questions (field: answers, array of {question_id, answer})",
+        "doc_lines": [
+            (
+                "- POST {base_url}/api/tickets/{ticket_id}/answers → batch-answer questions "
+                "(field: answers, array of {question_id, answer}). Returns 200 with answered count."
+            ),
+        ],
+    },
+    {
+        "key": "question_answer",
+        "category": "Comments",
+        "method": "PUT",
+        "path_template": "/api/questions/{question_id}/answer",
+        "label": "answer a single question (field: answer)",
+        "doc_lines": [
+            (
+                "- PUT {base_url}/api/questions/{question_id}/answer → answer a single question "
+                "(field: answer). Posts the answer as a formatted comment on the ticket."
+            ),
+        ],
+    },
+    {
+        "key": "ticket_labels_delete",
+        "category": "Labels",
+        "method": "DELETE",
+        "path_template": "/api/tickets/{ticket_id}/labels",
+        "label": "remove a label from ticket (query: label_id)",
+        "doc_lines": [
+            (
+                "- DELETE {base_url}/api/tickets/{ticket_id}/labels?label_id={label_id} → remove a "
+                "single label from the ticket (query: label_id required)."
+            ),
+        ],
+    },
+    {
+        "key": "boards_create",
+        "category": "Boards",
+        "method": "POST",
+        "path_template": "/api/boards",
+        "label": "create board (fields: name, workflow_id, working_directory, long_term_vision)",
+        "doc_lines": [
+            (
+                "- POST {base_url}/api/boards → create board (fields: name, workflow_id, "
+                "working_directory, long_term_vision). Returns 201 with board id."
+            ),
+        ],
+    },
+    {
+        "key": "board_put",
+        "category": "Boards",
+        "method": "PUT",
+        "path_template": "/api/boards/{board_id}",
+        "label": "update board (fields: name, workflow_id, working_directory, long_term_vision)",
+        "doc_lines": [
+            (
+                "- PUT {base_url}/api/boards/{board_id} → update board (fields: name, workflow_id, "
+                "working_directory, long_term_vision)."
+            ),
+        ],
+    },
+    {
+        "key": "board_delete",
+        "category": "Boards",
+        "method": "DELETE",
+        "path_template": "/api/boards/{board_id}",
+        "label": "delete board (destroys all tickets, comments, runs, queue, recurring)",
+        "doc_lines": [
+            (
+                "- DELETE {base_url}/api/boards/{board_id} → delete board. Destructive: permanently "
+                "deletes all tickets, comments, agent runs, queue entries, and recurring tasks for "
+                "the board."
+            ),
+        ],
+    },
+    {
+        "key": "boards_stats",
+        "category": "Boards",
+        "method": "GET",
+        "path_template": "/api/boards/stats",
+        "label": "get ticket counts per board",
+        "doc_lines": [
+            ("- GET {base_url}/api/boards/stats → get ticket counts per board (returns {board_id: ticket_count})."),
+        ],
+    },
+    {
+        "key": "workflows_create",
+        "category": "Workflows",
+        "method": "POST",
+        "path_template": "/api/workflows",
+        "label": "create workflow (fields: name, description, git_enabled)",
+        "doc_lines": [
+            (
+                "- POST {base_url}/api/workflows → create workflow (fields: name, description, "
+                "git_enabled boolean default false). Returns 201 with workflow id."
+            ),
+        ],
+    },
+    {
+        "key": "workflow_put",
+        "category": "Workflows",
+        "method": "PUT",
+        "path_template": "/api/workflows/{workflow_id}",
+        "label": "update workflow (fields: name, description, git_enabled)",
+        "doc_lines": [
+            (
+                "- PUT {base_url}/api/workflows/{workflow_id} → update workflow (fields: name, "
+                "description, git_enabled)."
+            ),
+        ],
+    },
+    {
+        "key": "workflow_delete",
+        "category": "Workflows",
+        "method": "DELETE",
+        "path_template": "/api/workflows/{workflow_id}",
+        "label": "delete workflow (blocked if any boards use it)",
+        "doc_lines": [
+            (
+                "- DELETE {base_url}/api/workflows/{workflow_id} → delete workflow. Blocked (409) if "
+                "any boards reference it; otherwise cascades agents, statuses, transitions, gates, "
+                "and labels."
+            ),
+        ],
+    },
+    {
+        "key": "workflow_export",
+        "category": "Workflows",
+        "method": "GET",
+        "path_template": "/api/workflows/{workflow_id}/export",
+        "label": "export workflow as JSON (agents, statuses, transitions, gates, labels)",
+        "doc_lines": [
+            (
+                "- GET {base_url}/api/workflows/{workflow_id}/export → export the workflow as a JSON "
+                "document (agents, statuses, transitions, quality_gates, labels)."
+            ),
+        ],
+    },
+    {
+        "key": "workflow_import",
+        "category": "Workflows",
+        "method": "POST",
+        "path_template": "/api/workflows/import",
+        "label": "import workflow from JSON (creates a new workflow; appends timestamp on name clash)",
+        "doc_lines": [
+            (
+                "- POST {base_url}/api/workflows/import → import a workflow from JSON body (version "
+                "'1.0', agents, statuses, transitions, optional quality_gates/labels). Creates a NEW "
+                "workflow; appends a timestamp if the name collides."
+            ),
+        ],
+    },
+    {
+        "key": "agents_create",
+        "category": "Agents",
+        "method": "POST",
+        "path_template": "/api/agents",
+        "label": (
+            "create agent (fields: name, description, workflow_id, model, thinking, "
+            "api_endpoints, skill_names (deprecated), excluded_skill_names)"
+        ),
+        "doc_lines": [
+            (
+                "- POST {base_url}/api/agents → create agent (fields: name, description, "
+                "workflow_id, model, thinking, api_endpoints (array of keys or null for defaults), "
+                "skill_names (deprecated), excluded_skill_names). Returns 201 with agent id."
+            ),
+        ],
+    },
+    {
+        "key": "agent_delete",
+        "category": "Agents",
+        "method": "DELETE",
+        "path_template": "/api/agents/{agent_id}",
+        "label": "delete agent (blocked if assigned to a status)",
+        "doc_lines": [
+            (
+                "- DELETE {base_url}/api/agents/{agent_id} → delete agent. Blocked (409) if the "
+                "agent is assigned to any status."
+            ),
+        ],
+    },
+    {
+        "key": "statuses_create",
+        "category": "Statuses",
+        "method": "POST",
+        "path_template": "/api/statuses",
+        "label": (
+            "create status (fields: name, sort_order, workflow_id, is_default, is_terminal, "
+            "agent_id, goal, model, thinking)"
+        ),
+        "doc_lines": [
+            (
+                "- POST {base_url}/api/statuses → create status (fields: name, sort_order, "
+                "workflow_id, is_default, is_terminal, agent_id, goal, model, thinking). Returns "
+                "201 with status id."
+            ),
+        ],
+    },
+    {
+        "key": "status_delete",
+        "category": "Statuses",
+        "method": "DELETE",
+        "path_template": "/api/statuses/{status_id}",
+        "label": "delete status (blocked if used by tickets or transitions; cascades gates and reviews)",
+        "doc_lines": [
+            (
+                "- DELETE {base_url}/api/statuses/{status_id} → delete status. Blocked (409) if "
+                "used by tickets or transitions; otherwise cascades quality gates and gate reviews."
+            ),
+        ],
+    },
+    {
+        "key": "transitions_create",
+        "category": "Transitions",
+        "method": "POST",
+        "path_template": "/api/transitions",
+        "label": "create transition (fields: from_status_id, to_status_id, instructions, workflow_id)",
+        "doc_lines": [
+            (
+                "- POST {base_url}/api/transitions → create transition (fields: from_status_id, "
+                "to_status_id, instructions, workflow_id). Returns 201 with transition id."
+            ),
+        ],
+    },
+    {
+        "key": "transition_delete",
+        "category": "Transitions",
+        "method": "DELETE",
+        "path_template": "/api/transitions/{transition_id}",
+        "label": "delete transition",
+        "doc_lines": [
+            "- DELETE {base_url}/api/transitions/{transition_id} → delete transition.",
+        ],
+    },
+    {
+        "key": "quality_gates_create",
+        "category": "Quality Gates",
+        "method": "POST",
+        "path_template": "/api/quality_gates",
+        "label": (
+            "create gate (fields: from_status_id, to_status_id, gate_type, name, config, "
+            "sort_order, enabled, notify_on_failure, include_in_feedback, workflow_id)"
+        ),
+        "doc_lines": [
+            (
+                "- POST {base_url}/api/quality_gates → create gate (fields: from_status_id, "
+                "to_status_id, gate_type 'manual'/'cli', name, config (JSON, e.g. "
+                '{"command":"pytest"} for cli), sort_order, enabled, notify_on_failure, '
+                "include_in_feedback, workflow_id). Returns 201 with gate id."
+            ),
+        ],
+    },
+    {
+        "key": "quality_gate_get",
+        "category": "Quality Gates",
+        "method": "GET",
+        "path_template": "/api/quality_gates/{gate_id}",
+        "label": "get quality gate details",
+        "doc_lines": [
+            "- GET {base_url}/api/quality_gates/{gate_id} → get quality gate details",
+        ],
+    },
+    {
+        "key": "quality_gate_put",
+        "category": "Quality Gates",
+        "method": "PUT",
+        "path_template": "/api/quality_gates/{gate_id}",
+        "label": (
+            "update gate (fields: name, gate_type, config, sort_order, enabled, "
+            "notify_on_failure, include_in_feedback, from_status_id, to_status_id)"
+        ),
+        "doc_lines": [
+            (
+                "- PUT {base_url}/api/quality_gates/{gate_id} → update gate (fields: name, "
+                "gate_type, config, sort_order, enabled, notify_on_failure, include_in_feedback, "
+                "from_status_id, to_status_id)."
+            ),
+        ],
+    },
+    {
+        "key": "quality_gate_delete",
+        "category": "Quality Gates",
+        "method": "DELETE",
+        "path_template": "/api/quality_gates/{gate_id}",
+        "label": "delete gate (cascades gate reviews)",
+        "doc_lines": [
+            ("- DELETE {base_url}/api/quality_gates/{gate_id} → delete gate (cascades its gate reviews)."),
+        ],
+    },
+    {
+        "key": "gate_review_put",
+        "category": "Gate Reviews",
+        "method": "PUT",
+        "path_template": "/api/gate_reviews/{review_id}",
+        "label": (
+            "approve/reject manual gate review (fields: status 'approved'/'rejected', comment; "
+            "requires X-Human-Action header; rejection requires comment) — human-only"
+        ),
+        "doc_lines": [
+            (
+                "- PUT {base_url}/api/gate_reviews/{review_id} → approve or reject a manual gate "
+                "review (fields: status 'approved'/'rejected', comment). Requires X-Human-Action "
+                "header; rejection requires a non-empty comment. HUMAN-ONLY — agents must never "
+                "call this."
+            ),
+        ],
+    },
+    {
+        "key": "labels_create",
+        "category": "Labels",
+        "method": "POST",
+        "path_template": "/api/labels",
+        "label": "create label (fields: name, color, workflow_id)",
+        "doc_lines": [
+            (
+                "- POST {base_url}/api/labels → create label (fields: name, color hex default "
+                "'#6b7280', workflow_id). Returns 201 with label id."
+            ),
+        ],
+    },
+    {
+        "key": "label_get",
+        "category": "Labels",
+        "method": "GET",
+        "path_template": "/api/labels/{label_id}",
+        "label": "get label details",
+        "doc_lines": [
+            "- GET {base_url}/api/labels/{label_id} → get label details",
+        ],
+    },
+    {
+        "key": "label_put",
+        "category": "Labels",
+        "method": "PUT",
+        "path_template": "/api/labels/{label_id}",
+        "label": "update label (fields: name, color)",
+        "doc_lines": [
+            ("- PUT {base_url}/api/labels/{label_id} → update label (fields: name, color)."),
+        ],
+    },
+    {
+        "key": "label_delete",
+        "category": "Labels",
+        "method": "DELETE",
+        "path_template": "/api/labels/{label_id}",
+        "label": "delete label",
+        "doc_lines": [
+            "- DELETE {base_url}/api/labels/{label_id} → delete label",
+        ],
+    },
+    {
+        "key": "skills_import",
+        "category": "Skills",
+        "method": "POST",
+        "path_template": "/api/skills/import",
+        "label": "import skill from ZIP (multipart field: file; optional form field: workflow_id)",
+        "doc_lines": [
+            (
+                "- POST {base_url}/api/skills/import → import a skill from a ZIP archive "
+                "(multipart/form-data field: file; optional form field: workflow_id for workflow "
+                "scope, omit for global scope)."
+            ),
+        ],
+    },
+    {
+        "key": "skills_import_github",
+        "category": "Skills",
+        "method": "POST",
+        "path_template": "/api/skills/import-github",
+        "label": "import skill from a public GitHub repo (JSON: url, optional workflow_id)",
+        "doc_lines": [
+            (
+                "- POST {base_url}/api/skills/import-github → import a skill from a public GitHub "
+                "repository (JSON body: url, optional workflow_id for workflow scope, omit for "
+                "global scope). URL may point to a repo root or a tree/branch/subpath."
+            ),
+        ],
+    },
+    {
+        "key": "recurring_create",
+        "category": "Recurring",
+        "method": "POST",
+        "path_template": "/api/recurring",
+        "label": (
+            "create recurring task (fields: board_id, title, body, status_id, cron_expression, start_at, end_at)"
+        ),
+        "doc_lines": [
+            (
+                "- POST {base_url}/api/recurring → create recurring task (fields: board_id, title, "
+                "body, status_id, cron_expression 5-field cron, start_at, end_at). Returns 201 "
+                "with the task."
+            ),
+        ],
+    },
+    {
+        "key": "recurring_put",
+        "category": "Recurring",
+        "method": "PUT",
+        "path_template": "/api/recurring/{task_id}",
+        "label": ("update recurring task (fields: title, body, status_id, cron_expression, start_at, end_at)"),
+        "doc_lines": [
+            (
+                "- PUT {base_url}/api/recurring/{task_id} → update recurring task (fields: title, "
+                "body, status_id, cron_expression, start_at, end_at)."
+            ),
+        ],
+    },
+    {
+        "key": "recurring_delete",
+        "category": "Recurring",
+        "method": "DELETE",
+        "path_template": "/api/recurring/{task_id}",
+        "label": "delete recurring task (soft-disable if instances exist)",
+        "doc_lines": [
+            (
+                "- DELETE {base_url}/api/recurring/{task_id} → delete recurring task. Soft-disables "
+                "if instances exist; hard deletes otherwise."
+            ),
+        ],
+    },
+    {
+        "key": "recurring_toggle",
+        "category": "Recurring",
+        "method": "POST",
+        "path_template": "/api/recurring/{task_id}/toggle",
+        "label": "toggle recurring task enabled/disabled",
+        "doc_lines": [
+            (
+                "- POST {base_url}/api/recurring/{task_id}/toggle → toggle a recurring task "
+                "enabled/disabled. Returns the updated task."
+            ),
+        ],
+    },
+    {
+        "key": "recurring_trigger",
+        "category": "Recurring",
+        "method": "POST",
+        "path_template": "/api/recurring/{task_id}/trigger",
+        "label": "manually trigger a recurring task now (creates a ticket immediately)",
+        "doc_lines": [
+            (
+                "- POST {base_url}/api/recurring/{task_id}/trigger → manually trigger a recurring "
+                "task now; creates a ticket immediately regardless of schedule. Returns "
+                "{success, ticket_id}."
+            ),
+        ],
+    },
+    {
+        "key": "recurring_preview",
+        "category": "Recurring",
+        "method": "GET",
+        "path_template": "/api/recurring/preview",
+        "label": "preview next 5 trigger times + human-readable (query: cron)",
+        "doc_lines": [
+            (
+                "- GET {base_url}/api/recurring/preview?cron={expr} → preview the next 5 trigger "
+                "times and a human-readable description for a cron expression (query: cron "
+                "required)."
+            ),
+        ],
+    },
+    {
+        "key": "knowledge_categories",
+        "category": "Knowledge",
+        "method": "GET",
+        "path_template": "/api/knowledge/categories",
+        "label": "list distinct knowledge categories (query: board_id optional)",
+        "doc_lines": [
+            (
+                "- GET {base_url}/api/knowledge/categories?board_id={board_id} → list distinct "
+                "knowledge categories (query: board_id optional to scope to a board)."
+            ),
+        ],
+    },
+    {
+        "key": "knowledge_tags",
+        "category": "Knowledge",
+        "method": "GET",
+        "path_template": "/api/knowledge/tags",
+        "label": "list all knowledge tags",
+        "doc_lines": [
+            "- GET {base_url}/api/knowledge/tags → list all knowledge tags.",
+        ],
+    },
+    {
+        "key": "knowledge_version_get",
+        "category": "Knowledge",
+        "method": "GET",
+        "path_template": "/api/knowledge/{entry_id}/versions/{version_id}",
+        "label": "get a specific version of a knowledge entry",
+        "doc_lines": [
+            (
+                "- GET {base_url}/api/knowledge/{entry_id}/versions/{version_id} → get a specific "
+                "version of a knowledge entry."
+            ),
+        ],
+    },
+    {
+        "key": "settings_put",
+        "category": "Settings",
+        "method": "PUT",
+        "path_template": "/api/settings/{key}",
+        "label": "update a setting (field: value) — human-only",
+        "doc_lines": [
+            (
+                "- PUT {base_url}/api/settings/{key} → update a setting (field: value). Changes "
+                "runtime config such as limits; HUMAN-ONLY — agents must never call this."
+            ),
+        ],
+    },
+    {
+        "key": "settings_purge_terminal_logs",
+        "category": "Settings",
+        "method": "POST",
+        "path_template": "/api/settings/purge-terminal-logs",
+        "label": "purge terminal log entries — human-only",
+        "doc_lines": [
+            (
+                "- POST {base_url}/api/settings/purge-terminal-logs → purge terminal log entries. "
+                "Destructive; HUMAN-ONLY — agents must never call this."
+            ),
+        ],
+    },
+    {
+        "key": "system_logs_list",
+        "category": "System Logs",
+        "method": "GET",
+        "path_template": "/api/system_logs",
+        "label": (
+            "list system logs (query: page, per_page, level, action_type, ticket_id, date_from, date_to, search)"
+        ),
+        "doc_lines": [
+            (
+                "- GET {base_url}/api/system_logs → list system logs (query: page, per_page, "
+                "level, action_type, ticket_id, date_from, date_to, search). Returns a paginated "
+                "envelope."
+            ),
+        ],
+    },
+    {
+        "key": "system_logs_get",
+        "category": "System Logs",
+        "method": "GET",
+        "path_template": "/api/system_logs/{log_id}",
+        "label": "get a single system log entry",
+        "doc_lines": [
+            "- GET {base_url}/api/system_logs/{log_id} → get a single system log entry",
+        ],
+    },
+    {
+        "key": "system_logs_export",
+        "category": "System Logs",
+        "method": "GET",
+        "path_template": "/api/system_logs/export",
+        "label": ("export system logs (query: level, action_type, ticket_id, date_from, date_to, search)"),
+        "doc_lines": [
+            (
+                "- GET {base_url}/api/system_logs/export → export system logs as a downloadable "
+                "file (query: level, action_type, ticket_id, date_from, date_to, search)."
+            ),
+        ],
+    },
+    {
+        "key": "agent_run_kill",
+        "category": "Agent Runs",
+        "method": "POST",
+        "path_template": "/api/agent_runs/{run_id}/kill",
+        "label": "kill a running agent run (returns feedback_id) — human-only",
+        "doc_lines": [
+            (
+                "- POST {base_url}/api/agent_runs/{run_id}/kill → kill a running agent run "
+                "(SIGTERM, escalates to SIGKILL). Returns {success, exit_code, escalated, "
+                "feedback_id}. HUMAN-ONLY — agents must never call this."
+            ),
+        ],
+    },
+    {
+        "key": "running_agent_runs",
+        "category": "Agent Runs",
+        "method": "GET",
+        "path_template": "/api/running_agent_runs",
+        "label": "list currently running agent runs",
+        "doc_lines": [
+            ("- GET {base_url}/api/running_agent_runs → list currently running agent runs."),
+        ],
+    },
+    {
+        "key": "notifications_dismiss",
+        "category": "Notifications",
+        "method": "PUT",
+        "path_template": "/api/notifications/dismiss",
+        "label": "dismiss a notification (fields: ticket_id, type 'gate_review'/'question') — human-only",
+        "doc_lines": [
+            (
+                "- PUT {base_url}/api/notifications/dismiss → dismiss a notification (fields: "
+                "ticket_id, type 'gate_review' or 'question'). HUMAN-ONLY — agents must never "
+                "call this."
+            ),
+        ],
+    },
+    {
+        "key": "notifications_dismiss_all",
+        "category": "Notifications",
+        "method": "PUT",
+        "path_template": "/api/notifications/dismiss-all",
+        "label": "dismiss all notifications — human-only",
+        "doc_lines": [
+            (
+                "- PUT {base_url}/api/notifications/dismiss-all → dismiss all notifications. "
+                "HUMAN-ONLY — agents must never call this."
+            ),
+        ],
+    },
+    {
+        "key": "pi_models",
+        "category": "Misc",
+        "method": "GET",
+        "path_template": "/api/pi-models",
+        "label": "list available models and thinking levels from the pi CLI",
+        "doc_lines": [
+            (
+                "- GET {base_url}/api/pi-models → list available models and per-model thinking "
+                "levels discovered from the pi CLI."
+            ),
+        ],
+    },
+    {
         "key": "observations_list",
         "category": "Observations",
         "method": "GET",
@@ -724,12 +1355,24 @@ DEFAULT_ENDPOINT_KEYS = [
 # Gate review write access allows agents to approve their own quality gates,
 # defeating the purpose of manual approval.
 AGENT_RESTRICTED_KEYS = {
+    # Gate review access lets agents approve their own quality gates.
     "gate_reviews_list",
+    "gate_review_put",
     "quality_gates_list",
+    # Notification management is a human-only concern.
     "notifications_list",
-    "db_backup_restore",
+    "notifications_dismiss",
+    "notifications_dismiss_all",
+    # Feedback records are human-curated.
     "feedback_put",
     "feedback_post",
+    # Killing agents is a human oversight action.
+    "agent_run_kill",
+    # Settings changes let an agent alter its own limits / destructive purges.
+    "settings_put",
+    "settings_purge_terminal_logs",
+    # DB restore is a destructive human-only action.
+    "db_backup_restore",
 }
 
 
