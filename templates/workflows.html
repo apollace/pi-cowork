@@ -76,7 +76,10 @@
       <label>Thinking<select name="thinking" id="agent-thinking-select"><option value="">default</option></select></label>
       <fieldset class="api-endpoints-fieldset">
         <legend>API Endpoints</legend>
-        <div id="api-endpoints-checkboxes">Loading…</div>
+        <input type="search" id="api-endpoints-search" class="api-endpoints-search" placeholder="Search endpoints…" autocomplete="off">
+        <div class="api-endpoints-scrollable" id="api-endpoints-scrollable">
+          <div id="api-endpoints-checkboxes">Loading…</div>
+        </div>
       </fieldset>
       <fieldset class="skills-fieldset" id="agent-excluded-skills-fieldset" style="display:none;">
         <legend>Excluded Skills</legend>
@@ -724,15 +727,52 @@ function renderEndpointCheckboxes(selectedKeys) {
 
   let html = '';
   for (const [cat, eps] of Object.entries(grouped)) {
-    html += `<div class="ep-category"><strong>${escapeHtml(cat)}</strong>`;
+    const escapedCat = escapeHtml(cat);
+    html += `<div class="ep-category" data-category="${escapedCat}"><strong>${escapedCat}</strong>`;
     for (const ep of eps) {
       const checked = effectiveSet.has(ep.key) ? 'checked' : '';
-      html += `<label class="ep-checkbox-label"><input type="checkbox" class="ep-checkbox" value="${escapeHtml(ep.key)}" ${checked}> ${escapeHtml(ep.method)} ${escapeHtml(ep.path_template)} — ${escapeHtml(ep.label)}</label>`;
+      html += `<label class="ep-checkbox-label" data-key="${escapeHtml(ep.key)}" data-method="${escapeHtml(ep.method)}" data-path="${escapeHtml(ep.path_template)}" data-label="${escapeHtml(ep.label)}" data-category="${escapedCat}"><input type="checkbox" class="ep-checkbox" value="${escapeHtml(ep.key)}" ${checked}> ${escapeHtml(ep.method)} ${escapeHtml(ep.path_template)} — ${escapeHtml(ep.label)}</label>`;
     }
     html += '</div>';
   }
   container.innerHTML = html;
 }
+
+function filterApiEndpoints() {
+  const input = document.getElementById('api-endpoints-search');
+  const query = (input.value || '').toLowerCase().trim();
+  const labels = document.querySelectorAll('#api-endpoints-checkboxes .ep-checkbox-label');
+  for (const label of labels) {
+    if (!query) {
+      label.classList.remove('hidden');
+      continue;
+    }
+    const haystack = [
+      label.dataset.key,
+      label.dataset.method,
+      label.dataset.path,
+      label.dataset.label,
+      label.dataset.category,
+    ].map(s => (s || '').toLowerCase()).join(' ');
+    if (haystack.includes(query)) {
+      label.classList.remove('hidden');
+    } else {
+      label.classList.add('hidden');
+    }
+  }
+  const categories = document.querySelectorAll('#api-endpoints-checkboxes .ep-category');
+  for (const category of categories) {
+    const visible = category.querySelector('.ep-checkbox-label:not(.hidden)') !== null;
+    category.classList.toggle('hidden', !visible);
+  }
+}
+
+function resetApiEndpointsFilter() {
+  const input = document.getElementById('api-endpoints-search');
+  if (input) { input.value = ''; filterApiEndpoints(); }
+}
+
+document.getElementById('api-endpoints-search').addEventListener('input', filterApiEndpoints);
 
 // ── pi-models (shared cache) ──
 
@@ -820,6 +860,7 @@ async function showAgentCreate(workflowId) {
   _agentEditEndpoints = null; // defaults
   await loadEndpointRegistry();
   renderEndpointCheckboxes(null);
+  resetApiEndpointsFilter();
   renderAgentExcludedSkillCheckboxes(workflowId, []);
   openModal('agent-modal');
 }
@@ -846,6 +887,7 @@ async function showAgentEdit(agentId, workflowId) {
   document.getElementById('agent-modal-title').textContent = 'Edit Agent';
   await loadEndpointRegistry();
   renderEndpointCheckboxes(epKeys);
+  resetApiEndpointsFilter();
   const excludedSkillNames = agent.excluded_skill_names || [];
   renderAgentExcludedSkillCheckboxes(workflowId, excludedSkillNames);
   openModal('agent-modal');
@@ -1520,6 +1562,30 @@ loadWorkflows();
     font-size: 0.9rem;
     color: var(--text-secondary);
     padding: 0 0.4rem;
+  }
+
+  .api-endpoints-search {
+    width: 100%;
+    padding: 0.45rem 0.6rem;
+    font-size: 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 0.5rem;
+    background: var(--surface);
+    color: var(--text);
+  }
+  .api-endpoints-search:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+  }
+  .api-endpoints-scrollable {
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 0.5rem;
+    border: 1px solid var(--border-secondary);
+    border-radius: var(--radius);
+    background: var(--bg);
   }
 
   .ep-category {
