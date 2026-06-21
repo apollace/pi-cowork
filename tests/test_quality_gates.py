@@ -1267,3 +1267,99 @@ def test_cli_gate_timeout_includes_stderr(client):
     body = fail_comments[0]["body"]
     assert "timed out" in body.lower()
     assert "partial stderr" in body
+
+
+# 28. Configurable CLI gate timeout is passed to subprocess.run
+def test_cli_gate_custom_timeout_passed_to_subprocess(client):
+    wf_id, status_ids = _create_workflow_with_statuses(client)
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+
+    client.post(
+        "/api/quality_gates",
+        json={
+            "from_status_id": status_ids[0],
+            "to_status_id": status_ids[1],
+            "gate_type": "cli",
+            "name": "Custom Timeout Check",
+            "config": json.dumps({"command": "sleep 1", "timeout": 120}),
+            "workflow_id": wf_id,
+        },
+    )
+
+    with patch("app.subprocess.Popen"), patch("app.subprocess.run") as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "ok"
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        res = client.put(f"/api/tickets/{ticket_id}", json={"status_id": status_ids[1]})
+
+    assert res.status_code == 200
+    assert mock_run.called
+    assert mock_run.call_args.kwargs.get("timeout") == 120
+
+    ticket = json.loads(client.get(f"/api/tickets/{ticket_id}").data)
+    assert ticket["status_id"] == status_ids[1]
+
+
+# 29. Invalid CLI gate timeout (non-integer) falls back to default 60s
+def test_cli_gate_invalid_string_timeout_falls_back_to_default(client):
+    wf_id, status_ids = _create_workflow_with_statuses(client)
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+
+    client.post(
+        "/api/quality_gates",
+        json={
+            "from_status_id": status_ids[0],
+            "to_status_id": status_ids[1],
+            "gate_type": "cli",
+            "name": "Bad Timeout Check",
+            "config": json.dumps({"command": "sleep 1", "timeout": "abc"}),
+            "workflow_id": wf_id,
+        },
+    )
+
+    with patch("app.subprocess.Popen"), patch("app.subprocess.run") as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "ok"
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        res = client.put(f"/api/tickets/{ticket_id}", json={"status_id": status_ids[1]})
+
+    assert res.status_code == 200
+    assert mock_run.called
+    assert mock_run.call_args.kwargs.get("timeout") == 60
+
+
+# 30. Negative CLI gate timeout falls back to default 60s
+def test_cli_gate_invalid_negative_timeout_falls_back_to_default(client):
+    wf_id, status_ids = _create_workflow_with_statuses(client)
+    _board_id, ticket_id = _create_board_with_ticket(client, wf_id, status_ids[0])
+
+    client.post(
+        "/api/quality_gates",
+        json={
+            "from_status_id": status_ids[0],
+            "to_status_id": status_ids[1],
+            "gate_type": "cli",
+            "name": "Negative Timeout Check",
+            "config": json.dumps({"command": "sleep 1", "timeout": -5}),
+            "workflow_id": wf_id,
+        },
+    )
+
+    with patch("app.subprocess.Popen"), patch("app.subprocess.run") as mock_run:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "ok"
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        res = client.put(f"/api/tickets/{ticket_id}", json={"status_id": status_ids[1]})
+
+    assert res.status_code == 200
+    assert mock_run.called
+    assert mock_run.call_args.kwargs.get("timeout") == 60
