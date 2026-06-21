@@ -510,7 +510,7 @@ If `pi` fails to launch or exits non-zero, an error comment is added.
 - `to_status_id` (integer, required) — destination status of the transition this gate guards
 - `gate_type` (string, required) — `'manual'` or `'cli'`
 - `name` (string, required)
-- `config` (JSON, nullable) — for CLI gates: `{"command": "pytest --cov"}`
+- `config` (JSON, nullable) — for CLI gates: `{"command": "pytest --cov"}`. Optionally include `"timeout": <seconds>` (default 60) to allow long-running commands.
 - `sort_order` (integer, default 0) — evaluation order
 - `enabled` (boolean, default true)
 - `notify_on_failure` (boolean, default true) — whether a failure/rejection of this gate should create a self-improvement observation ticket on the System board. Defaults to `true` for `manual` gates and `false` for `cli` gates on creation. Existing gates migrated to `1` (true).
