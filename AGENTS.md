@@ -26,6 +26,7 @@ A minimal CoWork web app with AI agent integration. Supports multiple boards and
 ```
 pi-cowork/
 ├── app.py                 # Flask app, routes, DB init, agent spawning
+├── pi_cowork/board_cleanup.py  # Terminate agents and remove on-disk artifacts on board deletion
 ├── pi_cowork/api/pi_models.py  # pi CLI model discovery with caching
 ├── schema.sql             # DB schema + seed data
 ├── requirements.txt       # Flask, pytest
@@ -56,6 +57,7 @@ pi-cowork/
     ├── test_import_export.py
     ├── test_quality_gates.py
     ├── test_workflows_boards.py
+    ├── test_board_deletion.py    # Destructive board deletion: agents, files, rows
     ├── test_agent_completion.py
     ├── test_pi_models.py
     └── test_schema_sync.py   # Verifies schema.sql stays in sync with migrations
@@ -126,7 +128,7 @@ Workflow (agents + statuses + transitions + quality_gates)
 - **Quality Gate** = check on a status transition (from, to) pair that must pass before the transition completes (manual approval or CLI command)
 - **Gate Review** = instance of a gate check for a specific ticket transition
 - Multiple boards can share the same workflow
-- Deleting a board permanently deletes all its tickets, comments, agent runs, gate reviews, and queue entries
+- Deleting a board permanently deletes all its tickets, comments, agent runs, gate reviews, notification dismissals, and queue entries. The deletion flow first kills any running agents for the board's tickets, then removes board-specific `.pi-logs/` and `.pi-sessions/` directories under the board's `working_directory`, then deletes child DB rows in dependency order, and finally deletes the board (cascading `recurring_tasks`, `knowledge_entries`, `assistant_messages`, and `assistant_runs`).
 - Deleting a workflow requires that no boards reference it
 - **`assistant_saved_prompts`** — global reusable prompt snippets for both global and board assistants (columns: `id`, `name` UNIQUE, `prompt_text`, `sort_order`, `created_at`)
 - **`ticket_status_overrides`** — per-ticket model/thinking overrides per status (compound PK: `ticket_id, status_id`, both with `ON DELETE CASCADE`; nullable `model`, `thinking` columns)
@@ -674,7 +676,7 @@ Each workflow has a `git_enabled` boolean flag (default `False`). When enabled:
 
 - **`updated_at` bumped on all ticket-affecting operations** — The `tickets.updated_at` column is updated whenever a ticket is modified, but also when related data changes: comments added (`add_comment()` in models.py), labels changed (`set_ticket_labels()` in models.py), questions asked or answered (API handlers in questions.py), and git branch set (`ensure_ticket_branch()` in git_helpers.py). All these operations run `UPDATE tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`. The SSE event generator enriches ticket-related events with the current `updated_at` value from the database (via `_get_ticket_updated_at()` in events.py), enabling clients to detect changes without re-fetching the full ticket list.
 - **No ticket deletion** — terminal statuses only (Closed/Dropped).
-- **Board deletion is destructive** — all tickets, comments, agent runs, and queue entries for that board are permanently deleted.
+- **Board deletion is destructive** — deleting a board kills any running agents for its tickets, removes board-specific `.pi-logs/` and `.pi-sessions/` directories under the board's `working_directory`, and permanently deletes all tickets, comments, agent runs, gate reviews, notification dismissals, queue entries, recurring tasks, knowledge entries, assistant messages, and assistant runs for that board. Implementation lives in `pi_cowork/board_cleanup.py` and `DELETE /api/boards/<id>`.
 - **Agent delete blocked** if assigned to a status.
 - **Status delete blocked** if used by tickets or transitions. Deleting a status cascades to its quality gates and gate reviews.
 - **Quality gate delete** cascades to its gate reviews.
