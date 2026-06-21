@@ -5,6 +5,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
+from pi_cowork.board_cleanup import cleanup_board_filesystem, terminate_running_agents_for_board
 from pi_cowork.db import query_db, row_to_dict, run_db
 from pi_cowork.models import get_board, get_board_with_workflow, get_workflow
 from pi_cowork.system_logs import add_log
@@ -137,10 +138,28 @@ def api_delete_board(board_id):
     board = get_board(board_id)
     if not board:
         return jsonify({"error": "Board not found"}), 404
+
+    # Stop any agents that are still running for tickets on this board before
+    # deleting their rows; no comments or feedback are added since those rows
+    # are about to be destroyed.
+    terminate_running_agents_for_board(board_id)
+
+    # Remove board-specific agent logs and session directories.  This must
+    # happen while we can still query ticket/agent_run rows to know which
+    # directories were created.
+    cleanup_board_filesystem(board_id, board["working_directory"])
+
+    # Delete child rows that do not cascade automatically, then delete the
+    # tickets (which cascades comments, labels, overrides, instances,
+    # feedback) and finally the board (which cascades recurring_tasks,
+    # knowledge_entries, assistant_messages, assistant_runs).
     run_db("DELETE FROM gate_reviews WHERE ticket_id IN (SELECT id FROM tickets WHERE board_id = ?)", (board_id,))
     run_db("DELETE FROM agent_queue WHERE ticket_id IN (SELECT id FROM tickets WHERE board_id = ?)", (board_id,))
     run_db("DELETE FROM agent_runs WHERE ticket_id IN (SELECT id FROM tickets WHERE board_id = ?)", (board_id,))
-    run_db("DELETE FROM comments WHERE ticket_id IN (SELECT id FROM tickets WHERE board_id = ?)", (board_id,))
+    run_db(
+        "DELETE FROM notification_dismissals WHERE ticket_id IN (SELECT id FROM tickets WHERE board_id = ?)",
+        (board_id,),
+    )
     run_db("DELETE FROM tickets WHERE board_id = ?", (board_id,))
     run_db("DELETE FROM boards WHERE id = ?", (board_id,))
     add_log(

@@ -429,10 +429,12 @@ def _truncate(text, max_bytes=50 * 1024):
     return encoded[:max_bytes].decode("utf-8", errors="replace") + "\n... (truncated)"
 
 
-def run_cli_gate(command, working_directory):
+def run_cli_gate(command, working_directory, timeout=60):
     """Run a CLI gate command and return (passed, output)."""
     try:
-        result = subprocess.run(command, shell=True, cwd=working_directory, capture_output=True, text=True, timeout=60)  # noqa: S602
+        result = subprocess.run(  # noqa: S602
+            command, shell=True, cwd=working_directory, capture_output=True, text=True, timeout=timeout
+        )
         stdout = (result.stdout or "").strip()
         stderr = (result.stderr or "").strip()
         if result.returncode != 0:

@@ -326,7 +326,7 @@
   });
 
   async function deleteBoard(id) {
-    if (!confirm('Delete this board? ALL tickets, comments, and agent runs will be permanently lost.')) return;
+    if (!confirm('Delete this board? ALL tickets, comments, agent runs, and on-disk agent logs/sessions will be permanently destroyed. Running agents on this board will be killed.')) return;
     const res = await fetch(`/api/boards/${id}`, { method: 'DELETE' });
     if (res.ok) {
       const current = localStorage.getItem('activeBoard');

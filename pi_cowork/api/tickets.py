@@ -372,7 +372,10 @@ def api_update_ticket(ticket_id):  # noqa: C901
                 if gate["gate_type"] == "cli":
                     config_json = json.loads(gate["config"] or "{}")
                     command = config_json.get("command", "")
-                    passed, output = run_cli_gate(command, board_dir)
+                    gate_timeout = config_json.get("timeout", 60)
+                    if not isinstance(gate_timeout, int) or gate_timeout < 1:
+                        gate_timeout = 60
+                    passed, output = run_cli_gate(command, board_dir, timeout=gate_timeout)
                     review = query_db(
                         "SELECT id FROM gate_reviews WHERE ticket_id = ? AND gate_id = ? "
                         "AND status = 'pending' LIMIT 1",
