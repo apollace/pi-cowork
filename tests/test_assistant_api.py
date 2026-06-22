@@ -426,6 +426,58 @@ def test_chat_json_mode_flag(client):
         assert cmd[cmd.index("--mode") + 1] == "json"
 
 
+def test_chat_uses_continue_flag(client):
+    """The pi command must include --continue so pi resumes the previous session."""
+    with patch("pi_cowork.assistant.subprocess.Popen") as mock_popen:
+        mock_popen.side_effect = _make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')
+        res = client.post("/api/assistant/chat", json={"message": "Hi"})
+        assert res.status_code == 200
+        cmd = mock_popen.call_args[0][0]
+        assert "--continue" in cmd
+
+
+def test_chat_passes_only_new_message_not_full_history(client):
+    """Only the new user message should be passed to pi, not the full conversation history.
+
+    Pi's --continue handles conversation continuity natively.
+    """
+    ndjson = '{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n'
+    with patch("pi_cowork.assistant.subprocess.Popen", side_effect=_make_mock_popen(ndjson=ndjson)) as mock_popen:
+        # First message
+        client.post("/api/assistant/chat", json={"message": "First message here"})
+        # Second message
+        client.post("/api/assistant/chat", json={"message": "Second message here"})
+
+    # Check the second call's command
+    second_cmd = mock_popen.call_args_list[1][0][0]
+    context_msg = second_cmd[-1]
+    # The new message should be present
+    assert "Second message here" in context_msg
+    # The previous message should NOT be in the context (pi --continue handles it)
+    assert "First message here" not in context_msg
+    # No USER: / ASSISTANT: flattening markers
+    assert "USER:" not in context_msg
+    assert "ASSISTANT:" not in context_msg
+
+
+def test_chat_multi_turn_db_persists_all_messages(client):
+    """Multiple turns should persist all messages in the DB for UI display."""
+    ndjson = '{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n'
+    with patch("pi_cowork.assistant.subprocess.Popen", side_effect=_make_mock_popen(ndjson=ndjson)):
+        client.post("/api/assistant/chat", json={"message": "M1"})
+        client.post("/api/assistant/chat", json={"message": "M2"})
+
+    history = client.get("/api/assistant/history")
+    rows = json.loads(history.data)
+    assert len(rows) == 4  # 2 user + 2 assistant
+    assert rows[0]["role"] == "user"
+    assert rows[0]["content"] == "M1"
+    assert rows[1]["role"] == "assistant"
+    assert rows[2]["role"] == "user"
+    assert rows[2]["content"] == "M2"
+    assert rows[3]["role"] == "assistant"
+
+
 def test_chat_injects_page_url_when_auto_context_enabled(client):
     with patch("pi_cowork.assistant.subprocess.Popen") as mock_popen:
         mock_popen.side_effect = _make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n')
@@ -738,6 +790,21 @@ def test_compact_uses_config_model_and_thinking(client):
         assert mock_run.call_args.kwargs.get("input") == '{"type":"compact"}'
 
 
+def test_compact_uses_continue_flag(client):
+    """Compact RPC command must include --continue to target the actual session."""
+    with patch(
+        "pi_cowork.assistant.subprocess.Popen",
+        side_effect=_make_mock_popen(ndjson='{"type":"text_delta","chunk":"A"}\n{"type":"done"}\n'),
+    ):
+        client.post("/api/assistant/chat", json={"message": "M1"})
+
+    with patch("app.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(stdout='{"type":"compaction_start"}', stderr="", returncode=0)
+        client.post("/api/assistant/compact")
+        cmd = mock_run.call_args[0][0]
+        assert "--continue" in cmd
+
+
 def test_compact_deletes_assistant_runs(client):
     with patch(
         "pi_cowork.assistant.subprocess.Popen",
@@ -788,6 +855,7 @@ def test_reset_clears_all(client):
         assert "--mode" in cmd
         assert "rpc" in cmd
         assert mock_run.call_args.kwargs.get("input") == '{"type":"new_session"}'
+        assert "--continue" in cmd
 
     history = client.get("/api/assistant/history")
     assert json.loads(history.data) == []

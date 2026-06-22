@@ -298,17 +298,19 @@ def _save_user_message_and_get_history(scope, message):
     return rows
 
 
-def _build_context_text(rows, cfg, data, board_id, board):
-    """Assemble the context text sent to the ``pi`` CLI."""
+def _build_context_text(message, cfg, data, board_id, board):
+    """Assemble the context text sent to the ``pi`` CLI.
+
+    Only the *new* user message is included — pi's native ``--continue``
+    session management handles conversation continuity.  The ``assistant_messages``
+    DB table is display-only.
+    """
     from pi_cowork.skill_packages import (
         get_built_in_skill_names,
         get_global_skill_names,
         read_skill_package,
         resolve_global_or_built_in_skill_dir,
     )
-
-    history_parts = [f"{r['role'].upper()}: {r['content']}" for r in rows]
-    context_text = "\n\n".join(history_parts)
 
     extra_context = []
     if cfg.get("auto_context") and data.get("page_url"):
@@ -331,9 +333,9 @@ def _build_context_text(rows, cfg, data, board_id, board):
     if skill_meta_lines:
         extra_context.append("Skills available to you:\n" + "\n".join(skill_meta_lines))
 
-    if extra_context:
-        context_text = "\n\n".join(extra_context + [context_text])
-    return context_text
+    # Build context: extra context (if any) + the new user message
+    parts = extra_context + [message]
+    return "\n\n".join(parts)
 
 
 def _prepare_assistant_skills(session_dir):
@@ -689,8 +691,9 @@ def api_assistant_chat():
 
     with _get_lock(scope):
         cfg = _get_assistant_config()
-        rows = _save_user_message_and_get_history(scope, message)
-        context_text = _build_context_text(rows, cfg, data, board_id, board)
+        # Persist user message for UI display; pi's --continue handles conversation context
+        _save_user_message_and_get_history(scope, message)
+        context_text = _build_context_text(message, cfg, data, board_id, board)
 
         thinking = cfg.get("thinking")
         model = cfg.get("model")
@@ -712,6 +715,7 @@ def api_assistant_chat():
             "--system-prompt",
             system_prompt,
             "--print",
+            "--continue",
             "--mode",
             "json",
             "--session-dir",
@@ -931,6 +935,7 @@ def api_assistant_compact():
             "--mode",
             "rpc",
             "--print",
+            "--continue",
             "--session-dir",
             session_dir,
         ]
@@ -1000,6 +1005,7 @@ def api_assistant_reset():
             "--mode",
             "rpc",
             "--print",
+            "--continue",
             "--session-dir",
             session_dir,
         ]
