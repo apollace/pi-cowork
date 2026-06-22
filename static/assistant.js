@@ -108,6 +108,14 @@
     }
   }
 
+  function getAssistantBoardId() {
+    const raw = localStorage.getItem("activeBoard");
+    if (!raw) return null;
+    const id = parseInt(raw, 10);
+    if (isNaN(id) || id <= 0) return null;
+    return id;
+  }
+
   async function saveQuickConfig() {
     const model = document.getElementById("assistant-model").value.trim() || null;
     const thinking = document.getElementById("assistant-thinking").value || "";
@@ -149,7 +157,7 @@
     }
   }
 
-  async function openPanel() {
+  async function openPanel(activeRunId) {
     panel.classList.add("open");
     bubble.classList.add("panel-open");
     localStorage.setItem("assistantPanelOpen", "1");
@@ -162,7 +170,9 @@
       document.documentElement.style.overflow = "hidden";
       document.body.style.overflow = "hidden";
     }
-    await checkActiveRun();
+    if (activeRunId) {
+      await reconnectToRun(activeRunId);
+    }
   }
 
   function closePanel() {
@@ -351,13 +361,12 @@
       const boardId = localStorage.getItem("activeBoard") || "";
       const url = "/api/assistant/active-run" + (boardId ? "?board_id=" + encodeURIComponent(boardId) : "");
       const res = await fetch(url);
-      if (!res.ok) return;
+      if (!res.ok) return null;
       const run = await res.json();
-      if (run && run.id) {
-        reconnectToRun(run.id);
-      }
+      return run || null;
     } catch (e) {
       console.error("Failed to check active run", e);
+      return null;
     }
   }
 
@@ -375,7 +384,7 @@
         await fetch("/api/assistant/stop", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ board_id: getAssistantBoardId() }),
         });
       } catch (e) {
         console.error("Stop failed", e);
@@ -471,7 +480,7 @@
         await fetch("/api/assistant/stop", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ board_id: getAssistantBoardId() }),
         });
       } catch (e) {
         console.error("Stop failed", e);
@@ -484,7 +493,7 @@
       const res = await fetch("/api/assistant/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, page_url: window.location.pathname }),
+        body: JSON.stringify({ message: text, page_url: window.location.pathname, board_id: getAssistantBoardId() }),
       });
       if (!res.ok) {
         const data = await res.json().catch(function () { return { error: "Request failed" }; });
@@ -608,9 +617,15 @@
     thinkingSelect.addEventListener("change", saveQuickConfig);
   }
 
-  loadConfig();
-
-  if (localStorage.getItem("assistantPanelOpen") === "1") {
-    openPanel();
+  async function initAssistant() {
+    await loadConfig();
+    const run = await checkActiveRun();
+    if (run && run.id) {
+      await openPanel(run.id);
+    } else if (localStorage.getItem("assistantPanelOpen") === "1") {
+      await openPanel();
+    }
   }
+
+  initAssistant();
 })();

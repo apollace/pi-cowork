@@ -31,6 +31,18 @@ _ASSISTANT_RUNS = {}
 _assistant_runs_lock = threading.Lock()
 
 
+def _is_pi_process_alive(pid):
+    """Check whether *pid* is still a running ``pi`` process.
+
+    Guards against PID recycling by inspecting ``/proc/<pid>/cmdline``.
+    """
+    try:
+        cmdline = Path(f"/proc/{pid}/cmdline").read_text()
+    except (FileNotFoundError, PermissionError, OSError):
+        return False
+    return "pi" in cmdline
+
+
 class _AssistantRun:
     def __init__(self, proc, scope, run_id, log_path):
         self.proc = proc
@@ -40,6 +52,7 @@ class _AssistantRun:
         self.cancelled = False
         self.finalized = False
         self.generator_done = threading.Event()
+        self.replay_done = threading.Event()
         self.accumulated_text = []
         self.accumulated_thinking = []
         self.start_time = time.monotonic()
@@ -53,6 +66,8 @@ def _stop_assistant_run(scope, timeout=5):
         return False
     run.cancelled = True
     proc = run.proc
+    if proc is None:
+        return True
     if proc.poll() is None:
         with contextlib.suppress(ProcessLookupError, OSError):
             os.kill(proc.pid, signal.SIGTERM)
@@ -413,6 +428,25 @@ def _yield_for_event(event, run):
     return None, False
 
 
+def _log_has_stdout_closed(log_path):
+    """Return True if the assistant log contains the stdout-closed sentinel."""
+    try:
+        with open(log_path, encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    event = json.loads(stripped)
+                except json.JSONDecodeError:
+                    continue
+                if event.get("type") == "_stdout_closed":
+                    return True
+    except (FileNotFoundError, OSError):
+        pass
+    return False
+
+
 def _finalize_and_save(run, scope, _app):
     """Persist the assistant response and clean up _ASSISTANT_RUNS.
 
@@ -425,6 +459,9 @@ def _finalize_and_save(run, scope, _app):
     full_text = "".join(run.accumulated_text)
     if run.cancelled:
         status = "stopped"
+    elif run.proc is None:
+        # Reattached run: infer final state from the log file when PID disappears.
+        status = "completed" if _log_has_stdout_closed(run.log_path) else "failed"
     elif run.proc.returncode != 0:
         status = "failed"
     else:
@@ -457,6 +494,26 @@ def _watcher_thread(proc, run, scope, _app):
     proc.wait()
     run.generator_done.wait()
     _finalize_and_save(run, scope, _app)
+
+
+def _reattached_watcher_thread(run, scope, pid, _app):
+    """Poll a reattached assistant PID until it exits, then finalize.
+
+    Used when a ``running`` DB row survives a server restart or worker change
+    and a new request reattaches to the existing process.
+    """
+    try:
+        while _is_pi_process_alive(pid) and not run.cancelled and not run.generator_done.is_set():
+            time.sleep(1)
+    finally:
+        # Give the reconnect stream time to replay the existing log before we
+        # finalize from the log file.
+        run.replay_done.wait(timeout=5)
+        _finalize_and_save(run, scope, _app)
+        run.generator_done.set()
+        with _assistant_runs_lock:
+            if _ASSISTANT_RUNS.get(scope) is run:
+                del _ASSISTANT_RUNS[scope]
 
 
 def _assistant_stream_generator(proc, q, run, scope, _app):
@@ -503,12 +560,15 @@ def _event_to_sse(event):
     return None
 
 
-def _read_log_frames(f, skip=0):
+def _read_log_frames(f, skip=0, run=None):
     """Parse NDJSON lines from an open file handle.
 
     Skips the first *skip* lines, then parses each non-empty line as JSON,
     normalizes it, and converts it to an SSE frame.  Stops when an event
     with ``type == "_stdout_closed"`` is encountered.
+
+    When *run* is provided, text/thinking deltas are accumulated onto the run
+    so that a reattached stream can finalize with the correct full_text.
 
     Returns a tuple ``(lines_consumed, stdout_closed, frames)`` where
     *frames* is a list of SSE frame strings.
@@ -529,6 +589,13 @@ def _read_log_frames(f, skip=0):
         except json.JSONDecodeError:
             continue
         event = _normalize_ndjson_event(event)
+        # Accumulate only for reattached runs that lost their in-memory state.
+        if run is not None and run.proc is None:
+            etype = event.get("type")
+            if etype == "text_delta":
+                run.accumulated_text.append(event.get("chunk", ""))
+            elif etype == "thinking_delta":
+                run.accumulated_thinking.append(event.get("chunk", ""))
         if event.get("type") == "_stdout_closed":
             stdout_closed = True
             break
@@ -552,9 +619,10 @@ def _assistant_stream_generator_reconnect(run, scope, _app):
 
     # Replay existing log lines
     with open(log_path, encoding="utf-8") as f:
-        lines_seen, stdout_closed, frames = _read_log_frames(f)
+        lines_seen, stdout_closed, frames = _read_log_frames(f, run=run)
     for frame in frames:
         yield frame
+    run.replay_done.set()
 
     # Tail the log while the run is active
     while True:
@@ -565,7 +633,7 @@ def _assistant_stream_generator_reconnect(run, scope, _app):
 
         if not stdout_closed:
             with open(log_path, encoding="utf-8") as f:
-                lines_seen, stdout_closed, frames = _read_log_frames(f, skip=lines_seen)
+                lines_seen, stdout_closed, frames = _read_log_frames(f, skip=lines_seen, run=run)
             if frames or stdout_closed:
                 for frame in frames:
                     yield frame
@@ -770,6 +838,18 @@ def api_assistant_stream():
 
     if active_run and active_run.run_id == run_id:
         gen = _assistant_stream_generator_reconnect(active_run, scope, _app)
+    elif not active_run and row["status"] == "running" and _is_pi_process_alive(row["pid"]):
+        # The in-memory run state is gone (server restart, different worker) but
+        # the pi process is still alive. Reattach and stream from the existing log.
+        run = _AssistantRun(None, scope, run_id, row["log_path"])
+        threading.Thread(
+            target=_reattached_watcher_thread,
+            args=(run, scope, row["pid"], _app),
+            daemon=True,
+        ).start()
+        with _assistant_runs_lock:
+            _ASSISTANT_RUNS[scope] = run
+        gen = _assistant_stream_generator_reconnect(run, scope, _app)
     else:
         # Already finalized — yield synthetic terminal event based on DB status
         def _finalized_gen():
