@@ -1,5 +1,6 @@
 """Agent spawning, limits, queue management, and watcher threads."""
 
+import contextlib
 import json
 import logging
 import os
@@ -423,10 +424,8 @@ def spawn_agent(ticket, status, agent, old_status_id=None):  # noqa: C901
         # Old session files from previous spawns are never reused without --continue.
         for f in os.listdir(session_dir):
             if f.endswith(".jsonl"):
-                try:
+                with contextlib.suppress(OSError):
                     os.remove(os.path.join(session_dir, f))
-                except OSError:
-                    pass
 
     transitions = get_transitions_from(status["id"])
     transition_parts = []
