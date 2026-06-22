@@ -1461,9 +1461,7 @@ def test_cold_spawn_no_continue(client, default_workflow, default_board):
     """Cold spawn should NOT include --continue in the pi CLI command."""
     agent = client.post(
         "/api/agents",
-        json={
-            "name": "NoContAgent", "description": "You are a no-cont agent.", "workflow_id": default_workflow["id"]
-        },
+        json={"name": "NoContAgent", "description": "You are a no-cont agent.", "workflow_id": default_workflow["id"]},
     )
     aid = json.loads(agent.data)["id"]
 
@@ -1473,9 +1471,7 @@ def test_cold_spawn_no_continue(client, default_workflow, default_board):
     )
     id1 = json.loads(s1.data)["id"]
 
-    ticket = client.post(
-        "/api/tickets", json={"title": "NoCont Ticket", "board_id": default_board["id"]}
-    )
+    ticket = client.post("/api/tickets", json={"title": "NoCont Ticket", "board_id": default_board["id"]})
     tid = json.loads(ticket.data)["id"]
 
     captured_cmd = []
@@ -1517,9 +1513,7 @@ def test_warm_spawn_omits_api_docs(client, default_workflow, default_board):
     id1 = json.loads(s1.data)["id"]
     id2 = json.loads(s2.data)["id"]
 
-    ticket = client.post(
-        "/api/tickets", json={"title": "OmitApi Ticket", "board_id": default_board["id"]}
-    )
+    ticket = client.post("/api/tickets", json={"title": "OmitApi Ticket", "board_id": default_board["id"]})
     tid = json.loads(ticket.data)["id"]
 
     # First spawn (cold) — should have API docs
@@ -1586,9 +1580,7 @@ def test_cold_spawn_cleans_old_session_files(client, default_workflow, default_b
     )
     id1 = json.loads(s1.data)["id"]
 
-    ticket = client.post(
-        "/api/tickets", json={"title": "Cleanup Ticket", "board_id": default_board["id"]}
-    )
+    ticket = client.post("/api/tickets", json={"title": "Cleanup Ticket", "board_id": default_board["id"]})
     tid = json.loads(ticket.data)["id"]
 
     # First spawn (cold)

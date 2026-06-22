@@ -276,10 +276,7 @@ Moved from "Backlog" to "Clarify".
 New comments since last update:
 - [timestamp] message
 
-API:
-- PUT http://localhost:5000/api/tickets/13 → update ticket (fields: status_id, title, body)
-- POST http://localhost:5000/api/tickets/13/comments → add comment (field: body)
-
+Previous API docs and skills are available from your session context.
 This is a new prompt, forget the goals you had from previous prompts.
 Your goal: Clarify — Check the provided ticket and ask any clarification needed.
 Allowed transitions: Clarify → Plan (status_id=86), Clarify → Clarification Needed (status_id=442)
