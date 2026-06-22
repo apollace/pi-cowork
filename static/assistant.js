@@ -214,7 +214,9 @@
 
   async function loadHistory() {
     try {
-      const res = await fetch("/api/assistant/history");
+      const boardId = getAssistantBoardId();
+      const url = "/api/assistant/history" + (boardId ? "?board_id=" + encodeURIComponent(boardId) : "");
+      const res = await fetch(url);
       const rows = await res.json();
       if (rows.length === 0) {
         clearMessages();
@@ -554,7 +556,11 @@
   async function doCompact() {
     if (!confirm("Compact conversation into a summary and clear history?")) return;
     try {
-      const res = await fetch("/api/assistant/compact", { method: "POST" });
+      const res = await fetch("/api/assistant/compact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ board_id: getAssistantBoardId() }),
+      });
       const data = await res.json();
       clearMessages();
       appendMessage("assistant", "Compacted: " + (data.summary || "(empty)"));
@@ -566,7 +572,11 @@
   async function doReset() {
     if (!confirm("Reset assistant and clear all history?")) return;
     try {
-      const res = await fetch("/api/assistant/reset", { method: "POST" });
+      const res = await fetch("/api/assistant/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ board_id: getAssistantBoardId() }),
+      });
       await res.json();
       clearMessages();
       appendMessage("assistant", "Assistant has been reset.");
