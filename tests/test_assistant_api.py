@@ -1635,3 +1635,65 @@ def test_reconnect_stream_scope_mismatch_returns_403(client, default_board):
     assert res.status_code == 403
     data = json.loads(res.data)
     assert "scope mismatch" in data["error"]
+
+
+def test_active_run_returns_running_run(client):
+    """GET /api/assistant/active-run returns the latest running run."""
+    with client.application.app_context():
+        run_db(
+            "INSERT INTO assistant_runs (board_id, status, log_path, pid) VALUES (?, 'running', ?, ?)",
+            (None, os.devnull, 12345),
+        )
+        run_id = query_db("SELECT last_insert_rowid() as id", one=True)["id"]
+
+    res = client.get("/api/assistant/active-run")
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    assert data is not None
+    assert data["id"] == run_id
+    assert data["status"] == "running"
+
+
+def test_stream_reattaches_to_running_run_when_in_memory_state_lost(client):
+    """If in-memory state is gone but the DB row is running and the PID is alive,
+    GET /api/assistant/stream reattaches and replays the existing log."""
+    import pi_cowork.assistant as assistant_mod
+
+    log_dir = os.path.join(ASSISTANT_SESSION_DIR, "runs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "run-reattach-test.log")
+    with open(log_path, "w") as f:
+        f.write('{"type":"text_delta","chunk":"Reattached"}\n')
+        f.write('{"type":"_stdout_closed"}\n')
+
+    with client.application.app_context():
+        run_db(
+            "INSERT INTO assistant_runs (board_id, status, log_path, pid) VALUES (?, 'running', ?, ?)",
+            (None, log_path, 77777),
+        )
+        run_id = query_db("SELECT last_insert_rowid() as id", one=True)["id"]
+
+    try:
+        with (
+            patch("pi_cowork.assistant._is_pi_process_alive", side_effect=[True, False]),
+            patch("pi_cowork.assistant.time.sleep", return_value=None),
+        ):
+            res = client.get(f"/api/assistant/stream?run_id={run_id}")
+    finally:
+        with assistant_mod._assistant_runs_lock:
+            assistant_mod._ASSISTANT_RUNS.pop(None, None)
+
+    assert res.status_code == 200
+    assert res.mimetype == "text/event-stream"
+    body = res.data.decode("utf-8")
+    assert "Reattached" in body
+    assert "event: done" in body
+
+    with client.application.app_context():
+        row = query_db(
+            "SELECT status, full_text FROM assistant_runs WHERE id = ?",
+            (run_id,),
+            one=True,
+        )
+    assert row["status"] == "completed"
+    assert row["full_text"] == "Reattached"
