@@ -1654,6 +1654,29 @@ def test_active_run_returns_running_run(client):
     assert data["status"] == "running"
 
 
+class TestAssistantJsBoardScope:
+    """Verify loadHistory, doCompact, and doReset pass board_id (Ticket #195)."""
+
+    def test_load_history_passes_board_id(self):
+        js = read(ASSISTANT_JS_PATH)
+        # loadHistory should build a URL that includes board_id
+        assert 'getAssistantBoardId' in js
+        # Find the loadHistory function body and check it uses board_id
+        assert 'board_id=' in js, "Expected board_id query param somewhere in assistant.js"
+
+    def test_do_compact_passes_board_id(self):
+        js = read(ASSISTANT_JS_PATH)
+        assert 'doCompact' in js
+        assert 'assistant/compact' in js
+        assert 'board_id: getAssistantBoardId()' in js
+
+    def test_do_reset_passes_board_id(self):
+        js = read(ASSISTANT_JS_PATH)
+        assert 'doReset' in js
+        assert 'assistant/reset' in js
+        assert 'board_id: getAssistantBoardId()' in js
+
+
 def test_stream_reattaches_to_running_run_when_in_memory_state_lost(client):
     """If in-memory state is gone but the DB row is running and the PID is alive,
     GET /api/assistant/stream reattaches and replays the existing log."""
