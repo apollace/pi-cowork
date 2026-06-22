@@ -1660,21 +1660,21 @@ class TestAssistantJsBoardScope:
     def test_load_history_passes_board_id(self):
         js = read(ASSISTANT_JS_PATH)
         # loadHistory should build a URL that includes board_id
-        assert 'getAssistantBoardId' in js
+        assert "getAssistantBoardId" in js
         # Find the loadHistory function body and check it uses board_id
-        assert 'board_id=' in js, "Expected board_id query param somewhere in assistant.js"
+        assert "board_id=" in js, "Expected board_id query param somewhere in assistant.js"
 
     def test_do_compact_passes_board_id(self):
         js = read(ASSISTANT_JS_PATH)
-        assert 'doCompact' in js
-        assert 'assistant/compact' in js
-        assert 'board_id: getAssistantBoardId()' in js
+        assert "doCompact" in js
+        assert "assistant/compact" in js
+        assert "board_id: getAssistantBoardId()" in js
 
     def test_do_reset_passes_board_id(self):
         js = read(ASSISTANT_JS_PATH)
-        assert 'doReset' in js
-        assert 'assistant/reset' in js
-        assert 'board_id: getAssistantBoardId()' in js
+        assert "doReset" in js
+        assert "assistant/reset" in js
+        assert "board_id: getAssistantBoardId()" in js
 
 
 def test_stream_reattaches_to_running_run_when_in_memory_state_lost(client):
