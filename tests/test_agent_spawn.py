@@ -83,6 +83,9 @@ def test_cold_spawn_uses_full_context(client, default_workflow, default_board):
     idx = captured_cmd.index("--session-dir")
     assert captured_cmd[idx + 1] == f"workspace/.pi-sessions/{aid}/ticket-{tid}"
 
+    # Cold spawn should NOT include --continue flag
+    assert "--continue" not in captured_cmd
+
     # Should record spawn time
     ticket_row = client.get(f"/api/tickets/{tid}")
     ticket_data = json.loads(ticket_row.data)
@@ -172,12 +175,12 @@ def test_warm_spawn_uses_full_context(client, default_workflow, default_board):
     assert "forget the goals you had from previous prompts" in context_msg
     assert "Your goal:" in context_msg
 
-    # Questions endpoint should be documented in warm spawn too
-    assert f"/api/tickets/{tid}/questions" in context_msg
-    assert "ask questions" in context_msg
+    # Warm spawn with --continue omits static API docs block; check continuity note instead
+    assert "Previous API docs and skills are available from your session context." in context_msg
+    assert "API:" not in context_msg  # API docs omitted on warm spawn
 
-    # Should include API section (now just 'API:')
-    assert "API:" in context_msg
+    # Warm spawn should include --continue flag in the command
+    assert "--continue" in captured_cmd
 
     # Should include done instruction at the end
     assert "add a comment to the ticket" in context_msg
@@ -403,6 +406,8 @@ def test_stale_spawn_uses_full_context(client, default_workflow, default_board):
     assert "API:" in context_msg
     assert "[Update]" not in context_msg
     assert "Description:" in context_msg
+    # Stale spawn is cold — should NOT include --continue
+    assert "--continue" not in captured_cmd
 
 
 def test_terminal_status_deletes_session(client, default_workflow, default_board):
@@ -914,8 +919,11 @@ def test_warm_spawn_prompt_structure(client, default_workflow, default_board):
     assert "forget the goals you had from previous prompts" in context_msg
     assert "Your goal:" in context_msg
 
-    # Should document the questions endpoint in warm spawn too
-    assert "/questions" in context_msg
+    # Warm spawn with --continue omits static API docs and skills blocks
+    assert "/questions" not in context_msg
+    assert "API:" not in context_msg
+    assert "Skills available" not in context_msg
+    assert "Previous API docs and skills are available from your session context." in context_msg
 
     # Warm spawn should NOT have redundant "You have been re-activated"
     assert "re-activated" not in context_msg
@@ -1383,3 +1391,249 @@ def test_spawn_agent_excludes_global_skill(client, default_workflow, default_boa
     assert "global-excluded" not in context_msg
     skill_args = [captured_cmd[i + 1] for i in range(len(captured_cmd) - 1) if captured_cmd[i] == "--skill"]
     assert not any("global-excluded" in s for s in skill_args)
+
+
+# ---------------------------------------------------------------------------
+# Session management: --continue flag and context trimming (Ticket #198)
+# ---------------------------------------------------------------------------
+
+
+def test_warm_spawn_uses_continue_flag(client, default_workflow, default_board):
+    """Warm spawn should include --continue in the pi CLI command."""
+    agent = client.post(
+        "/api/agents",
+        json={
+            "name": "ContinueAgent",
+            "description": "You are a continue agent.",
+            "workflow_id": default_workflow["id"],
+        },
+    )
+    aid = json.loads(agent.data)["id"]
+
+    s1 = client.post(
+        "/api/statuses",
+        json={"name": "ContStage1", "sort_order": 1, "agent_id": aid, "workflow_id": default_workflow["id"]},
+    )
+    s2 = client.post(
+        "/api/statuses",
+        json={"name": "ContStage2", "sort_order": 2, "agent_id": aid, "workflow_id": default_workflow["id"]},
+    )
+    id1 = json.loads(s1.data)["id"]
+    id2 = json.loads(s2.data)["id"]
+
+    ticket = client.post(
+        "/api/tickets",
+        json={"title": "Continue Ticket", "board_id": default_board["id"]},
+    )
+    tid = json.loads(ticket.data)["id"]
+
+    # First spawn (cold)
+    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
+        client.put(f"/api/tickets/{tid}", json={"status_id": id1})
+
+    # Add comment to make it warm
+    client.post(f"/api/tickets/{tid}/comments", json={"body": "Follow up"})
+    from pi_cowork.db import get_db
+
+    with client.application.app_context():
+        db = get_db()
+        db.execute("UPDATE comments SET created_at = datetime('now', '+1 minute') WHERE ticket_id = ?", (tid,))
+        db.commit()
+
+    # Second spawn (warm)
+    captured_cmd = []
+
+    def capture_popen(cmd, **kwargs):
+        class FakeProc:
+            pid = 9999
+
+        captured_cmd[:] = cmd
+        return FakeProc()
+
+    with patch("app.subprocess.Popen", side_effect=capture_popen), patch("app.os.path.isdir", return_value=True):
+        client.put(f"/api/tickets/{tid}", json={"status_id": id2})
+
+    # --continue should be present in warm spawn
+    assert "--continue" in captured_cmd
+
+
+def test_cold_spawn_no_continue(client, default_workflow, default_board):
+    """Cold spawn should NOT include --continue in the pi CLI command."""
+    agent = client.post(
+        "/api/agents",
+        json={
+            "name": "NoContAgent", "description": "You are a no-cont agent.", "workflow_id": default_workflow["id"]
+        },
+    )
+    aid = json.loads(agent.data)["id"]
+
+    s1 = client.post(
+        "/api/statuses",
+        json={"name": "NoContStage", "sort_order": 1, "agent_id": aid, "workflow_id": default_workflow["id"]},
+    )
+    id1 = json.loads(s1.data)["id"]
+
+    ticket = client.post(
+        "/api/tickets", json={"title": "NoCont Ticket", "board_id": default_board["id"]}
+    )
+    tid = json.loads(ticket.data)["id"]
+
+    captured_cmd = []
+
+    def capture_popen(cmd, **kwargs):
+        class FakeProc:
+            pid = 9999
+
+        captured_cmd[:] = cmd
+        return FakeProc()
+
+    with patch("app.subprocess.Popen", side_effect=capture_popen):
+        client.put(f"/api/tickets/{tid}", json={"status_id": id1})
+
+    # --continue should NOT be present in cold spawn
+    assert "--continue" not in captured_cmd
+
+
+def test_warm_spawn_omits_api_docs(client, default_workflow, default_board):
+    """Warm spawn with --continue should omit the API docs block from context message."""
+    agent = client.post(
+        "/api/agents",
+        json={
+            "name": "OmitApiAgent",
+            "description": "You are an omit-api agent.",
+            "workflow_id": default_workflow["id"],
+        },
+    )
+    aid = json.loads(agent.data)["id"]
+
+    s1 = client.post(
+        "/api/statuses",
+        json={"name": "OmitStage1", "sort_order": 1, "agent_id": aid, "workflow_id": default_workflow["id"]},
+    )
+    s2 = client.post(
+        "/api/statuses",
+        json={"name": "OmitStage2", "sort_order": 2, "agent_id": aid, "workflow_id": default_workflow["id"]},
+    )
+    id1 = json.loads(s1.data)["id"]
+    id2 = json.loads(s2.data)["id"]
+
+    ticket = client.post(
+        "/api/tickets", json={"title": "OmitApi Ticket", "board_id": default_board["id"]}
+    )
+    tid = json.loads(ticket.data)["id"]
+
+    # First spawn (cold) — should have API docs
+    cold_cmd = []
+
+    def cold_capture(cmd, **kwargs):
+        class FakeProc:
+            pid = 9999
+
+        cold_cmd[:] = cmd
+        return FakeProc()
+
+    with patch("app.subprocess.Popen", side_effect=cold_capture):
+        client.put(f"/api/tickets/{tid}", json={"status_id": id1})
+
+    cold_context = cold_cmd[-1]
+    assert "API:" in cold_context  # Cold spawn includes API docs
+
+    # Add comment to make it warm
+    client.post(f"/api/tickets/{tid}/comments", json={"body": "New info"})
+    from pi_cowork.db import get_db
+
+    with client.application.app_context():
+        db = get_db()
+        db.execute("UPDATE comments SET created_at = datetime('now', '+1 minute') WHERE ticket_id = ?", (tid,))
+        db.commit()
+
+    # Second spawn (warm) — should omit API docs
+    warm_cmd = []
+
+    def warm_capture(cmd, **kwargs):
+        class FakeProc:
+            pid = 9999
+
+        warm_cmd[:] = cmd
+        return FakeProc()
+
+    with patch("app.subprocess.Popen", side_effect=warm_capture), patch("app.os.path.isdir", return_value=True):
+        client.put(f"/api/tickets/{tid}", json={"status_id": id2})
+
+    warm_context = warm_cmd[-1]
+    # Warm spawn omits API docs and skills metadata blocks
+    assert "API:" not in warm_context
+    assert "Skills available" not in warm_context
+    # But should have the continuity note
+    assert "Previous API docs and skills are available from your session context." in warm_context
+
+
+def test_cold_spawn_cleans_old_session_files(client, default_workflow, default_board):
+    """Cold spawn should clean up old .jsonl session files in the session directory."""
+    agent = client.post(
+        "/api/agents",
+        json={
+            "name": "CleanupAgent",
+            "description": "You are a cleanup agent.",
+            "workflow_id": default_workflow["id"],
+        },
+    )
+    aid = json.loads(agent.data)["id"]
+
+    s1 = client.post(
+        "/api/statuses",
+        json={"name": "CleanupStage", "sort_order": 1, "agent_id": aid, "workflow_id": default_workflow["id"]},
+    )
+    id1 = json.loads(s1.data)["id"]
+
+    ticket = client.post(
+        "/api/tickets", json={"title": "Cleanup Ticket", "board_id": default_board["id"]}
+    )
+    tid = json.loads(ticket.data)["id"]
+
+    # First spawn (cold)
+    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
+        client.put(f"/api/tickets/{tid}", json={"status_id": id1})
+
+    # Simulate old session files
+    session_dir = os.path.join("workspace", ".pi-sessions", str(aid), f"ticket-{tid}")
+    old_file1 = os.path.join(session_dir, "old-session.jsonl")
+    old_file2 = os.path.join(session_dir, "another-old.jsonl")
+    keep_dir = os.path.join(session_dir, "skills", "some-skill")
+    os.makedirs(keep_dir, exist_ok=True)
+    with open(old_file1, "w") as f:
+        f.write("{}")
+    with open(old_file2, "w") as f:
+        f.write("{}")
+    assert os.path.exists(old_file1)
+    assert os.path.exists(old_file2)
+
+    # Make last_spawned_at stale so next spawn is cold
+    from pi_cowork.db import get_db
+
+    with client.application.app_context():
+        db = get_db()
+        db.execute("UPDATE tickets SET agent_last_spawned_at = datetime('now', '-2 hours') WHERE id = ?", (tid,))
+        db.commit()
+
+    # Second spawn (cold because stale) — should clean old .jsonl files
+    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)), patch("app.os.path.isdir", return_value=True):
+        from pi_cowork.agents import try_spawn_or_queue
+
+        with client.application.app_context():
+            db = get_db()
+            ticket_row = db.execute("SELECT * FROM tickets WHERE id = ?", (tid,)).fetchone()
+            status_row = db.execute("SELECT * FROM statuses WHERE id = ?", (id1,)).fetchone()
+            agent_row = db.execute("SELECT * FROM agents WHERE id = ?", (aid,)).fetchone()
+            try_spawn_or_queue(dict(ticket_row), dict(status_row), dict(agent_row))
+
+    # Old .jsonl files should be removed
+    assert not os.path.exists(old_file1)
+    assert not os.path.exists(old_file2)
+    # Non-jsonl dirs (like skills) should be untouched
+    assert os.path.isdir(keep_dir)
+
+    # Cleanup
+    import shutil
+
+    shutil.rmtree(session_dir, ignore_errors=True)

@@ -418,6 +418,16 @@ def spawn_agent(ticket, status, agent, old_status_id=None):  # noqa: C901
         elapsed = (now - last_spawned).total_seconds()
         is_warm = elapsed < get_config("warm_spawn_threshold")
 
+    if not is_warm:
+        # Cold spawn: clean up old .jsonl session files to prevent accumulation.
+        # Old session files from previous spawns are never reused without --continue.
+        for f in os.listdir(session_dir):
+            if f.endswith(".jsonl"):
+                try:
+                    os.remove(os.path.join(session_dir, f))
+                except OSError:
+                    pass
+
     transitions = get_transitions_from(status["id"])
     transition_parts = []
     has_gates = False
@@ -548,17 +558,18 @@ def spawn_agent(ticket, status, agent, old_status_id=None):  # noqa: C901
             change_line = f'Still in "{status["name"]}".'
             goal_instruction = f"Continue your goal: {goal_line}"
 
+        # Warm spawn with --continue: omit static API docs and skills metadata blocks
+        # since pi already has them from the previous session. Keep knowledge block
+        # (entries may have been added/updated) and add a continuity note.
+        warm_note = "Previous API docs and skills are available from your session context."
         context_msg = f"""[Update] Ticket #{ticket_id}: {ticket["title"]}
 {board_ctx}{git_info}
 {change_line}
 
 New comments since last update:
 {new_comments_block}
-
-API:
-{api_docs}
 {knowledge_block}
-{skills_block}
+{warm_note}
 {goal_instruction}
 {transitions_line}
 {done_instruction}"""
@@ -619,6 +630,8 @@ After completing your task, write a comment on the ticket summarizing what you d
         "--session-dir",
         session_dir,
     ]
+    if is_warm:
+        cmd += ["--continue"]
     if effective_thinking:
         cmd += ["--thinking", effective_thinking]
     if effective_model:
