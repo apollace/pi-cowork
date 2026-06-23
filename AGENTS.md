@@ -222,7 +222,7 @@ Logs are retained forever. No size cap.
 When a ticket is moved to a status with an agent assigned, or when a ticket is created in such a status:
 
 1. `pi` is spawned as a background subprocess in the **board's** `working_directory`
-2. Command: `pi --system-prompt "<prompt>" --print --session-dir <dir> [--thinking <level>] [--model <model>] [--skill <skill-dir> ...] "<context>"`
+2. Command: `pi --system-prompt "<prompt>" --print --session-dir <dir> [--continue] [--thinking <level>] [--model <model>] [--skill <skill-dir> ...] "<context>"`  — `--continue` is added on warm spawns to resume the previous session
 3. `--thinking` and `--model` are only included if an override is active at any level; resolution order: ticket override → status override → agent setting → `pi` CLI built-in defaults (lowest). Each field resolves independently.
 4. **Skills**: Built-in/system skills are automatically included for all agents unless excluded. Effective skills are computed as `all_available_skills(workflow_id) - excluded_names`, where `all_available_skills` includes built-in, global, and workflow-scoped skills. The full skill package directory is copied from `{skills_folder_path}/{workflow_id}/{name}/` (with `{skills_folder_path}/global/{name}/` fallback, then built-in) into `{session_dir}/skills/{name}/`, and `--skill {session_dir}/skills/{name}` is appended to the `pi` CLI command for each skill. When no skills are configured, `--skill` is not passed, preserving pi's default behavior. If a referenced skill directory is missing, a warning comment is posted on the ticket and the skill is skipped.
 5. The agent context message lists skill names and descriptions (read from each package's `SKILL.md` YAML frontmatter) under a "Skills available to you:" block.
@@ -276,10 +276,7 @@ Moved from "Backlog" to "Clarify".
 New comments since last update:
 - [timestamp] message
 
-API:
-- PUT http://localhost:5000/api/tickets/13 → update ticket (fields: status_id, title, body)
-- POST http://localhost:5000/api/tickets/13/comments → add comment (field: body)
-
+Previous API docs and skills are available from your session context.
 This is a new prompt, forget the goals you had from previous prompts.
 Your goal: Clarify — Check the provided ticket and ask any clarification needed.
 Allowed transitions: Clarify → Plan (status_id=86), Clarify → Clarification Needed (status_id=442)
@@ -296,9 +293,7 @@ Still in "Clarify".
 New comments since last update:
 - [timestamp] message
 
-API:
-- PUT ... POST ...
-
+Previous API docs and skills are available from your session context.
 Continue your goal: Clarify — Check the provided ticket and ask any clarification needed.
 Allowed transitions: ...
 When done: add a comment to the ticket summarizing your work, then you're finished.
@@ -308,7 +303,9 @@ When done: add a comment to the ticket summarizing your work, then you're finish
 - Goal and transitions appear **at the end** (recency bias — LLMs attend most to the tail)
 - "Forget previous goals" on every new-status spawn, "Continue your goal" on same-status warm spawns
 - System prompt is stable across spawns — no duplicated status info fighting with the context
-- API endpoints are trimmed to only what the agent needs (PUT ticket, POST comment)
+- API endpoints are trimmed to only what the agent needs (PUT ticket, POST comment). **Omitted on warm spawns** since `--continue` gives pi access from the previous session
+- Skills metadata block included on cold spawns, omitted on warm spawns (skills don't change between spawns)
+- Knowledge entries included on both cold and warm spawns (entries may have been updated between spawns)
 - Quality gates annotated inline as `⚠️gate` on transitions
 - When gates exist, PUT docs mention `gate_pending` behavior
 
@@ -705,7 +702,7 @@ Each workflow has a `git_enabled` boolean flag (default `False`). When enabled:
 - **Board context in prompts** — agents receive board name and board_id so they know which board they're operating on. No workflow_id is included (not needed for API calls).
 - **Status goals** — each status defines a `goal` that appears in the `Your goal:` / `Continue your goal:` directive at the end of the context message. No goal falls back to just the status name.
 - **Quality gates in prompts** — when a transition has quality gates, it's annotated inline with `⚠️gate` and the PUT API docs mention `gate_pending` behavior. No separate warning paragraphs.
-- **Session reuse** — agents reuse sessions per (agent, ticket) pair to cache tokens. Sessions stored under `{working_dir}/.pi-sessions/<agent-id>/`.
+- **Session reuse** — agents reuse sessions per (agent, ticket) pair to cache tokens. Sessions stored under `{working_dir}/.pi-sessions/<agent-id>/`. **Warm spawns** (session dir exists AND last spawn < `warm_spawn_threshold`) pass `--continue` to pi, resuming the previous session so the agent retains conversation context. **Cold spawns** (first time, stale session, or session dir missing) start a fresh session. Cold spawns also clean up old `.jsonl` session files in the session directory to prevent accumulation. Warm spawns with `--continue` omit static API docs and skills metadata blocks from the context message (pi already has them from the previous session), adding a continuity note instead. Knowledge entries are still included on warm spawns since they may have been updated.
 - **Quality gates** — configurable per status transition (from, to pair). Multiple gates are ANDed (all must pass). CLI gates run automatically; manual gates require human approval. Agent spawning is blocked while any gate review is pending. Rejection of manual gates re-triggers the agent with feedback. **CLI gate failure also re-triggers the agent in the current status** with the failure comment as warm-spawn context (mirrors the manual rejection path; the agent prompt already includes `⚠️ Gate required; stop if blocked.` annotations on transitions so the agent knows to fix the root cause before retrying). Orphaned gate reviews are cleaned up when the ticket moves to an unrelated status.
 - **Assistant API endpoints** — the assistant also supports per-endpoint API doc selection via the `assistant_config.api_endpoints` column. Unlike agents (which default to 3 endpoints), the assistant defaults to ALL registry endpoints (`build_assistant_api_docs`). The settings UI loads the same `/api/endpoint-registry` endpoint and defaults all checkboxes to selected; saving with all selected sends `null` to use the broad default.
 - **Board Context in Assistant** — the global ✨ assistant accepts an optional `board_id` parameter in its API (`/api/assistant/chat`, `/api/assistant/history`, `/api/assistant/compact`, `/api/assistant/reset`). When `board_id` is provided, it uses an isolated session per board (session dir: `{board.working_directory}/.pi-sessions/assistant-board-{board_id}`). The `board_assistant.js` and its dedicated panel/bubble UI have been removed from `board.html` — instead, the global assistant (in `base.html` + `assistant.js`) serves all pages. API endpoints remain backward-compatible (no `board_id` = global session). **Saved prompts** — global reusable prompt snippets stored in `assistant_saved_prompts` (columns: `id`, `name` UNIQUE, `prompt_text`, `sort_order`, `created_at`). Configured in Settings UI under the Assistant category. Rendered as pill buttons above the chat input in the global assistant panel (`base.html` + `assistant.js`). Clicking a pill injects `prompt_text` into the input field (not auto-sent). API: `GET/POST /api/assistant/saved-prompts`, `PUT/DELETE /api/assistant/saved-prompts/<id>`.
