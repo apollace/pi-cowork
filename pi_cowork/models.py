@@ -10,7 +10,7 @@ import logging
 import os
 import sqlite3
 import subprocess
-from datetime import UTC
+from datetime import UTC, datetime
 
 from pi_cowork.db import query_db, row_to_dict, run_db
 from pi_cowork.events import COMMENT_ADDED, TICKET_CREATED, bus
@@ -21,6 +21,49 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Comments
 # ---------------------------------------------------------------------------
+
+
+def compute_agent_run_elapsed(run):
+    """Return elapsed seconds for an agent run dict or row.
+
+    - Running/failed-without-completed_at: now - started_at
+    - completed/failed with completed_at: completed_at - started_at
+    - Returns 0 if timestamps are missing/malformed.
+    """
+    if isinstance(run, dict):
+        started_at = run.get("started_at")
+        completed_at = run.get("completed_at")
+    else:
+        keys = list(run.keys())
+        started_at = run["started_at"] if "started_at" in keys else None  # noqa: SIM401
+        completed_at = run["completed_at"] if "completed_at" in keys else None  # noqa: SIM401
+
+    if not started_at:
+        return 0
+
+    try:
+        started_dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return 0
+
+    if started_dt.tzinfo is None:
+        started_dt = started_dt.replace(tzinfo=UTC)
+
+    if completed_at:
+        try:
+            completed_dt = datetime.fromisoformat(completed_at.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            completed_dt = None
+        if completed_dt:
+            if completed_dt.tzinfo is None:
+                completed_dt = completed_dt.replace(tzinfo=UTC)
+            elapsed = int((completed_dt - started_dt).total_seconds())
+            return max(0, elapsed)
+
+    # For running (or failed without completed_at) use current time
+    now = datetime.now(UTC)
+    elapsed = int((now - started_dt).total_seconds())
+    return max(0, elapsed)
 
 
 def get_comments(ticket_id):

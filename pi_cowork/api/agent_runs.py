@@ -10,7 +10,12 @@ from flask import Blueprint, jsonify, request, stream_with_context
 
 from pi_cowork import agents as _agents_mod
 from pi_cowork.db import query_db, row_to_dict, run_db
-from pi_cowork.models import add_agent_feedback, add_comment, is_feedback_capture_enabled
+from pi_cowork.models import (
+    add_agent_feedback,
+    add_comment,
+    compute_agent_run_elapsed,
+    is_feedback_capture_enabled,
+)
 from pi_cowork.system_logs import add_log
 
 agent_runs_bp = Blueprint("agent_runs", __name__)
@@ -31,7 +36,7 @@ def api_ticket_agent_runs(ticket_id):
     """,
         (ticket_id,),
     )
-    return jsonify([row_to_dict(r) for r in rows])
+    return jsonify([{**row_to_dict(r), "elapsed_seconds": compute_agent_run_elapsed(r)} for r in rows])
 
 
 @agent_runs_bp.route("/api/agent_runs/<int:run_id>/log", methods=["GET"])
@@ -65,7 +70,7 @@ def api_running_agent_runs():
     """,
         (board_id,),
     )
-    return jsonify([row_to_dict(r) for r in rows])
+    return jsonify([{**row_to_dict(r), "elapsed_seconds": compute_agent_run_elapsed(r)} for r in rows])
 
 
 @agent_runs_bp.route("/api/agent_runs/<int:run_id>/kill", methods=["POST"])

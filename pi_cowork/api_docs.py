@@ -121,7 +121,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/tickets/{ticket_id}/agent_runs",
         "label": "list agent runs for ticket",
         "doc_lines": [
-            "- GET {base_url}/api/tickets/{ticket_id}/agent_runs → list agent runs for ticket",
+            (
+                "- GET {base_url}/api/tickets/{ticket_id}/agent_runs → list agent runs "
+                "for ticket (includes elapsed_seconds)"
+            ),
         ],
     },
     {
@@ -1280,7 +1283,10 @@ ENDPOINT_REGISTRY = [
         "path_template": "/api/running_agent_runs",
         "label": "list currently running agent runs",
         "doc_lines": [
-            ("- GET {base_url}/api/running_agent_runs → list currently running agent runs."),
+            (
+                "- GET {base_url}/api/running_agent_runs → list currently running agent runs "
+                "(query: board_id; includes elapsed_seconds)."
+            ),
         ],
     },
     {
