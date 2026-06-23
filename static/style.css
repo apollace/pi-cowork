@@ -2034,6 +2034,7 @@ textarea.edit-input { resize: vertical; min-height: 2.5rem; }
 .badge.run-running { background: #dbeafe22; color: #2563eb; border: 1px solid #2563eb44; }
 .badge.run-completed { background: #dcfce722; color: #16a34a; border: 1px solid #16a34a44; }
 .badge.run-failed { background: #fef2f222; color: #dc2626; border: 1px solid #dc262644; }
+.badge.run-elapsed { font-variant-numeric: tabular-nums; min-width: 3.2rem; text-align: center; }
 
 /* ── Questions ── */
 .questions-section {

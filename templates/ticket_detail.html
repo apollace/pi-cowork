@@ -685,6 +685,30 @@
     }
   }
 
+  function formatElapsedFromSeconds(totalSeconds) {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    const parts = [];
+    if (h) parts.push(h + 'h');
+    if (m || h) parts.push(m + 'm');
+    parts.push(s + 's');
+    return parts.join(' ');
+  }
+
+  function updateRunElapsedBadges() {
+    document.querySelectorAll('.run-elapsed[data-started-at]').forEach(function(badge) {
+      const startedAt = badge.dataset.startedAt;
+      if (!startedAt) return;
+      const started = new Date(startedAt);
+      const now = new Date();
+      const seconds = Math.max(0, Math.floor((now - started) / 1000));
+      badge.textContent = formatElapsedFromSeconds(seconds);
+    });
+  }
+
+  setInterval(updateRunElapsedBadges, 1000);
+
   async function loadAgentRuns() {
     const res = await fetch('/api/tickets/{{ ticket.id }}/agent_runs');
     const runs = await res.json();
@@ -741,12 +765,17 @@
         ? `<span class="badge muted">${escapeHtml(run.status_name)}</span>`
         : '';
 
+      const elapsedBadge = run.status === 'running'
+        ? `<span class="badge muted run-elapsed" data-started-at="${escapeHtml(run.started_at || '')}">${formatElapsedFromSeconds(run.elapsed_seconds || 0)}</span>`
+        : `<span class="badge muted run-elapsed">${formatElapsedFromSeconds(run.elapsed_seconds || 0)}</span>`;
+
       card.innerHTML = `
         <div class="agent-run-header">
           <div class="agent-run-info">
             <span class="agent-run-name">#${run.id} ${escapeHtml(run.agent_name)}</span>
             ${statusNameBadge}
             <span class="badge ${statusClass}">${statusIcon} ${run.status}</span>
+            ${elapsedBadge}
             ${exitInfo}
           </div>
           <div class="agent-run-meta">
