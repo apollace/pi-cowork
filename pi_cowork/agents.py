@@ -406,12 +406,24 @@ def spawn_agent(ticket, status, agent, old_status_id=None):  # noqa: C901
         if refreshed:
             ticket = row_to_dict(refreshed)
 
+    # Check for existing .jsonl session files BEFORE creating the directory.
+    # The mkdir below creates the directory unconditionally, so directory
+    # existence alone cannot distinguish first-spawn from subsequent-spawn.
+    # We check for .jsonl session files — these only exist if THIS specific
+    # agent previously ran a pi session for this ticket. This prevents a
+    # false warm-spawn classification when a different agent was spawned
+    # for the same ticket (agent_last_spawned_at is ticket-level, not
+    # per-agent).
+    has_prev_session = False
+    if os.path.isdir(session_dir):
+        has_prev_session = any(f.endswith(".jsonl") for f in os.listdir(session_dir))
+
     Path(session_dir).mkdir(parents=True, exist_ok=True)
     Path(log_dir).mkdir(parents=True, exist_ok=True)
 
     last_spawned = ticket.get("agent_last_spawned_at")
     is_warm = False
-    if os.path.isdir(session_dir) and last_spawned is not None:
+    if has_prev_session and last_spawned is not None:
         if isinstance(last_spawned, str):
             last_spawned = datetime.fromisoformat(last_spawned.replace("Z", "+00:00"))
             if last_spawned.tzinfo is None:

@@ -3,6 +3,18 @@ import os
 from unittest.mock import MagicMock, patch
 
 
+def _create_dummy_session(aid, tid):
+    """Create a dummy .jsonl session file so warm-spawn detection works in tests.
+
+    Real pi runs create .jsonl files in the session dir. Mocked Popen doesn't,
+    so we create a placeholder to simulate a previous session for this agent.
+    """
+    session_dir = os.path.join("workspace", ".pi-sessions", str(aid), f"ticket-{tid}")
+    os.makedirs(session_dir, exist_ok=True)
+    with open(os.path.join(session_dir, "session.jsonl"), "w") as f:
+        f.write('{"type":"message"}\n')
+
+
 def test_cold_spawn_uses_full_context(client, default_workflow, default_board):
     """No session dir -> full context message, lean system prompt."""
     agent = client.post(
@@ -138,6 +150,9 @@ def test_warm_spawn_uses_full_context(client, default_workflow, default_board):
     with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
         client.put(f"/api/tickets/{tid}", json={"status_id": id1})
 
+    # Simulate a real pi session file for warm-spawn detection
+    _create_dummy_session(aid, tid)
+
     # Add a new comment after first spawn
     client.post(f"/api/tickets/{tid}/comments", json={"body": "New instruction from human"})
 
@@ -233,6 +248,9 @@ def test_warm_spawn_status_change_says_moved(client, default_workflow, default_b
     with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
         client.put(f"/api/tickets/{tid}", json={"status_id": id1})
 
+    # Simulate a real pi session file for warm-spawn detection
+    _create_dummy_session(aid, tid)
+
     # Add comment to trigger new comments
     client.post(f"/api/tickets/{tid}/comments", json={"body": "New stuff"})
 
@@ -297,6 +315,9 @@ def test_warm_spawn_same_status_says_still(client, default_workflow, default_boa
     # First spawn (cold)
     with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
         client.put(f"/api/tickets/{tid}", json={"status_id": id1})
+
+    # Simulate a real pi session file for warm-spawn detection
+    _create_dummy_session(aid, tid)
 
     # Add a new comment
     client.post(f"/api/tickets/{tid}/comments", json={"body": "Follow-up"})
@@ -379,6 +400,10 @@ def test_stale_spawn_uses_full_context(client, default_workflow, default_board):
     # Move to id1 first (cold spawn)
     with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
         client.put(f"/api/tickets/{tid}", json={"status_id": id1})
+
+    # Simulate a real pi session file so the warm-spawn check reaches the
+    # staleness test (without .jsonl files, it would be cold for a different reason)
+    _create_dummy_session(aid, tid)
 
     # Set an old last_spawned_at
     from pi_cowork.db import get_db
@@ -882,6 +907,9 @@ def test_warm_spawn_prompt_structure(client, default_workflow, default_board):
     # First spawn (cold)
     with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
         client.put(f"/api/tickets/{tid}", json={"status_id": id1})
+
+    # Simulate a real pi session file for warm-spawn detection
+    _create_dummy_session(aid, tid)
 
     # Add comment after first spawn
     client.post(f"/api/tickets/{tid}/comments", json={"body": "New comment"})
@@ -1431,6 +1459,9 @@ def test_warm_spawn_uses_continue_flag(client, default_workflow, default_board):
     with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
         client.put(f"/api/tickets/{tid}", json={"status_id": id1})
 
+    # Simulate a real pi session file for warm-spawn detection
+    _create_dummy_session(aid, tid)
+
     # Add comment to make it warm
     client.post(f"/api/tickets/{tid}/comments", json={"body": "Follow up"})
     from pi_cowork.db import get_db
@@ -1532,6 +1563,9 @@ def test_warm_spawn_omits_api_docs(client, default_workflow, default_board):
     cold_context = cold_cmd[-1]
     assert "API:" in cold_context  # Cold spawn includes API docs
 
+    # Simulate a real pi session file for warm-spawn detection
+    _create_dummy_session(aid, tid)
+
     # Add comment to make it warm
     client.post(f"/api/tickets/{tid}/comments", json={"body": "New info"})
     from pi_cowork.db import get_db
@@ -1629,3 +1663,87 @@ def test_cold_spawn_cleans_old_session_files(client, default_workflow, default_b
     import shutil
 
     shutil.rmtree(session_dir, ignore_errors=True)
+
+
+def test_different_agent_first_spawn_is_cold(client, default_workflow, default_board):
+    """First spawn of agent B on a ticket where agent A was previously spawned.
+
+    Regression test for a bug where agent_last_spawned_at is ticket-level
+    (shared across agents) and the session dir was created by mkdir before
+    the warm/cold check. This caused agent B's first spawn to be incorrectly
+    classified as warm, omitting API docs from the context message even though
+    agent B had no previous session to pull them from.
+    """
+    # Agent A (e.g. Developer)
+    agent_a = client.post(
+        "/api/agents",
+        json={
+            "name": "AgentA",
+            "description": "You are agent A.",
+            "workflow_id": default_workflow["id"],
+        },
+    )
+    aid_a = json.loads(agent_a.data)["id"]
+
+    # Agent B (e.g. Reviewer) — different agent, same ticket
+    agent_b = client.post(
+        "/api/agents",
+        json={
+            "name": "AgentB",
+            "description": "You are agent B.",
+            "workflow_id": default_workflow["id"],
+        },
+    )
+    aid_b = json.loads(agent_b.data)["id"]
+
+    s_a = client.post(
+        "/api/statuses",
+        json={"name": "StageA", "sort_order": 1, "agent_id": aid_a, "workflow_id": default_workflow["id"]},
+    )
+    s_b = client.post(
+        "/api/statuses",
+        json={"name": "StageB", "sort_order": 2, "agent_id": aid_b, "workflow_id": default_workflow["id"]},
+    )
+    id_a = json.loads(s_a.data)["id"]
+    id_b = json.loads(s_b.data)["id"]
+
+    ticket = client.post(
+        "/api/tickets",
+        json={"title": "Multi-Agent Ticket", "body": "Test body", "board_id": default_board["id"]},
+    )
+    tid = json.loads(ticket.data)["id"]
+
+    # Spawn agent A (cold spawn)
+    with patch("app.subprocess.Popen", return_value=MagicMock(pid=9999)):
+        client.put(f"/api/tickets/{tid}", json={"status_id": id_a})
+
+    # Agent A's session dir now has a .jsonl file (simulated)
+    _create_dummy_session(aid_a, tid)
+
+    # Now move to agent B's status — this is agent B's FIRST spawn for this ticket.
+    # agent_last_spawned_at is set from agent A's recent spawn, but agent B has
+    # no .jsonl session files. This should be a COLD spawn with full API docs.
+    captured_cmd = []
+
+    def capture_popen(cmd, **kwargs):
+        class FakeProc:
+            pid = 9999
+
+        captured_cmd[:] = cmd
+        return FakeProc()
+
+    with patch("app.subprocess.Popen", side_effect=capture_popen):
+        client.put(f"/api/tickets/{tid}", json={"status_id": id_b})
+
+    context_msg = captured_cmd[-1]
+
+    # Cold spawn: should include full context with API docs
+    assert "API:" in context_msg, "Agent B's first spawn should include API docs (cold spawn)"
+    assert "Description:" in context_msg, "Cold spawn should include ticket description"
+    assert "[Update]" not in context_msg, "Agent B's first spawn should not be a warm spawn update"
+    assert "Previous API docs and skills are available from your session context." not in context_msg, (
+        "Agent B has no previous session — should not claim API docs are available"
+    )
+
+    # Should NOT include --continue (no previous session for agent B)
+    assert "--continue" not in captured_cmd
