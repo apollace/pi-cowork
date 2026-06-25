@@ -290,6 +290,11 @@
     if (type === "text_delta") {
       const chunk = payload.chunk || "";
       placeholder.rawText += chunk;
+      // Reset reconnecting/thinking label once real content arrives
+      const thinkingEl = placeholder.msg.querySelector(".thinking-indicator");
+      if (thinkingEl) {
+        thinkingEl.textContent = "Generating…";
+      }
       const span = document.createElement("span");
       span.textContent = chunk;
       placeholder.body.appendChild(span);
@@ -297,6 +302,11 @@
     } else if (type === "thinking_delta") {
       const chunk = payload.chunk || "";
       placeholder.thinkingText += chunk;
+      // Reset reconnecting label once real content arrives
+      const thinkingEl = placeholder.msg.querySelector(".thinking-indicator");
+      if (thinkingEl) {
+        thinkingEl.textContent = "Thinking…";
+      }
       let block = placeholder.msg.querySelector(".assistant-thinking-block");
       if (!block) {
         block = document.createElement("div");
@@ -326,13 +336,18 @@
         badge.textContent = (payload.name || "tool") + " ✅";
       }
     } else if (type === "done") {
-      if (payload.full_text) {
+      // Only use full_text from the server when no text was streamed live
+      // (e.g. synthetic reconnect done event). When rawText already has
+      // content from text_delta events, keep it — it is authoritative and
+      // the server's full_text may be truncated if the generator stopped
+      // consuming before the process finished.
+      if (payload.full_text && !placeholder.rawText) {
         placeholder.rawText = payload.full_text;
       }
     } else if (type === "error") {
       placeholder.error = payload.error || "Unknown error";
     } else if (type === "stopped") {
-      if (payload.partial) {
+      if (payload.partial && !placeholder.rawText) {
         placeholder.rawText = payload.partial;
       }
       placeholder.stopped = true;
@@ -374,6 +389,11 @@
 
   async function reconnectToRun(runId) {
     const placeholder = createStreamPlaceholder();
+    // Show a reconnecting label while the log is replayed
+    const thinkingEl = placeholder.msg.querySelector(".thinking-indicator");
+    if (thinkingEl) {
+      thinkingEl.textContent = "Reconnecting…";
+    }
     placeholder.timerInterval = setInterval(function () {
       placeholder.timer.textContent = formatDuration(placeholder.startTime);
     }, 1000);

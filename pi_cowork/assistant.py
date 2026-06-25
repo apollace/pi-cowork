@@ -126,6 +126,8 @@ def _reader_thread(proc, q, log_path):
     """Read NDJSON lines from proc.stdout and push parsed events to queue.
 
     Also writes every raw NDJSON line to *log_path* so reconnect can replay.
+    After stdout closes, captures stderr and appends it as a ``_stderr`` line
+    to the log for diagnostics.
     """
     try:
         with open(log_path, "w", encoding="utf-8") as log_f:
@@ -146,6 +148,14 @@ def _reader_thread(proc, q, log_path):
         try:
             with open(log_path, "a", encoding="utf-8") as log_f:
                 log_f.write(json.dumps(sentinel) + "\n")
+                # Capture stderr for diagnostics (non-fatal if read fails)
+                try:
+                    stderr_text = proc.stderr.read().strip() if hasattr(proc.stderr, "read") else ""
+                except Exception:
+                    stderr_text = ""
+                if stderr_text:
+                    stderr_event = {"type": "_stderr", "text": stderr_text}
+                    log_f.write(json.dumps(stderr_event) + "\n")
                 log_f.flush()
         except OSError:
             pass
@@ -379,7 +389,9 @@ def _poll_queue_event(proc, q, run, last_keepalive):
         except queue.Empty:
             if proc.poll() is not None:
                 returncode = proc.wait()
-                stderr_text = proc.stderr.read().strip() if hasattr(proc.stderr, "read") else ""
+                # stderr may have been consumed by _reader_thread; read from log
+                _, _, stderr_text = _reconstruct_text_from_log(run.log_path)
+                stderr_text = stderr_text.strip()
                 if run.cancelled:
                     event = {"type": "stopped"}
                 elif returncode != 0:
@@ -395,7 +407,9 @@ def _poll_queue_event(proc, q, run, last_keepalive):
 def _process_stdout_closed(proc, run):
     """Wait for the assistant process to finish and return a terminal event."""
     returncode = proc.wait()
-    stderr_text = proc.stderr.read().strip() if hasattr(proc.stderr, "read") else ""
+    # stderr may have been consumed by _reader_thread; read from log
+    _, _, stderr_text = _reconstruct_text_from_log(run.log_path)
+    stderr_text = stderr_text.strip()
     if run.cancelled:
         return {"type": "stopped"}
     elif returncode != 0:
@@ -449,16 +463,63 @@ def _log_has_stdout_closed(log_path):
     return False
 
 
+def _reconstruct_text_from_log(log_path):
+    """Parse the NDJSON log file and return the complete assistant text.
+
+    Normalises each event via ``_normalize_ndjson_event`` and concatenates
+    all ``text_delta`` chunks.  The log file is the source of truth because
+    ``_reader_thread`` writes every stdout line regardless of whether the
+    SSE generator is still consuming the queue (e.g. after a browser
+    disconnect).
+
+    Returns ``(text, thinking, stderr)`` — the concatenated text-delta
+    chunks, thinking-delta chunks, and any captured stderr string.
+    """
+    text_parts = []
+    thinking_parts = []
+    stderr_text = ""
+    try:
+        with open(log_path, encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    event = json.loads(stripped)
+                except json.JSONDecodeError:
+                    continue
+                if event.get("type") == "_stderr":
+                    stderr_text = event.get("text", "")
+                    continue
+                event = _normalize_ndjson_event(event)
+                etype = event.get("type")
+                if etype == "text_delta":
+                    text_parts.append(event.get("chunk", ""))
+                elif etype == "thinking_delta":
+                    thinking_parts.append(event.get("chunk", ""))
+    except (FileNotFoundError, OSError):
+        pass
+    return "".join(text_parts), "".join(thinking_parts), stderr_text
+
+
 def _finalize_and_save(run, scope, _app):
     """Persist the assistant response and clean up _ASSISTANT_RUNS.
 
     Idempotent: guarded by ``run.finalized``.
+
+    ``full_text`` is reconstructed from the log file (which always contains
+    the complete output) rather than ``run.accumulated_text`` (which is only
+    populated while the SSE generator is actively consuming events and may
+    be incomplete after a browser disconnect).
     """
     if run.finalized:
         return
     run.finalized = True
 
-    full_text = "".join(run.accumulated_text)
+    log_text, log_thinking, log_stderr = _reconstruct_text_from_log(run.log_path)
+    # Prefer log-file reconstruction (complete); fall back to accumulated_text
+    # only when the log file is missing/unreadable but events were consumed.
+    full_text = log_text or "".join(run.accumulated_text)
     if run.cancelled:
         status = "stopped"
     elif run.proc is None:
@@ -468,6 +529,25 @@ def _finalize_and_save(run, scope, _app):
         status = "failed"
     else:
         status = "completed"
+
+    # Diagnostics: warn when the process exited cleanly but produced no text
+    # or much less text than thinking (possible early-exit / model issue).
+    if status == "completed" and not full_text:
+        logger.warning(
+            "Assistant run %s completed with empty full_text (thinking=%d chars, stderr=%r)",
+            run.run_id,
+            len(log_thinking),
+            log_stderr[:200],
+        )
+    elif status == "completed" and full_text and log_thinking and len(full_text) < len(log_thinking) // 10:
+        logger.warning(
+            "Assistant run %s completed with very short text vs thinking (text=%d chars, thinking=%d chars)",
+            run.run_id,
+            len(full_text),
+            len(log_thinking),
+        )
+    if log_stderr and status == "failed":
+        logger.warning("Assistant run %s failed with stderr: %s", run.run_id, log_stderr[:500])
 
     with _app.app_context():
         run_db(
@@ -570,7 +650,10 @@ def _read_log_frames(f, skip=0, run=None):
     with ``type == "_stdout_closed"`` is encountered.
 
     When *run* is provided, text/thinking deltas are accumulated onto the run
-    so that a reattached stream can finalize with the correct full_text.
+    so that a reattached stream (``run.proc is None``) can finalize with the
+    correct full_text.  In-memory reconnect runs (``run.proc is not None``)
+    already have ``accumulated_text`` from the original generator, so we skip
+    accumulation to avoid duplication.
 
     Returns a tuple ``(lines_consumed, stdout_closed, frames)`` where
     *frames* is a list of SSE frame strings.
