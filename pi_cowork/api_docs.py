@@ -6,6 +6,7 @@ set).  ``build_api_docs()`` formats the selected endpoints into the text block
 that gets injected into the agent's context message.
 """
 
+from pi_cowork.auth import is_auth_enabled
 from pi_cowork.config import get_config
 
 # ---------------------------------------------------------------------------
@@ -1432,6 +1433,13 @@ def build_api_docs(selected_keys, ticket_id, base_url=None, has_gates=False, boa
                 lines[i] += gate_note
                 break
 
+    # Conditional authentication note
+    if is_auth_enabled():
+        lines.append(
+            "When authentication is enabled, API requests from agents must include an "
+            "`Authorization: Bearer <api_token>` header. Browser sessions are accepted automatically."
+        )
+
     lines.append(
         "IMPORTANT: You must NOT call any gate review, notification resolve, or\n"
         "other approval/rejection endpoints. Quality gates exist for human oversight.\n"
@@ -1466,6 +1474,11 @@ def build_assistant_api_docs(selected_keys, base_url=None):
 
     keys = selected_keys if selected_keys else ALL_ENDPOINT_KEYS
     lines = ["## API Documentation"]
+    if is_auth_enabled():
+        lines.append(
+            "When authentication is enabled, include an `Authorization: Bearer <api_token>` "
+            "header with every API request, or rely on an active browser session."
+        )
     for key in keys:
         entry = _REGISTRY_MAP.get(key)
         if entry is None:

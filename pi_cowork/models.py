@@ -1800,6 +1800,15 @@ def mark_feedback_consumed(feedback_id, consumed_by_run_id):
 # ---------------------------------------------------------------------------
 
 
+def get_user_by_id(user_id):
+    """Return a user row by id, or None if not found."""
+    return query_db(
+        "SELECT id, username, password_hash, created_at, updated_at FROM users WHERE id = ?",
+        (user_id,),
+        one=True,
+    )
+
+
 def get_user_by_username(username):
     """Return a user row by username, or None if not found."""
     return query_db(
