@@ -15,6 +15,22 @@
 
   const savedPromptsEl = document.getElementById("assistant-saved-prompts");
 
+  const SCROLL_TOLERANCE = 60;
+
+  function isNearBottom() {
+    return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight <= SCROLL_TOLERANCE;
+  }
+
+  function scrollToBottom() {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function maybeScrollToBottom() {
+    if (isNearBottom()) {
+      scrollToBottom();
+    }
+  }
+
   async function loadSavedPrompts() {
     try {
       const res = await fetch("/api/assistant/saved-prompts");
@@ -204,7 +220,7 @@
       msg.textContent = content;
     }
     messagesEl.appendChild(msg);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+    maybeScrollToBottom();
     return msg;
   }
 
@@ -269,7 +285,7 @@
     msg.appendChild(body);
 
     messagesEl.appendChild(msg);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+    maybeScrollToBottom();
 
     return {
       msg: msg,
@@ -298,7 +314,7 @@
       const span = document.createElement("span");
       span.textContent = chunk;
       placeholder.body.appendChild(span);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+      maybeScrollToBottom();
     } else if (type === "thinking_delta") {
       const chunk = payload.chunk || "";
       placeholder.thinkingText += chunk;
