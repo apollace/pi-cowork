@@ -98,6 +98,7 @@ All dynamic configuration is resolved via `pi_cowork.config.get_config(key)` wit
 | Event Log Retention Days | `event_log_retention_days` | `PI_EVENT_LOG_RETENTION_DAYS` | `30` | int | 📜 Logs & Storage |
 | Max DB Backups Retained | `db_backup_max_count` | _(none)_ | `10` | int | 📜 Logs & Storage |
 | Notification Dismissal Retention Days | `notification_dismissal_retention_days` | `PI_NOTIFICATION_DISMISSAL_RETENTION_DAYS` | `7` | int | 📜 Logs & Storage |
+| **Auth Enabled** | `auth_enabled` | `PI_AUTH_ENABLED` | `0` | int | 🔒 Security |
 | **Feedback Capture Enabled** | `feedback_capture_enabled` | `PI_FEEDBACK_CAPTURE_ENABLED` | `1` | int | 🧠 Self-Improvement |
 | Feedback Retention Days | `feedback_retention_days` | `PI_FEEDBACK_RETENTION_DAYS` | `30` | int | 🧠 Self-Improvement |
 
@@ -108,11 +109,12 @@ All dynamic configuration is resolved via `pi_cowork.config.get_config(key)` wit
 
 **Module-level aliases** (`config.PI_MAX_PARALLEL`, etc.) still exist for backward compatibility but should not be used by new code — use `get_config()` instead. Tests that need to control limits should update the DB settings via `set_setting('max_parallel', '5')` rather than monkeypatching module-level constants.
 
-**Settings UI** has three collapsible categories:
+**Settings UI** has four collapsible categories:
 1. 🤖 **Assistant** — enabled, auto-context, model, thinking, working-dir, system-prompt, api-endpoints, saved-prompts
 2. ⚙️ **General** — pi_cowork_url, **port**, skills_folder_path, max_parallel, max_per_hour, warm_spawn_threshold, run_max_age
 3. 🧠 **Self-Improvement** — feedback_capture_enabled, feedback_retention_days
 4. 📜 **Logs & Storage** — log_retention_days, event_log_retention_days, db_backup_max_count, notification_dismissal_retention_days, purge terminal logs
+5. 🔒 **Security** — auth_enabled
 
 ## Data Model
 

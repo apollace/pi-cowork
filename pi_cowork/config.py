@@ -30,6 +30,7 @@ DEFAULTS = {
     "feedback_capture_enabled": "1",
     "feedback_retention_days": "30",
     "skills_folder_path": "workspace/skills",
+    "auth_enabled": "0",
 }
 
 # ── Mapping: config key → env var name ──
@@ -44,6 +45,7 @@ ENV_MAP = {
     "feedback_capture_enabled": "PI_FEEDBACK_CAPTURE_ENABLED",
     "feedback_retention_days": "PI_FEEDBACK_RETENTION_DAYS",
     "skills_folder_path": "PI_SKILLS_FOLDER",
+    "auth_enabled": "PI_AUTH_ENABLED",
 }
 
 # ── Type coercion for numeric settings ──
@@ -59,6 +61,7 @@ _INT_KEYS = {
     "notification_dismissal_retention_days",
     "feedback_capture_enabled",
     "feedback_retention_days",
+    "auth_enabled",
 }
 
 

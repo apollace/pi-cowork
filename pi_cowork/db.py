@@ -46,6 +46,45 @@ def row_to_dict(row):
     return dict(zip(row.keys(), row, strict=False))
 
 
+def _table_exists(db, table):
+    """Check whether a table exists by querying sqlite_master."""
+    row = db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ).fetchone()
+    return row is not None
+
+
+def add_users_table(db):
+    """Idempotently create the users table if it does not yet exist."""
+    if _table_exists(db, "users"):
+        return
+    db.execute("""
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+
+def add_api_tokens_table(db):
+    """Idempotently create the api_tokens table if it does not yet exist."""
+    if _table_exists(db, "api_tokens"):
+        return
+    db.execute("""
+        CREATE TABLE api_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            token_hash TEXT UNIQUE NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_used_at DATETIME
+        )
+    """)
+
+
 def _migrate(db):
     """Idempotent migration runner to keep schema up-to-date."""
     db.execute("""
@@ -499,16 +538,22 @@ def _migrate(db):
             "seed_feedback_retention_days",
             "INSERT OR IGNORE INTO settings (key, value) VALUES ('feedback_retention_days', '30')",
         ),
+        # Ticket #202 — Users and API tokens for opt-in authentication
+        ("create_users_table", add_users_table),
+        ("create_api_tokens_table", add_api_tokens_table),
     ]
     for item in migrations:
         name = item[0]
-        sql = item[1]
+        sql_or_callable = item[1]
         params = (item[2],) if len(item) > 2 else ()
         already_applied = db.execute("SELECT 1 FROM _migrations WHERE name = ?", (name,)).fetchone()
         if already_applied:
             continue
         try:
-            db.execute(sql, params)
+            if callable(sql_or_callable):
+                sql_or_callable(db)
+            else:
+                db.execute(sql_or_callable, params)
         except sqlite3.OperationalError as e:
             err = str(e).lower()
             if "duplicate column" in err or "already exists" in err or "no such table" in err:
