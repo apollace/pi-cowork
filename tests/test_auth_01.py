@@ -3,7 +3,9 @@
 Covers users, api_tokens tables and the auth_enabled config setting.
 """
 
+import contextlib
 import os
+import sqlite3
 import sys
 import tempfile
 
@@ -13,8 +15,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 os.environ.setdefault("PI_MAX_PARALLEL", "100")
 os.environ.setdefault("PI_MAX_PER_HOUR", "100")
-
-import contextlib
 
 from app import app as flask_app
 from app import init_db
@@ -88,7 +88,7 @@ class TestUserHelpers:
             assert row is not None
             assert row["id"] == user_id
             assert row["username"] == "alice"
-            assert row["password_hash"] == "hashed-password"
+            assert row["password_hash"] == "hashed-password"  # noqa: S105
 
     def test_get_user_missing_returns_none(self, client):
         with client.application.app_context():
@@ -97,7 +97,7 @@ class TestUserHelpers:
     def test_duplicate_username_raises_integrity_error(self, client):
         with client.application.app_context():
             create_user("bob", "hash1")
-            with pytest.raises(Exception):
+            with pytest.raises(sqlite3.IntegrityError):
                 create_user("bob", "hash2")
 
 
@@ -114,7 +114,7 @@ class TestApiTokenHelpers:
 
             tokens = list_api_tokens(user_id)
             assert len(tokens) == 1
-            assert tokens[0]["token_hash"] == "sha256-of-token"
+            assert tokens[0]["token_hash"] == "sha256-of-token"  # noqa: S105
 
             revoke_api_token(token_id)
             assert get_api_token("sha256-of-token") is None
