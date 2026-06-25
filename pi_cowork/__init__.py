@@ -116,11 +116,21 @@ def create_app():
     app.before_request(record_request_start_time)
     app.after_request(log_http_request)
 
+    # Register authentication middleware (transparent when auth is disabled)
+    from pi_cowork import auth as _auth_module
+
+    app.before_request(_auth_module.require_auth)
+
     # Inject the human-action secret into all templates so the UI can
     # authenticate human-only operations (e.g. gate review approvals).
     @app.context_processor
     def inject_human_action_secret():
         return {"human_action_secret": app.config["HUMAN_ACTION_SECRET"]}
+
+    # Inject current_user so templates can show username / logout button.
+    @app.context_processor
+    def inject_current_user():
+        return {"current_user": _auth_module.current_user()}
 
     # Register system log event bus subscribers
     from pi_cowork.system_logs import register_system_log_subscribers
