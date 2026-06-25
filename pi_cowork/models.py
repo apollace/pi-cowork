@@ -1793,3 +1793,66 @@ def mark_feedback_consumed(feedback_id, consumed_by_run_id):
            WHERE id = ?""",
         (consumed_by_run_id, feedback_id),
     )
+
+
+# ---------------------------------------------------------------------------
+# Users and API tokens (opt-in authentication foundation)
+# ---------------------------------------------------------------------------
+
+
+def get_user_by_username(username):
+    """Return a user row by username, or None if not found."""
+    return query_db(
+        "SELECT id, username, password_hash, created_at, updated_at FROM users WHERE username = ?",
+        (username,),
+        one=True,
+    )
+
+
+def create_user(username, password_hash):
+    """Create a new user and return the new user id."""
+    cur = run_db(
+        "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+        (username, password_hash),
+    )
+    return cur.lastrowid
+
+
+def get_api_token(token_hash):
+    """Return an API token row by token hash, or None if not found."""
+    return query_db(
+        "SELECT id, user_id, name, token_hash, created_at, last_used_at FROM api_tokens WHERE token_hash = ?",
+        (token_hash,),
+        one=True,
+    )
+
+
+def create_api_token(user_id, name, token_hash):
+    """Create a new API token for a user and return the new token id."""
+    cur = run_db(
+        "INSERT INTO api_tokens (user_id, name, token_hash) VALUES (?, ?, ?)",
+        (user_id, name, token_hash),
+    )
+    return cur.lastrowid
+
+
+def list_api_tokens(user_id):
+    """Return all API tokens belonging to a user."""
+    rows = query_db(
+        "SELECT id, user_id, name, token_hash, created_at, last_used_at FROM api_tokens WHERE user_id = ?",
+        (user_id,),
+    )
+    return [row_to_dict(r) for r in rows]
+
+
+def revoke_api_token(token_id):
+    """Delete an API token by id."""
+    run_db("DELETE FROM api_tokens WHERE id = ?", (token_id,))
+
+
+def touch_api_token(token_id):
+    """Update an API token's last_used_at to the current time."""
+    run_db(
+        "UPDATE api_tokens SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (token_id,),
+    )

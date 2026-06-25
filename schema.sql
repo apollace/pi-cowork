@@ -409,6 +409,25 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_versions_entry_id ON knowledge_versions
 INSERT OR IGNORE INTO settings (key, value) VALUES ('feedback_capture_enabled', '1');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('feedback_retention_days', '30');
 
+-- Users: authentication accounts for opt-in auth
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- API tokens: per-user machine API keys
+CREATE TABLE IF NOT EXISTS api_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    token_hash TEXT UNIQUE NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_used_at DATETIME
+);
+
 -- Seed transitions (when to move — the "how" is in the API docs)
 -- Instructions describe *when* to transition, not the API call (that's redundant with the API docs in the prompt).
 INSERT OR IGNORE INTO transitions (from_status_id, to_status_id, instructions, workflow_id) VALUES
