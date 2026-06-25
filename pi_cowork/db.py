@@ -48,9 +48,7 @@ def row_to_dict(row):
 
 def _table_exists(db, table):
     """Check whether a table exists by querying sqlite_master."""
-    row = db.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
-    ).fetchone()
+    row = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
     return row is not None
 
 

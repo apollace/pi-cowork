@@ -109,7 +109,7 @@ All dynamic configuration is resolved via `pi_cowork.config.get_config(key)` wit
 
 **Module-level aliases** (`config.PI_MAX_PARALLEL`, etc.) still exist for backward compatibility but should not be used by new code — use `get_config()` instead. Tests that need to control limits should update the DB settings via `set_setting('max_parallel', '5')` rather than monkeypatching module-level constants.
 
-**Settings UI** has four collapsible categories:
+**Settings UI** has five collapsible categories:
 1. 🤖 **Assistant** — enabled, auto-context, model, thinking, working-dir, system-prompt, api-endpoints, saved-prompts
 2. ⚙️ **General** — pi_cowork_url, **port**, skills_folder_path, max_parallel, max_per_hour, warm_spawn_threshold, run_max_age
 3. 🧠 **Self-Improvement** — feedback_capture_enabled, feedback_retention_days
