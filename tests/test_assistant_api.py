@@ -1788,3 +1788,238 @@ def test_stream_reattaches_to_running_run_when_in_memory_state_lost(client):
         )
     assert row["status"] == "completed"
     assert row["full_text"] == "Reattached"
+
+
+# ---------------------------------------------------------------------------
+# Full-text reconstruction from log file (Ticket #199)
+# ---------------------------------------------------------------------------
+
+
+def test_reconstruct_text_from_log_helper(client):
+    """_reconstruct_text_from_log extracts all text_delta chunks from a log."""
+    from pi_cowork.assistant import _reconstruct_text_from_log
+
+    log_dir = os.path.join(ASSISTANT_SESSION_DIR, "runs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "run-reconstruct-test.log")
+    with open(log_path, "w") as f:
+        # Mixed events: text, thinking, toolcall, done, _stdout_closed, _stderr
+        f.write('{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"First "}}\n')
+        f.write('{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","delta":"Hmm"}}\n')
+        f.write('{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"Second"}}\n')
+        f.write('{"type":"toolcall_start","name":"search"}\n')
+        f.write('{"type":"toolcall_end","name":"search"}\n')
+        f.write('{"type":"agent_end"}\n')
+        f.write('{"type":"_stdout_closed"}\n')
+        f.write('{"type":"_stderr","text":"some error"}\n')
+
+    text, thinking, stderr = _reconstruct_text_from_log(log_path)
+    assert text == "First Second"
+    assert thinking == "Hmm"
+    assert stderr == "some error"
+
+
+def test_reconstruct_text_from_log_missing_file(client):
+    """Missing log file returns empty strings."""
+    from pi_cowork.assistant import _reconstruct_text_from_log
+
+    text, thinking, stderr = _reconstruct_text_from_log("/nonexistent/path.log")
+    assert text == ""
+    assert thinking == ""
+    assert stderr == ""
+
+
+def test_finalize_reconstructs_full_text_from_log_not_accumulated(client):
+    """_finalize_and_save must use log file, not accumulated_text, for full_text.
+
+    This simulates a browser disconnect: accumulated_text only has the first
+    chunk, but the log file has the complete output.  The persisted message
+    must contain the full text.
+    """
+    from pi_cowork.assistant import _AssistantRun, _finalize_and_save
+
+    log_dir = os.path.join(ASSISTANT_SESSION_DIR, "runs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "run-finalize-reconstruct.log")
+    with open(log_path, "w") as f:
+        f.write('{"type":"text_delta","chunk":"First part. "}')
+        f.write("\n")
+        f.write('{"type":"text_delta","chunk":"Conclusion after thinking."}')
+        f.write("\n")
+        f.write('{"type":"_stdout_closed"}\n')
+
+    fake_proc = MagicMock()
+    fake_proc.returncode = 0
+    run = _AssistantRun(fake_proc, None, 999, log_path)
+    # Simulate disconnect: only the first chunk was accumulated
+    run.accumulated_text = ["First part. "]
+
+    with client.application.app_context():
+        run_db(
+            "INSERT INTO assistant_runs (board_id, status, log_path, pid) VALUES (?, 'running', ?, ?)",
+            (None, log_path, 12345),
+        )
+        run.run_id = query_db("SELECT last_insert_rowid() as id", one=True)["id"]
+
+    _finalize_and_save(run, None, client.application)
+
+    with client.application.app_context():
+        row = query_db(
+            "SELECT status, full_text FROM assistant_runs WHERE id = ?",
+            (run.run_id,),
+            one=True,
+        )
+        msg = query_db(
+            "SELECT content FROM assistant_messages WHERE board_id IS NULL ORDER BY id DESC LIMIT 1",
+            one=True,
+        )
+
+    assert row["status"] == "completed"
+    # full_text must be the complete log content, not the truncated accumulated_text
+    assert row["full_text"] == "First part. Conclusion after thinking."
+    assert msg["content"] == "First part. Conclusion after thinking."
+
+
+def test_chat_history_complete_with_thinking_then_conclusion(client):
+    """The 'conclusion lost' bug: model emits text → thinking → text (conclusion).
+
+    Verify history contains both text segments, not just the first.
+    """
+    ndjson = (
+        '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"Let me think about this..."}}\n'
+        '{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","delta":"reasoning here"}}\n'
+        '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"Here is my conclusion: "}}\n'
+        '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"the answer is 42."}}\n'
+        '{"type":"agent_end"}\n'
+    )
+    with patch("pi_cowork.assistant.subprocess.Popen", side_effect=_make_mock_popen(ndjson=ndjson)):
+        res = client.post("/api/assistant/chat", json={"message": "What is the answer?"})
+        assert res.status_code == 200
+        body = res.data.decode("utf-8")
+        assert "Let me think about this..." in body
+        assert "Here is my conclusion: the answer is 42." in body
+
+    history = client.get("/api/assistant/history")
+    rows = json.loads(history.data)
+    assert len(rows) == 2
+    assert rows[1]["role"] == "assistant"
+    # Both text segments must be present in the saved message
+    assert "Let me think about this..." in rows[1]["content"]
+    assert "Here is my conclusion: the answer is 42." in rows[1]["content"]
+
+
+def test_chat_done_event_has_complete_full_text_with_thinking(client):
+    """The done event's full_text must include text after thinking deltas."""
+    ndjson = (
+        '{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","delta":"deep thought"}}\n'
+        '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"The answer"}}\n'
+        '{"type":"agent_end"}\n'
+    )
+    with patch("pi_cowork.assistant.subprocess.Popen", side_effect=_make_mock_popen(ndjson=ndjson)):
+        res = client.post("/api/assistant/chat", json={"message": "Hi"})
+        assert res.status_code == 200
+        body = res.data.decode("utf-8")
+        assert "event: done" in body
+        # full_text in the done event must contain the complete text
+        assert "The answer" in body
+
+    history = client.get("/api/assistant/history")
+    rows = json.loads(history.data)
+    assert rows[1]["content"] == "The answer"
+
+
+def test_stderr_captured_in_log_file(client):
+    """_reader_thread writes stderr to the log file as a _stderr event."""
+    import queue as queue_mod
+
+    from pi_cowork.assistant import _reader_thread
+
+    log_dir = os.path.join(ASSISTANT_SESSION_DIR, "runs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "run-stderr-test.log")
+
+    proc = MagicMock()
+    proc.stdout = io.StringIO('{"type":"text_delta","chunk":"Hi"}\n')
+    proc.stderr = io.StringIO("some stderr output")
+
+    q = queue_mod.Queue()
+    _reader_thread(proc, q, log_path)
+
+    with open(log_path) as f:
+        log_content = f.read()
+
+    assert "_stdout_closed" in log_content
+    assert "_stderr" in log_content
+    assert "some stderr output" in log_content
+
+
+def test_reconnect_synthetic_done_uses_log_full_text(client):
+    """When reconnecting to a finalized run, the synthetic done event uses
+    full_text reconstructed from the log file (not stale DB full_text)."""
+    log_dir = os.path.join(ASSISTANT_SESSION_DIR, "runs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "run-synthetic-done.log")
+    with open(log_path, "w") as f:
+        f.write('{"type":"text_delta","chunk":"Complete "}\n')
+        f.write('{"type":"text_delta","chunk":"response"}\n')
+        f.write('{"type":"_stdout_closed"}\n')
+
+    # Seed DB with stale/truncated full_text — the reconnect should still
+    # show the correct content because the log is the source of truth
+    # for _finalize_and_save. However, for already-finalized runs, the
+    # stream endpoint uses the DB full_text directly. This test verifies
+    # that the DB full_text was correctly saved (via log reconstruction).
+    from pi_cowork.assistant import _AssistantRun, _finalize_and_save
+
+    with client.application.app_context():
+        run_db(
+            "INSERT INTO assistant_runs (board_id, status, log_path, pid) VALUES (?, 'running', ?, ?)",
+            (None, log_path, 12345),
+        )
+        run_id = query_db("SELECT last_insert_rowid() as id", one=True)["id"]
+
+    run = _AssistantRun(MagicMock(), None, run_id, log_path)
+    run.proc.returncode = 0
+    run.accumulated_text = []  # Simulate disconnect — nothing accumulated
+
+    with client.application.app_context():
+        _finalize_and_save(run, None, client.application)
+
+    with client.application.app_context():
+        row = query_db("SELECT status, full_text FROM assistant_runs WHERE id = ?", (run_id,), one=True)
+    assert row["status"] == "completed"
+    assert row["full_text"] == "Complete response"
+
+    # Now reconnect — synthetic done should have the correct full_text
+    res = client.get(f"/api/assistant/stream?run_id={run_id}")
+    assert res.status_code == 200
+    body = res.data.decode("utf-8")
+    assert "event: done" in body
+    assert "Complete response" in body
+
+
+# ---------------------------------------------------------------------------
+# Frontend clobber guard (Ticket #199)
+# ---------------------------------------------------------------------------
+
+
+class TestAssistantJsClobberGuard:
+    """Verify the done/stopped handler does not overwrite streamed text."""
+
+    def test_done_handler_guards_against_clobber(self):
+        js = read(ASSISTANT_JS_PATH)
+        # The done handler should check !placeholder.rawText before overwriting
+        assert "payload.full_text" in js
+        assert "!placeholder.rawText" in js, (
+            "Expected done handler to guard against overwriting streamed text with full_text"
+        )
+
+    def test_stopped_handler_guards_against_clobber(self):
+        js = read(ASSISTANT_JS_PATH)
+        assert "payload.partial" in js
+        # The stopped handler should also guard
+        assert "!placeholder.rawText" in js
+
+    def test_reconnect_shows_reconnecting_label(self):
+        js = read(ASSISTANT_JS_PATH)
+        assert "Reconnecting" in js, "Expected 'Reconnecting' label in reconnectToRun"
