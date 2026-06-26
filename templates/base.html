@@ -57,6 +57,18 @@
             <span class="icon">📜</span> System Logs
           </a>
         </div>
+        {% if current_user %}
+        <div class="nav-section">
+          <div class="nav-section-title">Account</div>
+          <div class="nav-link" style="cursor: default; opacity: 1;" onclick="void(0)">
+            <span class="icon">👤</span>
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; display: inline-block; vertical-align: bottom;">{{ current_user.username }}</span>
+          </div>
+          <a class="nav-link" href="#" id="sidebar-logout" onclick="handleLogout(event)">
+            <span class="icon">🚪</span> Logout
+          </a>
+        </div>
+        {% endif %}
       </nav>
     </aside>
     <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
@@ -105,6 +117,21 @@
       document.getElementById('sidebar').classList.remove('open');
       document.getElementById('sidebar-overlay').classList.remove('open');
     }
+
+    window.handleLogout = async function(e) {
+      if (e) e.preventDefault();
+      try {
+        const res = await fetch('/api/auth/logout', { method: 'POST' });
+        if (res.ok) {
+          window.location.href = '/login';
+        } else {
+          const data = await res.json().catch(function() { return {}; });
+          window.showToast(data.error || 'Logout failed.', 'error');
+        }
+      } catch (err) {
+        window.showToast('Logout failed. Please try again.', 'error');
+      }
+    };
     function escapeHtml(str) {
       const div = document.createElement('div');
       div.textContent = str;

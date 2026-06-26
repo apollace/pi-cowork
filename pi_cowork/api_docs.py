@@ -1345,6 +1345,48 @@ ENDPOINT_REGISTRY = [
             "read-only aggregated audit view.",
         ],
     },
+    {
+        "key": "auth_setup",
+        "category": "Auth",
+        "method": "POST",
+        "path_template": "/api/auth/setup",
+        "label": "create first user account (human-only)",
+        "doc_lines": [
+            "- POST {base_url}/api/auth/setup → create the first user account (fields: username, password). "
+            "Only works when no users exist; returns 409 if a user already exists. HUMAN-ONLY.",
+        ],
+    },
+    {
+        "key": "auth_login",
+        "category": "Auth",
+        "method": "POST",
+        "path_template": "/api/auth/login",
+        "label": "start a browser session (human-only)",
+        "doc_lines": [
+            "- POST {base_url}/api/auth/login → start a browser session (fields: username, password). "
+            "Returns 200 on success or 401 on invalid credentials. HUMAN-ONLY.",
+        ],
+    },
+    {
+        "key": "auth_logout",
+        "category": "Auth",
+        "method": "POST",
+        "path_template": "/api/auth/logout",
+        "label": "clear the current browser session (human-only)",
+        "doc_lines": [
+            "- POST {base_url}/api/auth/logout → clear the current browser session. HUMAN-ONLY.",
+        ],
+    },
+    {
+        "key": "auth_me",
+        "category": "Auth",
+        "method": "GET",
+        "path_template": "/api/auth/me",
+        "label": "get current user info",
+        "doc_lines": [
+            "- GET {base_url}/api/auth/me → get current user info, or 401 if not logged in.",
+        ],
+    },
 ]
 
 # Key → registry entry lookup (built once at import time)
@@ -1362,6 +1404,11 @@ DEFAULT_ENDPOINT_KEYS = [
 # Gate review write access allows agents to approve their own quality gates,
 # defeating the purpose of manual approval.
 AGENT_RESTRICTED_KEYS = {
+    # Authentication endpoints are human-only login/setup/logout controls.
+    "auth_setup",
+    "auth_login",
+    "auth_logout",
+    "auth_me",
     # Gate review access lets agents approve their own quality gates.
     "gate_reviews_list",
     "gate_review_put",

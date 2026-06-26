@@ -2,6 +2,7 @@
 
 from pi_cowork.api.agent_runs import agent_runs_bp
 from pi_cowork.api.agents_api import agents_api_bp
+from pi_cowork.api.auth import auth_bp
 from pi_cowork.api.boards import boards_bp
 from pi_cowork.api.comments import comments_bp
 from pi_cowork.api.db_backup import db_backup_bp
@@ -38,6 +39,7 @@ ALL_BLUEPRINTS = [
     skills_bp,
     statuses_bp,
     transitions_bp,
+    auth_bp,
     quality_gates_bp,
     gate_reviews_bp,
     agent_runs_bp,
