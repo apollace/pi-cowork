@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Create account' if needs_setup else 'Sign in' }} — pi-CoWork{% endblock %}
+
+{% block content %}
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-title">
+      <span class="logo" style="font-size:1.8rem;">π</span>
+      <h1>{{ 'Create account' if needs_setup else 'Sign in' }}</h1>
+      <p class="muted">Welcome to pi-CoWork</p>
+    </div>
+
+    <form id="auth-form" class="form-card" style="max-width: 100%; box-shadow: none; border: none; padding: 0;">
+      <label>
+        Username
+        <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+      </label>
+      <label>
+        Password
+        <input type="password" id="password" name="password" autocomplete="{{ 'new-password' if needs_setup else 'current-password' }}" required>
+      </label>
+      <div class="form-actions" style="margin-top: 0.5rem;">
+        <button type="submit" class="btn primary" id="auth-submit">
+          {{ 'Create account' if needs_setup else 'Sign in' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const form = document.getElementById('auth-form');
+  const submitBtn = document.getElementById('auth-submit');
+  const isSetup = {{ needs_setup|tojson }};
+  const endpoint = isSetup ? '/api/auth/setup' : '/api/auth/login';
+
+  form.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    if (!username || !password) {
+      window.showToast('Username and password are required.', 'error');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = isSetup ? 'Creating account…' : 'Signing in…';
+
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json().catch(function() { return {}; });
+      if (res.ok) {
+        const params = new URLSearchParams(window.location.search);
+        const next = params.get('next') || '/board';
+        window.location.href = next;
+      } else {
+        window.showToast(data.error || 'Authentication failed.', 'error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = isSetup ? 'Create account' : 'Sign in';
+      }
+    } catch (err) {
+      window.showToast('Network error. Please try again.', 'error');
+      submitBtn.disabled = false;
+      submitBtn.textContent = isSetup ? 'Create account' : 'Sign in';
+    }
+  });
+})();
+</script>
+{% endblock %}

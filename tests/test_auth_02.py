@@ -136,9 +136,7 @@ class TestMiddlewareEnabledAuth:
     def test_exempt_login_route_not_blocked(self, client):
         with auth_enabled(client.application, enabled=1):
             res = client.get("/login")
-            assert res.status_code != 401
-            # There is no login page yet, so it falls through to a 404.
-            assert res.status_code == 404
+            assert res.status_code == 200
 
     def test_exempt_static_route_not_blocked(self, client):
         with auth_enabled(client.application, enabled=1):

@@ -2,16 +2,25 @@
 
 from flask import redirect, render_template, url_for
 
+from pi_cowork.auth import current_user, is_auth_enabled
 from pi_cowork.db import query_db
 from pi_cowork.update import _read_and_clear_update_state
 
 
 def index():
+    if is_auth_enabled() and not current_user():
+        return redirect(url_for("login_page"))
     return redirect(url_for("board"))
 
 
 def board():
     return render_template("board.html")
+
+
+def login_page():
+    count_row = query_db("SELECT COUNT(*) AS c FROM users", one=True)
+    needs_setup = count_row["c"] == 0
+    return render_template("login.html", needs_setup=needs_setup)
 
 
 def ticket_detail(ticket_id):
@@ -85,6 +94,7 @@ def register_pages(app):
     """Register page routes and context processors on *app*."""
     app.route("/")(index)
     app.route("/board")(board)
+    app.route("/login")(login_page)
     app.route("/ticket/<int:ticket_id>")(ticket_detail)
     app.route("/ticket/new")(new_ticket)
     app.route("/ticket/<int:ticket_id>/edit")(edit_ticket)
