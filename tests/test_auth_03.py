@@ -3,9 +3,6 @@
 import json
 from contextlib import contextmanager
 
-import pytest
-
-from app import app as flask_app
 from pi_cowork import auth
 from pi_cowork.models import create_user, set_setting
 
@@ -153,7 +150,7 @@ class TestLoginPage:
             text = res.data.decode("utf-8")
             assert "Create account" in text
             # The endpoint path only appears inside inline JS, which is fine
-            assert "id=\"auth-submit\"" in text
+            assert 'id="auth-submit"' in text
 
     def test_login_page_login_mode_when_user_exists(self, client):
         _create_user(client, "frank", "pw")
@@ -162,7 +159,7 @@ class TestLoginPage:
             assert res.status_code == 200
             text = res.data.decode("utf-8")
             assert "Sign in" in text
-            assert "id=\"auth-submit\"" in text
+            assert 'id="auth-submit"' in text
 
     def test_login_page_accepts_next_query(self, client):
         with auth_enabled(client.application, enabled=1):
@@ -248,6 +245,7 @@ class TestAuthEndpointRegistry:
 
     def test_auth_endpoints_are_restricted(self):
         from pi_cowork.api_docs import AGENT_RESTRICTED_KEYS
+
         assert "auth_setup" in AGENT_RESTRICTED_KEYS
         assert "auth_login" in AGENT_RESTRICTED_KEYS
         assert "auth_logout" in AGENT_RESTRICTED_KEYS
