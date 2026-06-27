@@ -18,6 +18,7 @@ from flask import (
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from pi_cowork.config import get_config
+from pi_cowork.db import query_db
 from pi_cowork.models import (
     create_api_token as _create_api_token,
 )
@@ -30,7 +31,6 @@ from pi_cowork.models import (
 # Routes that are reachable without authentication even when auth is enabled.
 _EXEMPT_PATHS = {
     "/login",
-    "/api/auth/setup",
     "/api/auth/setup-needed",
     "/api/auth/login",
     "/api/auth/logout",
@@ -51,6 +51,15 @@ def require_session():
     if session.get("user_id"):
         return True
     return jsonify({"error": "Authentication required"}), 401
+
+
+def _setup_is_first_run():
+    """Return True only when the users table is empty (first-run setup)."""
+    try:
+        row = query_db("SELECT COUNT(*) AS c FROM users", one=True)
+        return row["c"] == 0 if row else False
+    except Exception:
+        return False
 
 
 def hash_password(plain):
@@ -136,7 +145,15 @@ def store_api_token(user_id, name, token_hash):
 
 def _is_exempt_path(path):
     """Return True if the request path does not require authentication."""
-    return path.startswith("/static/") or path in _EXEMPT_PATHS
+    if path.startswith("/static/"):
+        return True
+    if path in _EXEMPT_PATHS:
+        return True
+    # /api/auth/setup is exempt only on first-run; once a user exists it must
+    # go through auth like any other protected route.
+    if path == "/api/auth/setup":
+        return _setup_is_first_run()
+    return False
 
 
 def _authenticate_api():
@@ -152,6 +169,7 @@ def _authenticate_api():
         user = validate_api_token(token)
         if user:
             g.current_user = user
+            g.api_token = token
             return user
         return jsonify({"error": "Authentication required"}), 401
 
@@ -179,6 +197,14 @@ def require_auth():
         return None
 
     if path.startswith("/api/"):
+        # Assistant endpoints are human-facing UI tools and require a browser
+        # session; API tokens (agent access) are intentionally rejected.
+        if path.startswith("/api/assistant/"):
+            user = current_user()
+            if user:
+                return None
+            return jsonify({"error": "Authentication required"}), 401
+
         result = _authenticate_api()
         if isinstance(result, tuple):
             return result

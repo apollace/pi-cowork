@@ -472,11 +472,25 @@ def _truncate(text, max_bytes=50 * 1024):
     return encoded[:max_bytes].decode("utf-8", errors="replace") + "\n... (truncated)"
 
 
-def run_cli_gate(command, working_directory, timeout=60):
-    """Run a CLI gate command and return (passed, output)."""
+def run_cli_gate(command, working_directory, timeout=60, env=None):
+    """Run a CLI gate command and return (passed, output).
+
+    Args:
+        env: Optional dict of extra environment variables merged into a copy
+             of the current process environment.
+    """
     try:
+        run_env = os.environ.copy()
+        if env:
+            run_env.update(env)
         result = subprocess.run(  # noqa: S602
-            command, shell=True, cwd=working_directory, capture_output=True, text=True, timeout=timeout
+            command,
+            shell=True,
+            cwd=working_directory,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=run_env,
         )
         stdout = (result.stdout or "").strip()
         stderr = (result.stderr or "").strip()
