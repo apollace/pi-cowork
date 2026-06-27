@@ -33,6 +33,13 @@ def api_update_setting(key):
     if value is None:
         return jsonify({"error": "value is required"}), 400
     value = str(value).strip()
+
+    # Auth guard: do not allow enabling authentication if no user exists.
+    if key == "auth_enabled" and value in ("1", "true", "yes", "on"):
+        count = query_db("SELECT COUNT(*) AS c FROM users", one=True)["c"]
+        if count == 0:
+            return jsonify({"error": "Create an account first"}), 400
+
     set_setting(key, value)
     add_log(
         "INFO",
