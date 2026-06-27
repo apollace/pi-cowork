@@ -1493,7 +1493,9 @@ AGENT_RESTRICTED_KEYS = {
 ALL_ENDPOINT_KEYS = [entry["key"] for entry in ENDPOINT_REGISTRY]
 
 
-def build_api_docs(selected_keys, ticket_id, base_url=None, has_gates=False, board_id=None, workflow_id=None):
+def build_api_docs(
+    selected_keys, ticket_id, base_url=None, has_gates=False, board_id=None, workflow_id=None, agent_token=None
+):
     """Build the API documentation text block for an agent prompt.
 
     Args:
@@ -1504,6 +1506,9 @@ def build_api_docs(selected_keys, ticket_id, base_url=None, has_gates=False, boa
         has_gates: If True, append the gate_pending note to the ticket_put entry.
         board_id: Board ID for substituting {board_id} in endpoint URLs.
         workflow_id: Workflow ID for substituting {workflow_id} in endpoint URLs.
+        agent_token: Plaintext API token to inject into the docs as the
+            ``Authorization: Bearer`` header.  When ``None``, auth-enabled
+            prompts fall back to the generic auth note.
 
     Returns:
         A string with one doc line per selected endpoint, ending with the
@@ -1542,10 +1547,16 @@ def build_api_docs(selected_keys, ticket_id, base_url=None, has_gates=False, boa
 
     # Conditional authentication note
     if is_auth_enabled():
-        lines.append(
-            "When authentication is enabled, API requests from agents must include an "
-            "`Authorization: Bearer <api_token>` header. Browser sessions are accepted automatically."
-        )
+        if agent_token:
+            lines.insert(
+                0,
+                f"Headers: Authorization: Bearer {agent_token}",
+            )
+        else:
+            lines.append(
+                "When authentication is enabled, API requests from agents must include an "
+                "`Authorization: Bearer <api_token>` header. Browser sessions are accepted automatically."
+            )
 
     lines.append(
         "IMPORTANT: You must NOT call any gate review, notification resolve, or\n"

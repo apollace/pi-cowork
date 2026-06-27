@@ -5,6 +5,7 @@ import shutil
 
 from flask import Blueprint, jsonify, request
 
+from pi_cowork.agent_auth import revoke_agent_api_tokens
 from pi_cowork.db import query_db, row_to_dict
 from pi_cowork.models import get_setting, set_setting
 from pi_cowork.system_logs import add_log
@@ -41,6 +42,11 @@ def api_update_setting(key):
             return jsonify({"error": "Create an account first"}), 400
 
     set_setting(key, value)
+
+    # When authentication is disabled, invalidate all dedicated agent tokens.
+    if key == "auth_enabled" and value in ("0", "false", "no", "off"):
+        revoke_agent_api_tokens()
+
     add_log(
         "INFO",
         "db_change",
