@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 os.environ.setdefault("PI_MAX_PARALLEL", "100")
 os.environ.setdefault("PI_MAX_PER_HOUR", "100")
+os.environ.setdefault("PI_AUTH_ENABLED", "0")
 
 import contextlib
 
@@ -173,6 +174,26 @@ def temp_skills_folder(monkeypatch):
     shutil.rmtree(built_in_tmpdir, ignore_errors=True)
     monkeypatch.setattr(_sp, "get_skills_folder", original_get_skills_folder)
     monkeypatch.setattr(_sp, "get_built_in_skills_folder", original_get_built_in)
+
+
+@pytest.fixture
+def auth_enabled(client):
+    """Create a test user and enable authentication for auth-specific tests.
+
+    The ``client`` fixture uses a fresh temporary database per test, so the
+    user and the ``auth_enabled`` setting are automatically cleaned up at the
+    end of each test.
+    """
+    from pi_cowork import auth as _auth
+    from pi_cowork.models import create_user, set_setting
+
+    with flask_app.app_context():
+        password = "testpass123"
+        password_hash = _auth.hash_password(password)
+        user_id = create_user("testuser", password_hash)
+        set_setting("auth_enabled", "1")
+
+    return {"username": "testuser", "password": password, "user_id": user_id}
 
 
 @pytest.fixture

@@ -27,6 +27,8 @@ A minimal CoWork web app with AI agent integration. Supports multiple boards and
 pi-cowork/
 ├── app.py                 # Flask app, routes, DB init, agent spawning
 ├── pi_cowork/board_cleanup.py  # Terminate agents and remove on-disk artifacts on board deletion
+├── pi_cowork/auth.py          # Opt-in authentication middleware (sessions, API tokens, before_request gate)
+├── pi_cowork/api/auth.py      # Auth endpoints: setup, login, logout, password, API tokens
 ├── pi_cowork/api/pi_models.py  # pi CLI model discovery with caching
 ├── schema.sql             # DB schema + seed data
 ├── requirements.txt       # Flask, pytest
@@ -47,6 +49,7 @@ pi-cowork/
 └── tests/                 # pytest suite (930+ tests)
     ├── conftest.py
     ├── test_tickets_api.py
+    ├── test_auth.py              # Opt-in authentication tests
     ├── test_agents_api.py
     ├── test_skills_api.py
     ├── test_statuses_api.py
@@ -132,6 +135,8 @@ Workflow (agents + statuses + transitions + quality_gates)
 - Multiple boards can share the same workflow
 - Deleting a board permanently deletes all its tickets, comments, agent runs, gate reviews, notification dismissals, and queue entries. The deletion flow first kills any running agents for the board's tickets, then removes board-specific `.pi-logs/` and `.pi-sessions/` directories under the board's `working_directory`, then deletes child DB rows in dependency order, and finally deletes the board (cascading `recurring_tasks`, `knowledge_entries`, `assistant_messages`, and `assistant_runs`).
 - Deleting a workflow requires that no boards reference it
+- **`users`** — authentication accounts for opt-in auth (columns: `id`, `username` UNIQUE, `password_hash`, `created_at`, `updated_at`)
+- **`api_tokens`** — per-user machine API keys, stored as SHA-256 hashes only (columns: `id`, `user_id` FK → users ON DELETE CASCADE, `name`, `token_hash` UNIQUE, `created_at`, `last_used_at`)
 - **`assistant_saved_prompts`** — global reusable prompt snippets for both global and board assistants (columns: `id`, `name` UNIQUE, `prompt_text`, `sort_order`, `created_at`)
 - **`ticket_status_overrides`** — per-ticket model/thinking overrides per status (compound PK: `ticket_id, status_id`, both with `ON DELETE CASCADE`; nullable `model`, `thinking` columns)
 - **`assistant_runs`** — tracks in-progress assistant generations so the UI can reconnect across page refreshes (columns: `id`, `board_id` (nullable, FK → boards ON DELETE CASCADE), `status` (`running`/`completed`/`failed`/`stopped`), `log_path`, `pid`, `started_at`, `completed_at`, `full_text`). Inserted on chat start, updated by the watcher/finalizer thread when the `pi` process exits, and deleted on compact/reset.
