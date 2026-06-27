@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from pi_cowork import config
+from pi_cowork.agent_auth import get_or_create_agent_api_token
 from pi_cowork.api_docs import build_api_docs
 from pi_cowork.config import get_config
 from pi_cowork.db import get_db, query_db, row_to_dict, run_db
@@ -478,14 +479,6 @@ def spawn_agent(ticket, status, agent, old_status_id=None):  # noqa: C901
             selected_keys = None
     else:
         selected_keys = None
-    api_docs = build_api_docs(
-        selected_keys,
-        ticket_id,
-        base_url=get_config("pi_cowork_url"),
-        has_gates=has_gates,
-        board_id=board_id,
-        workflow_id=workflow_id,
-    )
 
     # ── Knowledge context injection ──
     # Inject auto_context entries relevant to this board into the agent prompt.
@@ -596,6 +589,19 @@ New comments since last update:
                     f'\nNote: This ticket was moved from "{old_status["name"]}" to "'
                     + f'"{status["name"]}" before you were spawned.\n'
                 )
+
+        # Auth-enabled agents get a dedicated API token injected into the docs.
+        agent_token = get_or_create_agent_api_token(agent["id"], ticket_id, session_dir)
+        api_docs = build_api_docs(
+            selected_keys,
+            ticket_id,
+            base_url=get_config("pi_cowork_url"),
+            has_gates=has_gates,
+            board_id=board_id,
+            workflow_id=workflow_id,
+            agent_token=agent_token,
+        )
+
         context_msg = f"""Ticket #{ticket_id}: {ticket["title"]}
 {board_ctx}{git_info}{change_note}\nDescription:
 {ticket["body"] or "(no description)"}\nComments:
