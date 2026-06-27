@@ -5,8 +5,9 @@ import os
 import shutil
 from datetime import UTC, datetime
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
+from pi_cowork import auth
 from pi_cowork.agents import spawn_agent_for_ticket, try_spawn_or_queue
 from pi_cowork.db import query_db, row_to_dict, run_db
 from pi_cowork.events import (
@@ -375,7 +376,15 @@ def api_update_ticket(ticket_id):  # noqa: C901
                     gate_timeout = config_json.get("timeout", 60)
                     if not isinstance(gate_timeout, int) or gate_timeout < 1:
                         gate_timeout = 60
-                    passed, output = run_cli_gate(command, board_dir, timeout=gate_timeout)
+                    gate_env = None
+                    if auth.is_auth_enabled() and getattr(g, "api_token", None):
+                        gate_env = {"PI_AUTH_TOKEN": g.api_token}
+                    passed, output = run_cli_gate(
+                        command,
+                        board_dir,
+                        timeout=gate_timeout,
+                        env=gate_env,
+                    )
                     review = query_db(
                         "SELECT id FROM gate_reviews WHERE ticket_id = ? AND gate_id = ? "
                         "AND status = 'pending' LIMIT 1",

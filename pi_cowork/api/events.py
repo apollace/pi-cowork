@@ -6,8 +6,9 @@ import queue
 import threading
 import time
 
-from flask import Blueprint, Response, current_app, request, stream_with_context
+from flask import Blueprint, Response, current_app, g, request, stream_with_context
 
+from pi_cowork import auth
 from pi_cowork.events import (
     AGENT_COMPLETED,
     AGENT_FAILED,
@@ -82,8 +83,26 @@ def api_events_stream():
                   are forwarded. TICKET_CREATED already includes board_id
                   in the event data; other events require a lightweight
                   DB lookup to resolve the ticket's board.
+        token:    Optional API token. EventSource cannot set custom headers,
+                  so this endpoint accepts a valid API token as a query
+                  parameter, falling back to the browser session cookie.
+                  When auth is disabled, neither is required.
     """
     global _active_connections
+
+    # Auth: EventSource cannot send Authorization headers, so we accept a
+    # token via query string or fall back to the browser session.
+    if auth.is_auth_enabled():
+        token = request.args.get("token", "").strip()
+        user = auth.validate_api_token(token) if token else None
+        if user:
+            g.current_user = user
+        elif not auth.current_user():
+            return Response(
+                "Authentication required",
+                status=401,
+                mimetype="text/plain",
+            )
 
     board_id = request.args.get("board_id", type=int)
 
