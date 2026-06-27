@@ -168,8 +168,8 @@ class TestAgentTokenColdSpawnEnabled:
         token_end = context_msg.find("\n", token_start)
         token = context_msg[token_start:token_end].strip()
         assert token
-        assert token != "<token>"
-        assert token != "<api_token>"
+        assert len(token) > 10
+        assert not token.startswith("<")
 
         # A matching row exists in the database.
         with client.application.app_context():
@@ -445,7 +445,7 @@ class TestAgentTokenUnit:
 
     def test_get_or_create_returns_none_when_auth_disabled(self, client, default_workflow, default_board):
         with client.application.app_context():
-            assert get_or_create_agent_api_token(1, 1, "/tmp/fake-session") is None
+            assert get_or_create_agent_api_token(1, 1, "workspace/.fake-session") is None
 
     def test_revoke_agent_api_tokens_deletes_matching_rows(self, client):
         user = _create_user(client, "revoke-unit", "pw123456")
