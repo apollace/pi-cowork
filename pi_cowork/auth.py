@@ -153,6 +153,10 @@ def _is_exempt_path(path):
     # go through auth like any other protected route.
     if path == "/api/auth/setup":
         return _setup_is_first_run()
+    # Allow the settings endpoint that enables auth to be reachable before any
+    # user exists so it can return a helpful "Create account first" error.
+    if path == "/api/settings/auth_enabled" and request.method == "PUT":
+        return _setup_is_first_run()
     return False
 
 
