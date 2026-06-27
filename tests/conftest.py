@@ -188,7 +188,7 @@ def auth_enabled(client):
     from pi_cowork.models import create_user, set_setting
 
     with flask_app.app_context():
-        password = "testpass123"
+        password = "testpass123"  # noqa: S105
         password_hash = _auth.hash_password(password)
         user_id = create_user("testuser", password_hash)
         set_setting("auth_enabled", "1")
