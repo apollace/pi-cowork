@@ -1827,6 +1827,14 @@ def create_user(username, password_hash):
     return cur.lastrowid
 
 
+def update_user_password(user_id, password_hash):
+    """Update the password hash for a user and bump updated_at."""
+    run_db(
+        "UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (password_hash, user_id),
+    )
+
+
 def get_api_token(token_hash):
     """Return an API token row by token hash, or None if not found."""
     return query_db(

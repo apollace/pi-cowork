@@ -31,7 +31,9 @@ from pi_cowork.models import (
 _EXEMPT_PATHS = {
     "/login",
     "/api/auth/setup",
+    "/api/auth/setup-needed",
     "/api/auth/login",
+    "/api/auth/logout",
     "/api/events/stream",
 }
 
@@ -39,6 +41,16 @@ _EXEMPT_PATHS = {
 def is_auth_enabled():
     """Return True when the auth_enabled setting is on."""
     return bool(get_config("auth_enabled"))
+
+
+def require_session():
+    """Return True if a browser session exists, otherwise an HTTP 401 response.
+
+    For use by human-only /api/auth endpoints that must never accept API tokens.
+    """
+    if session.get("user_id"):
+        return True
+    return jsonify({"error": "Authentication required"}), 401
 
 
 def hash_password(plain):
@@ -124,10 +136,7 @@ def store_api_token(user_id, name, token_hash):
 
 def _is_exempt_path(path):
     """Return True if the request path does not require authentication."""
-    if path.startswith("/static/") or path in _EXEMPT_PATHS:
-        return True
-    # Future-proofing: any auth-subsystem route is exempt.
-    return path.startswith("/api/auth/")
+    return path.startswith("/static/") or path in _EXEMPT_PATHS
 
 
 def _authenticate_api():

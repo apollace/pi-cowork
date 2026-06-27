@@ -1346,6 +1346,17 @@ ENDPOINT_REGISTRY = [
         ],
     },
     {
+        "key": "auth_setup_needed",
+        "category": "Auth",
+        "method": "GET",
+        "path_template": "/api/auth/setup-needed",
+        "label": "check whether first-run account setup is needed",
+        "doc_lines": [
+            "- GET {base_url}/api/auth/setup-needed → return {setup_needed: true/false}. "
+            "Works without authentication so the login page can choose setup vs sign-in mode.",
+        ],
+    },
+    {
         "key": "auth_setup",
         "category": "Auth",
         "method": "POST",
@@ -1387,6 +1398,50 @@ ENDPOINT_REGISTRY = [
             "- GET {base_url}/api/auth/me → get current user info, or 401 if not logged in.",
         ],
     },
+    {
+        "key": "auth_password",
+        "category": "Auth",
+        "method": "PUT",
+        "path_template": "/api/auth/password",
+        "label": "change current user's password (fields: current_password, new_password) — human-only",
+        "doc_lines": [
+            "- PUT {base_url}/api/auth/password → change the current user's password (fields: current_password, "
+            "new_password). Requires an active browser session; API tokens are not accepted. HUMAN-ONLY.",
+        ],
+    },
+    {
+        "key": "auth_tokens_list",
+        "category": "Auth",
+        "method": "GET",
+        "path_template": "/api/auth/tokens",
+        "label": "list current user's API tokens — human-only",
+        "doc_lines": [
+            "- GET {base_url}/api/auth/tokens → list API tokens for the current session user. Returns id, name, "
+            "created_at, last_used_at (no hashes). HUMAN-ONLY.",
+        ],
+    },
+    {
+        "key": "auth_tokens_create",
+        "category": "Auth",
+        "method": "POST",
+        "path_template": "/api/auth/tokens",
+        "label": "create API token for current user (field: name) — human-only",
+        "doc_lines": [
+            "- POST {base_url}/api/auth/tokens → create a new API token for the current session user (field: name). "
+            "Returns the plaintext token exactly once along with the token id. HUMAN-ONLY.",
+        ],
+    },
+    {
+        "key": "auth_tokens_delete",
+        "category": "Auth",
+        "method": "DELETE",
+        "path_template": "/api/auth/tokens/{token_id}",
+        "label": "revoke an API token belonging to the current user — human-only",
+        "doc_lines": [
+            "- DELETE {base_url}/api/auth/tokens/{token_id} → revoke an API token belonging to the current "
+            "session user. HUMAN-ONLY.",
+        ],
+    },
 ]
 
 # Key → registry entry lookup (built once at import time)
@@ -1404,11 +1459,16 @@ DEFAULT_ENDPOINT_KEYS = [
 # Gate review write access allows agents to approve their own quality gates,
 # defeating the purpose of manual approval.
 AGENT_RESTRICTED_KEYS = {
-    # Authentication endpoints are human-only login/setup/logout controls.
+    # Authentication endpoints are human-only login/setup/logout/password/token controls.
     "auth_setup",
+    "auth_setup_needed",
     "auth_login",
     "auth_logout",
     "auth_me",
+    "auth_password",
+    "auth_tokens_list",
+    "auth_tokens_create",
+    "auth_tokens_delete",
     # Gate review access lets agents approve their own quality gates.
     "gate_reviews_list",
     "gate_review_put",
